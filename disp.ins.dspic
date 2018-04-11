@@ -1,0 +1,2063 @@
+;   ***************************************************************
+;   * Copyright (C) 2016, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Display manager.  The rest of the system accesses the display and buttons
+;   via the interface presented by this module.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   evsimult real = 40e-3 ;events are simultaneous if within this time, seconds
+/const   lrsec   real = 3.0  ;seconds both left and right pressed for special LR event
+/const   sendnnop integer = 8 ;number of NOP responses to send at startup
+.equiv   stacksz, 128        ;processing task stack size, bytes
+;
+;   Derived constants.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+  /var local b bool
+
+  /if [not [exist "char_cr_k"]] then
+    /const char_cr_k integer = 13 ;carriage return character code
+    /endif
+  /if [not [exist "char_lf_k"]] then
+    /const char_lf_k integer = 10 ;line feed character code
+    /endif
+  /if [not [exist "reset_line"]] then
+    /const reset_line string = "" ;default to reset via serial comm only
+    /endif
+  /if [not [exist "debug_drespdel"]] then
+    /const debug_drespdel bool = False ;don't wait for parameter bytes
+    /endif
+
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_disp, bss
+
+allocg   disp_fwtype         ;display firmware type ID
+allocg   disp_fwver          ;display firmware version number
+allocg   disp_fwseq          ;display firmware sequence number
+
+;*******************
+;
+;   Local state.
+;
+alloc    ncols               ;number of text columns the display supports
+alloc    nlines              ;number of text lines the display supports
+alloc    cont                ;last known contrast setting
+
+alloc    stack_dresp, stacksz, 2 ;display response processing task stack
+
+;*******************
+;
+;   Local state in near memory.
+;
+.section .near_disp, bss, near
+
+alloc    cmds,   32          ;1 bit for each implemented command
+alloc    flags               ;individual flag bits, use FLG_xxx bit numbers
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_ev, 0           ;event has occurred
+.equiv   flg_evpong, 1       ;set EV on PONG response received
+.equiv   flg_evfwinfo, 2     ;set EV on FWINFO response received
+.equiv   flg_stop, 3         ;don't send display-writing commands
+.equiv   flg_evdgo, 4        ;set EV on DGO response received
+.equiv   flg_dresp, 5        ;responses processing is running and ready
+
+
+.section .code_disp, code
+;*******************************************************************************
+;
+;   Subroutine DISP_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  disp_init, regf0
+
+/if [<> reset_line ""] then
+         set_[chars reset_line]_on ;hold the display processor in reset
+  /endif
+;
+;   Init global state.
+;
+         mov     #0, w0
+         mov     w0, disp_fwtype
+         mov     w0, disp_fwver
+         mov     w0, disp_fwseq
+
+;   (Local state is initialized before use in DISP_START.)
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine DCMD_PUT8
+;
+;   Write the byte in the low 8 bits of W0 to the display.
+;
+         locsub  dcmd_put8
+
+         gcall   uart_disp_put ;write the byte to the UART
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine DCMD_PUT16
+;
+;   Write the 16 bit word in W0 to the display.  The bytes are written in most
+;   to least significant order.
+;
+         locsub  dcmd_put16
+
+         swap    w0
+         mcall   dcmd_put8   ;send the high byte
+         swap    w0
+         mcall   dcmd_put8   ;send the low byte
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine DCMD_PUT32
+;
+;   Write the 32 bit word in W1:W0 to the display.  The bytes are written in
+;   most to least significant order.
+;
+         locsub  dcmd_put32
+
+         exch    w0, w1
+         mcall   dcmd_put16  ;send the high word
+         exch    w0, w1
+         mcall   dcmd_put16  ;send the low word
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine WAIT_TOUT
+;
+;   Wait for the local EV flag to be set or a timeout, whichever comes first.
+;   W0 contains the maximum milliseconds to wait.  If the timeout is reached
+;   before the event occurs, then the Z flag is set, otherwise cleared.  The EV
+;   flag is cleared if returning due to the event.
+;
+         locsub  wait_tout, regf0 | regf1 | regf2
+
+         btsc    flags, #flg_ev ;check for special case of no wait required
+         jump    wtout_leave
+         cp0     w0          ;check for special case of 0 timeout
+         bra     z, wtout_leave
+
+         mov     tick1ms, w1 ;init clock value updated to
+wtout_wait:                  ;back here to wait a while
+         gcall   task_yield_save ;give other tasks a chance to run
+wtout_recheck:               ;back here to check state again
+         btsc    flags, #flg_ev ;event still hasn't occurred ?
+         jump    wtout_leave
+         mov     tick1ms, w2 ;get latest clock value
+         xor     w2, w1, w2  ;compare to last clock value updated to
+         bra     z, wtout_wait ;no new clock tick ?
+;
+;   New clock tick.
+;
+         sub     #1, w0      ;count one less tick until timeout over
+         bra     z, wtout_leave ;timeout has expired ?
+         add     #1, w1      ;update the clock value now current with
+         jump    wtout_recheck ;back and check the state again
+;
+;   Common exit point.
+;
+wtout_leave:
+         cp0     w0          ;set Z iff the timeout has expired
+         btss    flags, #flg_ev ;the event occurred ?
+         jump    wtout_ret   ;no
+         bclr    flags, #flg_ev ;clear the event condition
+         bclr    Sr, #Z      ;indicate returning due to event occurred
+wtout_ret:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine WAIT_WRITE
+;
+;   Wait for the display to be ready to receive another command.  The global
+;   DISP flag is cleared if the display is unresponsive.
+;
+         locsub  wait_write, regf0
+
+         btss    flags, #flg_stop ;display told us to stop ?
+         jump    dwat_leave  ;no, nothing more to do
+
+         bclr    flags, #flg_ev ;clear the event condition
+         bset    flags, #flg_evdgo ;cause event to be set on DGO response
+         mov     #25, w0     ;max ms to wait
+         mcall   wait_tout   ;wait for DGO response or timeout
+         bra     nz, dwat_leave ;received DGO as expected ?
+
+         bclr    flags, #flg_evdgo ;clear EV trigger condition
+         clrflag disp        ;indicate display error
+
+dwat_leave:
+         leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro WAITCMD nodisp
+//
+//   Wait for the display to be ready to accept another command.  If the display
+//   is unresponsive, then the global DISP flag is cleared and the macro jumps
+//   to NODISP.
+//
+//   If NODISP is the special keyword "return", then a RETURN is executed
+//   instead of a jump to NODISP when the display is unresponsive.
+//
+/macro waitcmd
+  /var local adr string = [qstr [arg 1]] ;address to jump to, or "return"
+
+         mcall   wait_write  ;wait for display ready, set DISP flag on error
+         skip_flag disp      ;the display seems to be functioning ?
+  /if [= adr "return"]
+    /then
+         return              ;no, done here
+    /else
+         jump    [chars adr] ;no, jump to the abort address
+    /endif
+  /endmac
+
+;*******************************************************************************
+;
+;   Local subroutine DISP_SYNC
+;
+;   Wait for the display to process whatever commands have been sent to it.
+;   This is done by sending a PING command and waiting for the PONG response.
+;   If the PONG response is not received within a reasonable time, then the
+;   global DISP flag is cleared, otherwise it is set.  The set of commands sent
+;   before this routine is called must not contain PING.
+;
+         locsub  disp_sync, regf0
+
+         bclr    flags, #flg_ev ;clear event
+         bset    flags, #flg_evpong ;indicate to set event on PONG response
+         mov     #1, w0      ;send PING command
+         gcall   dcmd_put8
+
+         mov     #50, w0     ;max ms to wait
+         mcall   wait_tout   ;wait for the commands to be processed
+         btss    Sr, #Z
+         setflag disp        ;indicate display is up and running
+         btsc    Sr, #Z
+         clrflag disp        ;indicate error communicating with the display
+         bclr    flags, #flg_evpong ;clear EV trigger condition
+
+         leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro NOT_CMD n, skipto
+//
+//   Check whether the display implements command N, and jump to SKIPTO if not.
+//   If the command is implemented, then execution proceeds immediately after
+//   this macro.
+//
+//   If SKIPTO is the special keyword "return", then a RETURN is executed
+//   instead of a jump to SKIPTO when the command does not exist.
+//
+/macro not_cmd
+  /var local n integer = [arg 1] ;0-255 command number
+  /var local adr string = [qstr [arg 2]] ;address to jump to, or "return"
+  /var local word integer    ;word offset into CMDS array
+  /var local bit integer     ;number of bit within CMDS array word
+
+  /if [or [< n 0] [> n 255]] then ;command number out of range ?
+    /show "  Command " n " is out of range in NOT_CMD macro."
+         .error  "NOT_CMD command number"
+         .end
+    /stop
+    /endif
+  /set word [shiftr n 4]     ;make 0-15 word offset
+  /set bit [and n 16#0F]     ;make 0-15 number of bit within word
+
+         btss    cmds+[v word], #[v bit] ;this command is implemented ?
+  /if [= adr "return"]
+    /then
+         return              ;no, done here
+    /else
+         jump    [chars adr] ;no, don't attempt to send the command
+    /endif
+  /endmac
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Application-level routines for interacting with the display.
+;
+
+;*******************************************************************************
+;
+;   Subroutine DISP_BACKLIGHT
+;
+;   Turn the display backlight on or off.  It will be turned off when W0 is 0
+;   and on otherwise.
+;
+         glbsubd disp_backlight, regf0 | regf1
+
+         not_cmd 3, backl_leave ;BACKLIGHT command not implemented ?
+
+         mov     #0, w1      ;get intensity for backlight off
+         cp0     w0
+         skip_z              ;supposed to be off ?
+         mov     #255, w1    ;no, get intensity for on
+
+         waitcmd backl_leave ;wait for the display to be ready for another command
+
+         mov     #3, w0      ;BACKLIGHT opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;brightness
+         gcall   dcmd_put8
+
+backl_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CONT_SET
+;
+;   Set the contrast to W0.  The actual resulting contrast is returned in W0.
+;
+         glbsubd disp_cont_set, regf1
+
+         mov     w0, w1      ;save desired setting in W1
+         not_cmd 4, contset_skip ;CONT command not implemented ?
+         waitcmd contset_skip ;wait for the display to be ready for another command
+         mov     #4, w0      ;send CONT command
+         gcall   dcmd_put8
+         mov     w1, w0      ;send new desired setting
+         gcall   dcmd_put8
+         mcall   disp_sync   ;wait for reply
+contset_skip:
+
+         mov     cont, w0    ;return the local copy of the contrast setting
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CONT
+;
+;   Get the display contrast setting.
+;
+         glbsubd disp_cont
+
+         not_cmd 20, contg_skip ;CONTGET command not implemented ?
+         waitcmd contg_skip  ;wait for the display to be ready for another command
+         mov     #20, w0     ;send CONTGET command
+         gcall   dcmd_put8
+         mcall   disp_sync   ;wait for reply
+contg_skip:
+
+         mov     cont, w0    ;return the local copy of the contrast setting
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CONTUP
+;
+;   Increase the display contrast setting by 1.  The new contrast setting is
+;   returned in W0.
+;
+         glbsubd disp_contup
+
+         not_cmd 18, contu_skip ;CONTUP command not implemented ?
+         waitcmd contu_skip  ;wait for the display to be ready for another command
+         mov     #18, w0     ;send CONTUP command
+         gcall   dcmd_put8
+         mcall   disp_sync   ;wait for reply
+contu_skip:
+
+         mov     cont, w0    ;return the local copy of the contrast setting
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CONTDOWN
+;
+;   Increase the display contrast setting by 1.  The new contrast setting is
+;   returned in W0.
+;
+         glbsubd disp_contdown
+
+         not_cmd 19, contd_skip ;CONTDOWN command not implemented ?
+         waitcmd contd_skip  ;wait for the display to be ready for another command
+         mov     #19, w0     ;send CONTDOWN command
+         gcall   dcmd_put8
+         mcall   disp_sync   ;wait for reply
+contd_skip:
+
+         mov     cont, w0    ;return the local copy of the contrast setting
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CONT_OFF
+;
+;   Turn down the contrast of the display to the extent possible.  The intent is
+;   to make any drawing on the display invisible.  This does not change the
+;   current contrast setting.
+;
+         glbsubd disp_cont_off, regf0
+
+         not_cmd 22, contoff_leave ;CONTOFF command not implemented ?
+         waitcmd contoff_leave ;wait for the display to be ready for another command
+
+         mov     #22, w0     ;send CONTOFF command
+         gcall   dcmd_put8
+contoff_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CONT_ON
+;
+;   Turn down the contrast of the display to the extent possible.  The intent is
+;   to make any drawing on the display invisible.  This does not change the
+;   current contrast setting.
+;
+         glbsubd disp_cont_on, regf0
+
+         not_cmd 23, conton_leave ;CONTON command not implemented ?
+         waitcmd conton_leave ;wait for the display to be ready for another command
+
+         mov     #23, w0     ;send CONTON command
+         gcall   dcmd_put8
+conton_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_SAVE
+;
+;   Cause all current persistent settings to be saved in non-volatile memory.
+;
+         glbsubd disp_save, regf0
+
+         not_cmd 21, dsave_leave ;SAVE command not implemented ?
+         waitcmd dsave_leave ;wait for the display to be ready for another command
+         mov     #21, w0     ;send SAVE command
+         gcall   dcmd_put8
+         mov     #5, w0      ;give display processor time to send DSTOP
+         gcall   waitms
+
+dsave_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CLEAR
+;
+;   Clear the display and set the character position to the top left corner.
+;   This routine doesn't return until the display has performed the action.
+;   Other tasks are allowed to run meanwhile.
+;
+         glbsubd disp_clear, regf0
+
+         not_cmd 9, dclr_leave ;CLEAR command not implemented ?
+
+         waitcmd dclr_leave  ;wait for the display to be ready for another command
+
+         mov     #9, w0      ;send CLEAR command
+         gcall   dcmd_put8
+         mcall   disp_sync   ;wait for display to process the command
+
+dclr_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CLEARTO
+;
+;   Clear the display from the current position going right to the 0-N column
+;   number in W0.  The column is left at W0+1, except that it is clipped to 255.
+;
+         glbsubd disp_clearto, regf0 | regf1
+
+         not_cmd 15, clrto_leave ;CLEARTO command not implemented ?
+
+         mov     w0, w1      ;save target column number in W1
+
+         waitcmd clrto_leave ;wait for the display to be ready for another command
+
+         mov     #15, w0     ;CLRTO command opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;0-N column number
+         gcall   dcmd_put8
+
+clrto_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_POS
+;
+;   Set the character position within the display.  This is where the next
+;   character will be written.  The display is a rectangular array of
+;   characters.  Columns are numbered left to right starting with 0.  Lines are
+;   numbered top to bottom starting with 0.
+;
+;   W0 contains the column number and W1 the line number.
+;
+         glbsubd disp_pos, regf0 | regf2
+
+         not_cmd 10, pos_leave ;POS command not implemented ?
+
+         waitcmd pos_leave   ;wait for the display to be ready for another command
+
+         mov     w0, w2      ;save column number in W2
+         mov     #10, w0     ;POS opcode
+         gcall   dcmd_put8
+         mov     w2, w0      ;col
+         gcall   dcmd_put8
+         mov     w1, w0      ;line
+         gcall   dcmd_put8
+
+pos_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CHAR
+;
+;   Write the character in the low byte of W0 to the display at the current
+;   character position, then advance the column one to the right.  If the column
+;   is already at 255 then it is not advanced.
+;
+;   Nothing is written to the display if the character position is outside the
+;   physical display area.  However, the logical column is still advanced until
+;   the end of the line is reached (column 255).
+;
+;   Some characters are handled differently from what is described above. The
+;   characters that are handled specially are:
+;
+;     7 (bell)  -  A beep sound is emitted.  Nothing is written to the display
+;       and no display state is changed.
+;
+;     8 (backspace)  -  Moves the position one column to the left.  If already
+;       in the left-most column, then nothing is done.
+;
+;     10 (line feed)  -  The position is changed one line down at the same
+;       column.  Nothing is written to the display.  The line will not be
+;       advanced past 255 (will not wrap back to top of display).
+;
+;     13 (carriage return)  -  The position is changed to column 0 in the
+;       current line.  Nothing is written to the display.
+;
+;   Control characters (0-31) not listed above are ignored.
+;
+         glbsubd disp_char, regf0 | regf1
+
+         not_cmd 11, dchar_leave ;CHAR command not implemented ?
+
+         mov     w0, w1      ;save the character in the low byte of W1
+
+         waitcmd dchar_leave ;wait for the display to be ready for another command
+
+         mov     #11, w0     ;CHAR opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;char
+         gcall   dcmd_put8
+
+dchar_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_CRLF
+;
+;   Send a carriage return and line feed to the display.  This sets the
+;   character position to the start of the next line down.  If already on the
+;   last logical line (well past displayable area), then this resets to the
+;   start of that line.
+;
+         glbsubd disp_crlf, regf0
+
+         waitcmd crlf_leave  ;wait for the display to be ready for another command
+
+         mov     #[v char_cr_k], w0 ;send CR
+         mcall   disp_char
+         mov     #[v char_lf_k], w0 ;send LF
+         mcall   disp_char
+
+crlf_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_DIGIT
+;
+;   Writes the digit corresponding to the value in the low byte of REG0 to the
+;   display as the next character.  Values 0-9 result in characters "0"-"9", and
+;   values 10-35 in characters "A"-"Z".  Digit values above 35 are not supported
+;   and will result in a error character.
+;
+         glbsubd disp_digit, regf0 | regf1
+
+         not_cmd 14, ddig_leave ;DIGIT command not implemented ?
+
+         mov     w0, w1      ;save the digit value in the low byte of W1
+
+         waitcmd ddig_leave  ;wait for the display to be ready for another command
+
+         mov     #14, w0     ;DIGIT opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;digval
+         gcall   dcmd_put8
+
+ddig_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_INT
+;
+;   Write the 16 bit integer to the display according to the formatting rules
+;   in W1.  The low byte of W1 is directly sent to the display as the FW
+;   parameter to the INT command.
+;
+         glbsubd disp_int
+
+         not_cmd 13, dint_leave ;INT command not implemented ?
+
+         waitcmd dint_leave  ;wait for the display to be ready for another command
+
+         push    w0          ;temp save integer value on the stack
+         mov     #13, w0
+         gcall   dcmd_put8   ;INT command opcode
+         mov     w1, w0
+         gcall   dcmd_put8   ;FW parameter
+         pop     w0
+         gcall   dcmd_put16  ;INT parameter
+
+dint_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_INT16U
+;
+;   Write the unsigned decimal integer value in W0 to the display.  W1 is the
+;   1-16 field width.  Leading blanks are written as necessary to fill the
+;   field.
+;
+         glbsubd disp_int16u, regf0 | regf1 | regf2
+
+         not_cmd 13, i16u_leave ;INT command not implemented ?
+
+         mov     w0, w2      ;save integer value in W2
+
+         cp0     w1
+         skip_nz
+         mov     #1, w1      ;clip to minimum allowed field width
+         sub     #1, w1      ;make 0-15 field width - 1
+         cp      w1, #15
+         skip_leu
+         mov     #15, w1     ;clip to maximum allowed field width
+         ior     #0b00100000, w1 ;make full FW byte
+                 ;  0------- leading blanks, not zeros
+                 ;  -0------ unsigned
+                 ;  --10---- decimal
+                 ;  ----XXXX field width - 1, already present
+
+         waitcmd i16u_leave  ;wait for the display to be ready for another command
+
+         mov     #13, w0     ;INT opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;FW parameter
+         gcall   dcmd_put8
+         mov     w2, w0      ;INT16 parameter
+         gcall   dcmd_put16
+
+i16u_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_INT16S
+;
+;   Write the signed decimal integer value in W0 to the display.  W1 is the 1-16
+;   field width.  Leading blanks are written as necessary to fill the field.
+;
+         glbsubd disp_int16s, regf0 | regf1 | regf2
+
+         not_cmd 13, i16s_leave ;INT command not implemented ?
+
+         mov     w0, w2      ;save integer value in W2
+
+         cp0     w1
+         skip_nz
+         mov     #1, w1      ;clip to minimum allowed field width
+         sub     #1, w1      ;make 0-15 field width - 1
+         cp      w1, #15
+         skip_leu
+         mov     #15, w1     ;clip to maximum allowed field width
+         ior     #0b01100000, w1 ;make full FW byte
+                 ;  0------- leading blanks, not zeros
+                 ;  -1------ signed
+                 ;  --10---- decimal
+                 ;  ----XXXX field width - 1, already present
+
+         waitcmd i16s_leave  ;wait for the display to be ready for another command
+
+         mov     #13, w0     ;INT opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;FW parameter
+         gcall   dcmd_put8
+         mov     w2, w0      ;INT16 parameter
+         gcall   dcmd_put16
+
+i16s_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_INT16H
+;
+;   Write the unsigned hexadecimal integer value in W0 to the display.  W1 is
+;   the 1-16 field width.  Leading zeros are written as necessary to fill the
+;   field.
+;
+         glbsubd disp_int16h, regf0 | regf1 | regf2
+
+         not_cmd 13, i16h_leave ;INT command not implemented ?
+
+         mov     w0, w2      ;save integer value in W2
+
+         cp0     w1
+         skip_nz
+         mov     #1, w1      ;clip to minimum allowed field width
+         sub     #1, w1      ;make 0-15 field width (actual width - 1)
+         cp      w1, #15
+         skip_leu
+         mov     #15, w1     ;clip to maximum allowed field width
+         ior     #0b10110000, w1 ;make full FW byte
+                 ;  1------- leading zeros, not blanks
+                 ;  -0------ unsigned
+                 ;  --11---- hexadecimal
+                 ;  ----XXXX field width - 1, already present
+
+         waitcmd i16h_leave  ;wait for the display to be ready for another command
+
+         mov     #13, w0     ;INT opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;FW parameter
+         gcall   dcmd_put8
+         mov     w2, w0      ;INT16 parameter
+         gcall   dcmd_put16
+
+i16h_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_INT32H
+;
+;   Write the unsigned hexadecimal integer value in W1:W0 to the display.  W2 is
+;   the 1-16 field width.  Leading zeros are written as necessary to fill the
+;   field.
+;
+         glbsubd disp_int32h, regf1 | regf2
+
+         cp0     w1
+         bra     nz, i32h2w  ;need to write both words ?
+;
+;   Really only a 16 bit value is being written.
+;
+         mov     w2, w1      ;pass field width in W1
+         mcall   disp_int16h ;write 16 bit value in W0, field width in W1
+         jump    i32h_leave  ;all done
+;
+;   The high word is non-zero.  The value needs to be written as a 32 bit value.
+;   This also means the minimum field width is 5.
+;
+i32h2w:
+         cp      w2, #5      ;compare to minimum field width
+         skip_geu            ;is at least the minimum ?
+         mov     #5, w2      ;no, set to the minimum
+
+         push    w0          ;temp save low word on stack
+         mov     w1, w0      ;pass high word to write
+         sub     w2, #4, w1  ;pass field width for writing high word
+         mcall   disp_int16h ;write the high word
+         pop     w0          ;restore low word into W0
+
+         mov     #4, w1      ;pass field width for writing low word
+         mcall   disp_int16h ;write the low word
+
+i32h_leave:                  ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_INT16O
+;
+;   Write the unsigned octal integer value in W0 to the display.  W1 is the 1-16
+;   field width.  Leading zeros are written as necessary to fill the field.
+;
+         glbsubd disp_int16o, regf0 | regf1 | regf2
+
+         not_cmd 13, i16o_leave ;INT command not implemented ?
+
+         mov     w0, w2      ;save integer value in W2
+
+         cp0     w1
+         skip_nz
+         mov     #1, w1      ;clip to minimum allowed field width
+         sub     #1, w1      ;make 0-15 field width - 1
+         cp      w1, #15
+         skip_leu
+         mov     #15, w1     ;clip to maximum allowed field width
+         ior     #0b10010000, w1 ;make full FW byte
+                 ;  1------- leading zeros, not blanks
+                 ;  -0------ unsigned
+                 ;  --01---- octal
+                 ;  ----XXXX field width - 1, already present
+
+         waitcmd i16o_leave  ;wait for the display to be ready for another command
+
+         mov     #13, w0     ;INT opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;FW parameter
+         gcall   dcmd_put8
+         mov     w2, w0      ;INT16 parameter
+         gcall   dcmd_put16
+
+i16o_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_INT16B
+;
+;   Write the unsigned binary integer value in W0 to the display.  W1 is the
+;   1-16 field width.  Leading zeros are written as necessary to fill the field.
+;
+         glbsubd disp_int16b, regf0 | regf1 | regf2
+
+         not_cmd 13, i16b_leave ;INT command not implemented ?
+
+         mov     w0, w2      ;save integer value in W2
+
+         cp0     w1
+         skip_nz
+         mov     #1, w1      ;clip to minimum allowed field width
+         sub     #1, w1      ;make 0-15 field width - 1
+         cp      w1, #15
+         skip_leu
+         mov     #15, w1     ;clip to maximum allowed field width
+         ior     #0b10000000, w1 ;make full FW byte
+                 ;  1------- leading zeros, not blanks
+                 ;  -0------ unsigned
+                 ;  --00---- binary
+                 ;  ----XXXX field width - 1, already present
+
+         waitcmd i16b_leave  ;wait for the display to be ready for another command
+
+         mov     #13, w0     ;INT opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;FW parameter
+         gcall   dcmd_put8
+         mov     w2, w0      ;INT16 parameter
+         gcall   dcmd_put16
+
+i16b_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_INT32FX
+;
+;   Write a 32 bit fixed point value in decimal.  The call parameters are:
+;
+;     W1:W0  -  The 32 bit fixed point value.  This can be interpreted as either
+;       signed or unsigned, depending on a flag bit.
+;
+;     W2  -  Minimum field width, 0-31.  Leading blanks or zeros are added to
+;       fill the  field.  The full number is always written, even if wider than
+;       this value.  Use 0 for free form.
+;
+;     W3  -  Number of fraction digits right of the decimal point in the low
+;       byte.  The upper byte is a collection of flag bits:
+;
+;          8 - The number in W1:W0 is signed, not unsigned.
+;
+;          9 - Write the decimal point even if there are no digits to its right.
+;
+;         10 - Don't force a zero to be written if it would be the only digit
+;              left of the point.
+;
+;         11 - Fill the field with leading zeros, not leading blanks.
+;
+         glbsub  disp_int32fx
+
+         not_cmd 17, return  ;FIXPNT command not implemented ?
+
+         mcall   wait_write  ;wait for display ready for another command
+         skip_flag disp      ;display is up and working ?
+         return              ;no, abort
+
+         push    w0          ;temp save low byte of 32 bit value
+
+         mov     #17, w0     ;FIXPNT opcode
+         gcall   dcmd_put8
+
+         mov     #0x1F, w0   ;init W0 with field width
+         and     w2, w0, w0
+         btsc    w3, #8
+         bset    w0, #6      ;signed
+         btsc    w3, #11
+         bset    w0, #7      ;leading zeros, not blanks
+         gcall   dcmd_put8   ;send FW byte
+
+         and     w3, #0xF, w0 ;init W0 with number of fraction digits
+         btss    w3, #10
+         bset    w0, #6      ;force 0 if only digit left of point
+         btsc    w3, #9
+         bset    w0, #7      ;write decimal point even when no digits to right
+         gcall   dcmd_put8   ;send DIGF byte
+
+         pop     w0          ;restore full 32 bit value into W1:W0
+         gjump   dcmd_put32  ;send INT32 parameter, return to caller
+
+/if using_xc16 then
+;
+;   Create C interface for this routine.  In the C template, the flag bits are
+;   in a separate call argument and not merged in with the number of fraction
+;   digits.  W3 is the number of fraction digits, and W4 contains the flag bits
+;   in the low byte.
+;
+;   Trashes W3, W4.  Note that XC16 expects W0-W7 to be trashed.
+;
+         glbsubc disp_int32fx
+
+         and     #0xFF, w3   ;clear the high byte of W3, shouldn't be used
+         sl      w4, #8, w4  ;move the flag bits into place
+         ior     w3, w4, w3  ;make combined fraction digits and flag bits word
+         jump    disp_int32fx ;run the real routine which will return to the caller
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine DISP_ISTRING
+;
+;   Write the string following the call in program memory to the display.
+;
+;   The 24 bit program memory words following the CALL instruction are
+;   interpreted as a sequence of bytes, in low to high byte order within each
+;   word.  The first byte is the length of the string - 1.  Strings can
+;   therefore be 1-256 bytes in length.  These bytes will be written as
+;   characters to the display.
+;
+;   The subroutine returns to the program memory location following the word
+;   that contains the last string byte.  The last program memory string word
+;   may contain 1 or 2 bytes after the end of the string.  These bytes are
+;   ignored.
+;
+         glbsub  disp_istring, regf0 | regf1 | regf2 | regf3 | regf12 | regf13
+
+         mov     [w15-16], w12 ;get return address into W13:W12
+         mov     [w15-14], w13
+         bclr    w12, #0     ;fix up W13:W12 to first data byte address
+
+         gcall   pgbyte_read ;get the first byte into W0
+         add     w0, #1, w3  ;make 1-255 string length in W3
+;
+;   Fix up the return address on the stack to after the string.  The number of
+;   string bytes is in W3.
+;
+         add     w3, #3, w0  ;length for whole words plus length byte into W0
+         mov     #3, w2      ;number of bytes per program memory word
+         repeat  #17
+         div.u   w0, w2      ;make number of prog mem words used by string in W0
+         sl      w0, #1, w0  ;number of prog mem addresses used by string
+         mov     [w15-16], w1 ;get return address into W2:W1
+         mov     [w15-14], w2
+         add     w1, w0, w1  ;add offset to skip over string
+         addc    #0, w2
+         mov     w1, [w15-16] ;write updated return address back to stack
+         mov     w2, [w15-14]
+;
+;   Write the string characters to the display.  The byte address of the first
+;   string character in our format is in W13:W12.  The number of characters in
+;   the string is in W3, which is at least 1.
+;
+istr_char:                   ;back here each new string byte
+         gcall   pgbyte_read ;fetch this byte into W0
+         mcall   disp_char   ;write it to the display
+         sub     #1, w3      ;count one less character left
+         bra     nz, istr_char ;back to do next character
+
+         leaverest
+
+;*******************************************************************************
+;
+;   C subroutine DISP_STRING (CHAR *)
+;
+;   Write the contents of a C string to the display.  The starting address of
+;   the string is passed in W0.  The string is null-terminated, meaning all the
+;   string characters up to but not including the first 0 will be written to
+;   the display.
+;
+;   W0 is returned pointing to the next byte after the end of the string.  This
+;   is irrelevant to the C compiler, but can be utilized from assembly code.
+;
+         glbsubd disp_string, regf1
+
+         mov     w0, w1      ;init pointer to first string byte
+cstr_byte:                   ;back here to do each new string byte
+         mov.b   [w1++], w0  ;fetch this byte, point to next
+         cp0.b   w0
+         bra     z, cstr_dbytes ;this is the terminating null ?
+         mcall   disp_char   ;no, write the character in the low byte of W0
+         jump    cstr_byte   ;back to do next byte
+
+cstr_dbytes:                 ;done with the string of bytes
+         mov     w1, w0      ;pass back pointer to next byte after the string
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EVENTS_CLEAR
+;
+;   Clear all pending events.  Subroutine EVENT_WAIT will now not return with a
+;   real event (as apposed to timeout) until a new event occurs.  All previously
+;   occurring events are lost.
+;
+         glbsubd events_clear
+
+         clrflag bpress_left ;clear all the event conditions
+         clrflag bpress_right
+         clrflag bpress_up
+         clrflag bpress_down
+         clrflag bpress_mid
+         clrflag bpress_onoff
+         clrflag brel_left
+         clrflag brel_right
+         clrflag brel_up
+         clrflag brel_down
+         clrflag brel_mid
+         clrflag brel_onoff
+
+         leaverest
+
+;*******************************************************************************
+;
+;   C function EVENT_WAIT (TOUT)
+;
+;   Wait for the next event and return the event ID in W0 (the C function
+;   value).  TOUT is a 16 bit unsigned timeout value in units of EVWAITMS ms.
+;   If no event occurs within this timeout, then the function returns 0
+;   (event_none).
+;
+;   This routine can be called with TOUT = 0 to just poll for any event having
+;   occured.  It will return with a event ID if one is pending, or indicate no
+;   event.  In either case, this is done without waiting when TOUT = 0.
+;
+
+/////////////
+//
+//   Macro CHECK_EVENT name
+//
+//   Check for events related to the named button to have occurred.  If not,
+//   then execution falls thru.  If a event is detected, W0 is set to the event
+//   ID and execution jumps to EVW_HAVE.  NAME is raw characters, not a string.
+//   It must be one of: left right up down mid.
+//
+/macro check_event
+  /write
+         skip_flag bpress_[arg 1] ;new button press event ?
+         jump    [lab npress] ;no
+         clrflag bpress_[arg 1] ;clear the event condition
+         mov     #[v event_[arg 1]_press], w0 ;get the event ID
+         jump    evw_have
+[lab npress]:
+         skip_flag brel_[arg 1] ;new button release event ?
+         jump    [lab nrelease] ;no
+         clrflag brel_[arg 1] ;clear the event condition
+         mov     #[v event_[arg 1]_release], w0 ;get the event ID
+         jump    evw_have
+[lab nrelease]:
+  /endmac
+//
+/////////////
+
+         glbsubd event_wait, regf1 | regf2 | regf3 | regf4
+
+         mov     w0, w1      ;save allowed clock ticks left to wait
+         mov     tick1ms, w2 ;init clock value updated to
+         mov     #[v evwaitms], w4 ;init ms until next timeout tick
+
+evw_check:                   ;back here to check all events again
+         check_event left
+         check_event right
+         check_event up
+         check_event down
+         check_event mid
+         check_event onoff
+;
+;   No event detected.  Update the time state and handle timeout.
+;
+;   Register usage:
+;
+;     W0  -  Contains the event ID when jumping to EVW_HAVE.
+;
+;     W1  -  Ticks until timeout.
+;
+;     W2  -  Latest clock value updated to.
+;
+;     W3  -  New clock value.
+;
+;     W4  -  ms until next TOUT tick.
+
+evw_chtick:                  ;back here to check for new clock tick
+         mov     #[v event_none], w0 ;get event ID for timeout ready
+         cp0     w1
+         bra     z, evw_have ;no more wait time left, return with timeout
+
+         mov     tick1ms, w3 ;get the latest clock value
+         cp      w3, w2      ;compare to last clock value updated to
+         bra     z, evw_wait ;no new clock tick, go wait
+
+         add     #1, w2      ;update clock value will now be current with
+         sub     #1, w4      ;one less ms until new timeout tick
+         bra     nz, evw_wait ;no new timeout tick now
+
+         mov     #[v evwaitms], w4 ;reset ms until next timeout tick
+         sub     #1, w1      ;count one less tick until timeout
+         jump    evw_chtick  ;check time state again after this tick
+
+evw_wait:                    ;wait a little while
+         gcall   task_yield_save ;give all other tasks a chance to run
+         jump    evw_check   ;back and check all event conditions again
+
+evw_have:                    ;event ID to return is in W0
+         leaverest
+
+;*******************************************************************************
+;
+;   C Function EVENT_CHECK_LR (EVENT)
+;
+;   Checks for the special high level event of both the left and right buttons
+;   pressed simultaneously, with nothing else pressed.  The buttons must be held
+;   down together for LRSEC seconds with nothing else pressed for this event to
+;   occur.
+;
+;   EVENT is the ID of the event that was just detected.  The function will
+;   return this event if the special left/right button hold event is not
+;   detected.  It will return the left/right event if it is detected.  If the
+;   left/right event is started but aborted before completion, then the function
+;   returns the original event.
+;
+;   EVENT is passed in W0 on entry, and the function value is returned in W0.
+;
+         glbsubd event_check_lr, regf1 | regf2 | regf3
+
+         mov     tick1ms, w1 ;get clock snapshot to start wait time
+         mov     #[rnd [* evsimult 1000]], w2 ;get remaining time for second press
+
+         cp      w0, #[v event_left_press]
+         bra     z, lr_left  ;starting with left button down
+         cp      w0, #[v event_right_press]
+         bra     z, lr_right ;starting with right button down
+         jump    lr_leave    ;not the right event for start of left/right hold
+;
+;   The initial event was left button pressed.  Register usage:
+;
+;     W0  -  Initial event ID, which is a left button press.
+;
+;     W1  -  1 ms clock tick up to date with.
+;
+;     W2  -  1 ms ticks that the other button needs to be pressed within.
+;
+;     W3  -  New 1 ms clock value.
+;
+lr_left:
+         skip_flag butt_left ;make sure this button is still down
+         jump    lr_leave
+
+         skip_nflag butt_up  ;make sure non-participating buttons are up
+         jump    lr_leave
+         skip_nflag butt_down
+         jump    lr_leave
+         skip_nflag butt_mid
+         jump    lr_leave
+         skip_nflag butt_onoff
+         jump    lr_leave
+
+         skip_nflag butt_right ;other button still up ?
+         jump    lr_both     ;both buttons are now pressed, continue
+
+         gcall   task_yield  ;give other tasks a chance to run
+lr_left_tick:                ;back here after processing a clock tick
+         mov     tick1ms, w3 ;get current clock value
+         cp      w3, w1      ;compare to clock value current with
+         bra     z, lr_left  ;no new clock tick to process ?
+
+         add     #1, w1      ;update clock value now current with
+         sub     #1, w2      ;one less tick for second button press
+         bra     nz, lr_left_tick ;not timed out, back to check for another tick
+         jump    lr_leave    ;didn't get second button press in time
+;
+;   The initial event was right button pressed.  Register usage:
+;
+;     W0  -  Initial event ID, which is a right button press.
+;
+;     W1  -  1 ms clock tick up to date with.
+;
+;     W2  -  1 ms ticks that the other button needs to be pressed within.
+;
+;     W3  -  New 1 ms clock value.
+;
+lr_right:
+         skip_flag butt_right ;make sure this button is still down
+         jump    lr_leave
+
+         skip_nflag butt_up  ;make sure non-participating buttons are up
+         jump    lr_leave
+         skip_nflag butt_down
+         jump    lr_leave
+         skip_nflag butt_mid
+         jump    lr_leave
+         skip_nflag butt_onoff
+         jump    lr_leave
+
+         skip_nflag butt_left ;other button still up ?
+         jump    lr_both     ;both buttons are now pressed, continue
+
+         gcall   task_yield  ;give other tasks a chance to run
+lr_right_tick:               ;back here after processing a clock tick
+         mov     tick1ms, w3 ;get current clock value
+         cp      w3, w1      ;compare to clock value current with
+         bra     z, lr_right ;no new clock tick to process ?
+
+         add     #1, w1      ;update clock value now current with
+         sub     #1, w2      ;one less tick for second button press
+         bra     nz, lr_right_tick ;not timed out, back to check for another tick
+         jump    lr_leave    ;didn't get second button press in time
+;
+;   The second button was pressed in time.  Both buttons are now pressed with
+;   the remaining buttons up.  This state must be held for LRSEC to be a valid
+;   left/right button hold event.
+;
+;   If the special sequence is aborted now, then this routine will return with
+;   the event that aborted the sequence.  The events that got us here are
+;   cleared, since returning with them possibly seconds after they occurred does
+;   not make sense.
+;
+;   W1 contains the last 1 ms clock tick we are current with.
+;
+lr_both:
+         mcall   events_clear ;clear all previous events
+         mov     #[rnd [* lrsec 1000]], w2 ;init ticks until event is complete
+
+lr_both_check:               ;back here to check the current state again
+         gcall   task_yield  ;give other tasks a chance to run
+         skip_flag butt_left ;make sure left and right buttons are still down
+         jump    lr_abort
+         skip_flag butt_right
+         jump    lr_abort
+
+         skip_nflag butt_up  ;make sure non-participating buttons are up
+         jump    lr_abort
+         skip_nflag butt_down
+         jump    lr_abort
+         skip_nflag butt_mid
+         jump    lr_abort
+         skip_nflag butt_onoff
+         jump    lr_leave
+
+lr_both_tick:                ;back here after processing a clock tick
+         mov     tick1ms, w3 ;get current clock value
+         cp      w3, w1      ;compare to clock value current with
+         bra     z, lr_both_check ;no new clock tick to process ?
+
+         add     #1, w1      ;update clock value now current with
+         sub     #1, w2      ;one less tick before event completes
+         bra     nz, lr_both_tick ;not done yet, back to check for another tick
+;
+;   All conditions for this special event have been met.
+;
+         mov     #[v event_leftright], w0 ;pass back special left/right hold event
+         jump    lr_leave
+
+lr_abort:                    ;the sequence was aborted, return the abort event
+         mov     #0, w0      ;don't wait for timeout
+         mcall   event_wait  ;get the ID of the event that caused the abort
+;
+;   Common return point.  W0 contains the event ID returning with.
+;
+lr_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine DRESP_START
+;
+;   Start the command stream processing tasks.
+;
+         locsub  dresp_start, regf13 | regf14
+
+         mov     #stacksz, w13 ;pass size of data stack
+         mov     #stack_dresp, w14 ;pass start address of data stack
+         call    task_new    ;create UART command processing task
+         goto    dresp_task  ;start point of the new task
+
+drespst_wait:                ;back here to wait for response task ready
+         btsc    flags, #flg_dresp ;task not ready yet ?
+         jump    drespst_leave ;is ready, all done
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    drespst_wait ;back to check on the new task again
+
+drespst_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_START
+;
+;   Start the display running.  The display functions are not available to the
+;   rest of the system until this routine returns.  The DISP flag is set
+;   according to whether the display is up and functioning without errors or
+;   not.
+;
+         glbsub  disp_start, regf0 | regf1
+
+         clrflag disp        ;init to unable to start display
+
+         mov     #16, w0     ;init to all commands are unimplemented
+         mov     #cmds, w1
+ini_cmds:
+         clr     [w1++]
+         sub     #1, w0
+         bra     nz, ini_cmds
+
+         clr     flags       ;init all local flags to off
+         mov     #255, w0    ;init local copy of contrast setting
+         mov     w0, cont
+;
+;   Initialize the display and get the display processor to send the FWINFO
+;   response.
+;
+/if [= reset_line ""]
+//
+//   Initialize the display using only the serial communication to it.
+//
+  /then
+    /show "  Reset via serial commands only."
+
+         mcall   dresp_start ;start responses task, wait for ready
+
+         mov     #9, w0      ;send CLEAR command
+         gcall   dcmd_put8
+
+         mov     #3, w0      ;init the backlight to off
+         gcall   dcmd_put8
+         mov     #0, w0
+         gcall   dcmd_put8
+
+         bset    flags, #flg_evfwinfo ;set EV on FWINFO response
+         bclr    flags, #flg_ev ;init to event not occurred yet
+         mov     #2, w0      ;request firmware info
+         gcall   dcmd_put8
+//
+//   Initialize the display using a hardware reset line.
+//
+  /else
+    /show "  Using hardware reset line " [ucase reset_line] "."
+
+         set_[chars reset_line]_on ;hold the display processor in reset
+         mcall   dresp_start ;start the display response stream processing task
+
+         bset    flags, #flg_evfwinfo ;set EV on FWINFO response
+         bclr    flags, #flg_ev ;init to event not occurred yet
+
+         set_[chars reset_line]_off ;release the display from reset
+  /endif
+;
+;   The FWINFO command has been sent, or the display has been reset.  Wait for
+;   the display processor to send the FWINFO response.
+;
+         mov     #1000, w0   ;max ms to wait for the event
+         mcall   wait_tout   ;wait for the event or timeout
+         bclr    flags, #flg_evfwinfo ;clear event trigger condition
+         bra     z, strt_leave ;no response from the display ?
+;
+;   Get the display size and list of supported commands.
+;
+         mov     #8, w0      ;send DISP command, get display size
+         gcall   dcmd_put8
+         mov     #12, w0     ;send CMDS command, get implemented commands
+         gcall   dcmd_put8
+         mov     #20, w0     ;send CONTGET, get display contrast setting
+         gcall   dcmd_put8
+         mcall   disp_sync   ;wait for display response, set DISP flag accordingly
+
+strt_leave:                  ;DISP flag set according to display available
+         leaverest
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Display response stream processing task.
+;
+
+;*******************************************************************************
+;
+;   Local subroutine DRESP_GET8
+;
+;   Get the next 8 bit byte from the stream into W0.  This routine waits
+;   indefinitely until a byte is available.
+;
+         locsub  dresp_get8
+
+         gcall   uart_disp_get ;get the byte from the UART
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Routine DRESP_TASK
+;
+;   This code is run in a separate task.  The task reads the response stream and
+;   processes the responses.
+;
+dresp_task:                  ;task starts here
+;
+;   Send a bunch of NOP commands so that the host will be in sync with our
+;   command stream.  The number of NOPs to send is set by the constant SENDNNOP
+;   at the top of this module.  This section is omitted when SENDNNOP is 0.
+;
+         mov     #10, w0     ;wait for display input FIFO to be drained
+         gcall   waitms
+
+/if [> sendnnop 0] then
+         mov     #[v sendnnop], w1 ;init number of NOPs left to send
+loop_nop:
+         mov     #0, w0
+         gcall   dcmd_put8   ;send one NOP
+         sub     #1, w1      ;count one less NOP left to send
+         bra     nz, loop_nop ;back to send the next NOP
+  /endif
+;
+;   Discard any bytes already received.  These may be due to powerup glitches
+;   and may be out of sync anyway.
+;
+dresp_drain:                 ;back here to check again
+         gcall   uart_disp_get_ready ;check for received byte immediately available
+         bra     z, dresp_ddrain ;nothing immediately available, done draining ?
+         mcall   dresp_get8  ;get and discard the received byte
+         jump    dresp_drain ;back to check again
+dresp_ddrain:                ;there is no pending received byte
+
+         mov     #10, w0     ;wait a little while
+         gcall   waitms
+         gcall   uart_disp_get_ready ;check for received byte immediately available
+         bra     nz, dresp_drain ;something showed up, back and drain again ?
+;
+;   Both the command and response streams are in sync with the display, and
+;   neither is immediately active.  We are no ready to process responses from
+;   the display.
+;
+         bset    flags, #flg_dresp ;ready to process responses from display
+;
+;   Return point after done executing a response.  Response processing routines
+;   can jump here from nested subroutines or with data on the stack.  The stack
+;   will be reset to empty before any further processing.
+;
+         glbent  dresp_done
+
+         disi    #1
+         mov     #stack_dresp, w15 ;reset the stack to empty
+;
+;   Get and process the next response.
+;
+         mcall   dresp_get8  ;get the opcode byte into W0
+;
+;   If the DEBUG_DRESPDEL switch is enabled, wait a while for any parameters for
+;   this response to arrive.  This makes single stepping thru response
+;   interpretation possible since all data bytes will already have been received
+;   by the hardware and they will be coming from the software FIFO.
+;
+/if debug_drespdel then
+         mov     w0, w1      ;temp save the opcode byte
+         mov     #10, w0     ;number of ms ticks to wait
+         gcall   waitms      ;do the wait
+         mov     w1, w0      ;restore the opcode into W0
+  /endif
+;
+;   Run the response routine for the opcode in W0.
+;
+         mov     #tbloffset(dresp_done), w1 ;put DRESP_DONE as return address onto stack
+         mov     w1, [w15++]
+         mov     #tblpage(dresp_done), w1
+         and     #0x7F, w1
+         mov     w1, [w15++]
+
+         mov     #tbloffset(dresp_tbl), w1 ;get command table address into W2:W1
+         mov     #tblpage(dresp_tbl), w2
+         sl      w0, #1, w3  ;make offset into table for this opcode
+         add     w1, w3, w1  ;make table entry address in W2:W1
+         addc    #0, w2
+         mov     w2, Tblpag  ;set high bits of program memory address to fetch
+         tblrdl  [w1], [w15++] ;fetch low 16 bits and push them onto the stack
+         tblrdh  [w1], [w15++] ;fetch and push the remaining high bits
+         return              ;jump to the address just pushed onto the stack
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Response processing routines.  Each of these routines processes a different
+;   response from the display unit.  The response opcode is in W0, with the
+;   remaining bytes of the response, if any, not read from the stream yet.
+;
+;   Use the DRESP_GETn routines to read parameters to this response from the
+;   response stream.
+;
+;   When done, execution must end up at DRESP_DONE.  This can be accomplished by
+;   executing a RETURN from the top nesting level.  It is permissible to jump to
+;   DRESP_DONE with data left on the stack.  It can therefore be jumped to from
+;   a nested subroutine, for example.
+;
+;   All the W0-W14 general registers may be trashed.
+;
+
+;*******************************************************************************
+;
+;   Response PONG
+;
+;   Sent in response to a PING command.
+;
+         locent  drsp_pong
+
+         btss    flags, #flg_evpong ;waiting for this response ?
+         return              ;no, nothing more to do
+         bset    flags, #flg_ev ;indicate the event occurred
+         bclr    flags, #flg_evpong ;reset to not waiting for this event anymore
+         setflag disp        ;indicate the display seems to be up and functioning
+         return
+
+;*******************************************************************************
+;
+;   Response FWINFO type version sequence
+;
+         locent  drsp_fwinfo
+
+         mcall   dresp_get8  ;get and save the firmware info data
+         mov     w0, disp_fwtype
+         mcall   dresp_get8
+         mov     w0, disp_fwver
+         mcall   dresp_get8
+         mov     w0, disp_fwseq
+
+         btss    flags, #flg_evfwinfo ;waiting for this response ?
+         return              ;no, nothing more to do
+         bset    flags, #flg_ev ;indicate the event occurred
+         bclr    flags, #flg_evfwinfo ;reset to not waiting for this event anymore
+         setflag disp        ;indicate the display seems to be up and functioning
+         return
+
+;*******************************************************************************
+;
+;   Response BUTTRAW left right up down mid
+;
+;   Indicates the current raw button sense values.
+;
+         locent  drsp_buttraw
+
+         mov     #5, w1      ;number of bytes to read and discard
+;
+;   Common code to read and discard the number of bytes indicated in W0, then
+;   end the response routine.  W0 may be 0, in which case nothing is done.  This
+;   section may be jumped to with data on the stack.
+;
+dresp_discard_n:             ;read and discard number of bytes in W0
+         cp0     w0
+         bra     z, dresp_done ;no more bytes to read ?
+         mcall   dresp_get8  ;read this byte
+         sub     #1, w1      ;count one less byte left to do
+         jump    dresp_discard_n ;back to do next byte
+
+;*******************************************************************************
+;
+;   Response BUTT butt changed
+;
+
+////////////////////
+//
+//   Macro UPD_BUTTON name, bit
+//
+//   Update the global flags for the button of name NAME.  BIT is the 0-N number
+//   of its bit within the BUTT and CHANGED bytes.  The BUTT is in the high byte
+//   of W1 and CHANGED is in the low byte.
+//
+//   NAME is bare characters, not a string.
+//
+/macro upd_button
+  /var local bit integer = [arg 2]
+  /write ";"
+  /write ";   Update " [ucase [qstr [arg 1]]] " button state."
+  /write ";"
+         btsc    w1, #[+ bit 8] ;released ?
+         jump    [lab press] ;no, pressed
+         ;
+         ;   The button is now released.
+         ;
+         clrflag butt_[arg 1] ;indicate state of the button
+         btsc    w1, #[v bit] ;didn't change just now ?
+         setflag brel_[arg 1] ;button released event
+         jump    [lab done]
+         ;
+         ;   The button is now pressed.
+         ;
+[lab press]:
+         setflag butt_[arg 1] ;indicate state of the button
+         btsc    w1, #[v bit] ;didn't change just now ?
+         setflag bpress_[arg 1] ;button pressed event
+[lab done]:
+  /endmac
+//
+////////////////////
+
+         locent  drsp_butt
+
+         mcall   dresp_get8  ;get button state into high byte of W1
+         sl      w0, #8, w1
+         mcall   dresp_get8  ;merge changed flags into low byte of W1
+         ior     w1, w0, w1
+
+         upd_button left, 0  ;update the global flags for each button
+         upd_button right, 1
+         upd_button up, 2
+         upd_button down, 3
+         upd_button mid, 4
+         upd_button onoff, 5
+
+         return
+
+;*******************************************************************************
+;
+;   Response DISP cols lines flags
+;
+         locent  drsp_disp
+
+         mcall   dresp_get8  ;COLS
+         add     #1, w0      ;make number of columns
+         mov     w0, ncols   ;save it
+
+         mcall   dresp_get8  ;LINES
+         add     #1, w0      ;make number of lines
+         mov     w0, nlines  ;save it
+
+         return
+
+;*******************************************************************************
+;
+;   Response CMDS dat0 ... dat31
+;
+         locent  drsp_cmds
+
+         mov     #32, w1     ;init number of bytes left to get
+         mov     #cmds, w2   ;init pointer where to store next byte
+cmds_byte:                   ;back here each new byte
+         mcall   dresp_get8  ;get this DAT byte
+         mov.b   w0, [w2++]  ;save it, point to where to put next byte
+         sub     #1, w1      ;count one less byte left to do
+         bra     nz, cmds_byte ;back to do another byte ?
+
+         return
+
+;*******************************************************************************
+;
+;   Response DSTOP
+;
+         locent  drsp_dstop
+
+         bset    flags, #flg_stop ;indicate to not send display-writing commands
+         return
+
+;*******************************************************************************
+;
+;   Response DGO
+;
+         locent  drsp_dgo
+
+         bclr    flags, #flg_stop ;OK to send display-writing commands again
+
+         btss    flags, #flg_evdgo ;waiting for this response ?
+         return              ;no, nothing more to do
+         bset    flags, #flg_ev ;indicate the event occurred
+         bclr    flags, #flg_evdgo ;reset to not waiting for this event anymore
+         setflag disp        ;indicate the display seems to be up and functioning
+
+         return
+
+;*******************************************************************************
+;
+;   Response THRESH plft prit ptop pbot pmid rlft rrit rtop rbot rmid
+;
+;   Capacitive sense button press and release thresholds.
+;
+         locent  drsp_thresh
+
+         mov     #10, w0     ;number of bytes to read and discard
+         jump    dresp_discard_n
+
+;*******************************************************************************
+;
+;   Response CONT cont
+;
+;   Display contrast setting.
+;
+         locent  drsp_cont
+
+         mcall   dresp_get8  ;get the contrast setting
+         mov     w0, cont    ;save it
+         return
+
+//******************************************************************************
+//******************************************************************************
+//
+//   Create the C include file for the interfaces in this module if any C
+//   modules are used in this build.
+//
+/if using_c then
+  /call write_push [str fwname "_disp.h"]
+
+  /call write_c_const event_none
+  /call write_c_const event_left_press
+  /call write_c_const event_left_release
+  /call write_c_const event_right_press
+  /call write_c_const event_right_release
+  /call write_c_const event_up_press
+  /call write_c_const event_up_release
+  /call write_c_const event_down_press
+  /call write_c_const event_down_release
+  /call write_c_const event_mid_press
+  /call write_c_const event_mid_release
+  /call write_c_const event_onoff_press
+  /call write_c_const event_onoff_release
+  /call write_c_const event_leftright
+
+  /call write_c_const char_bell_k
+  /call write_c_const char_back_k
+  /call write_c_const char_cr_k
+  /call write_c_const char_lf_k
+  /call write_c_const char_left_k
+  /call write_c_const char_right_k
+  /call write_c_const char_up_k
+  /call write_c_const char_down_k
+  /call write_c_const char_block_k
+
+  /call write_c_const evwaitms
+  /call write_c_const evwaithz
+
+  /call write_pop
+  /endif                     ;done writing C include file
+
+;*******************************************************************************
+;
+;   Responses dispatch table.  There is one table entry for each possible 0 -
+;   255 response opcode.  Each table entry uses one program memory word (24
+;   bits), and contains the address of the processing routine for that opcode.
+;
+;   All response processing routines are named DRSP_xxx.
+;
+dresp_tbl:
+         .pword  dresp_done  ;0 - NOP, command explicitly ignored
+         .pword  drsp_pong   ;1 - response to PING
+         .pword  drsp_fwinfo ;2 - firmware version
+         .pword  drsp_buttraw ;3 - button raw sense values
+         .pword  drsp_butt   ;4 - button state with changes flagged
+         .pword  drsp_disp   ;5 - display capabilities
+         .pword  drsp_cmds   ;6 - list of supported commands
+         .pword  drsp_dstop  ;7 - stop sending display-writing commands
+         .pword  drsp_dgo    ;8 - OK to send display-writing commands again
+         .pword  drsp_thresh ;9 - capacitive sense threshold levels
+         .pword  drsp_cont   ;10 - display contrast setting
+         .pword  dresp_done  ;10
+         .pword  dresp_done  ;11
+         .pword  dresp_done  ;12
+         .pword  dresp_done  ;13
+         .pword  dresp_done  ;14
+         .pword  dresp_done  ;15
+         .pword  dresp_done  ;16
+         .pword  dresp_done  ;17
+         .pword  dresp_done  ;18
+         .pword  dresp_done  ;19
+         .pword  dresp_done  ;20
+         .pword  dresp_done  ;21
+         .pword  dresp_done  ;22
+         .pword  dresp_done  ;23
+         .pword  dresp_done  ;24
+         .pword  dresp_done  ;25
+         .pword  dresp_done  ;26
+         .pword  dresp_done  ;27
+         .pword  dresp_done  ;28
+         .pword  dresp_done  ;29
+         .pword  dresp_done  ;30
+         .pword  dresp_done  ;31
+         .pword  dresp_done  ;32
+         .pword  dresp_done  ;33
+         .pword  dresp_done  ;34
+         .pword  dresp_done  ;35
+         .pword  dresp_done  ;36
+         .pword  dresp_done  ;37
+         .pword  dresp_done  ;38
+         .pword  dresp_done  ;39
+         .pword  dresp_done  ;40
+         .pword  dresp_done  ;41
+         .pword  dresp_done  ;42
+         .pword  dresp_done  ;43
+         .pword  dresp_done  ;44
+         .pword  dresp_done  ;45
+         .pword  dresp_done  ;46
+         .pword  dresp_done  ;47
+         .pword  dresp_done  ;48
+         .pword  dresp_done  ;49
+         .pword  dresp_done  ;50
+         .pword  dresp_done  ;51
+         .pword  dresp_done  ;52
+         .pword  dresp_done  ;53
+         .pword  dresp_done  ;54
+         .pword  dresp_done  ;55
+         .pword  dresp_done  ;56
+         .pword  dresp_done  ;57
+         .pword  dresp_done  ;58
+         .pword  dresp_done  ;59
+         .pword  dresp_done  ;60
+         .pword  dresp_done  ;61
+         .pword  dresp_done  ;62
+         .pword  dresp_done  ;63
+         .pword  dresp_done  ;64
+         .pword  dresp_done  ;65
+         .pword  dresp_done  ;66
+         .pword  dresp_done  ;67
+         .pword  dresp_done  ;68
+         .pword  dresp_done  ;69
+         .pword  dresp_done  ;70
+         .pword  dresp_done  ;71
+         .pword  dresp_done  ;72
+         .pword  dresp_done  ;73
+         .pword  dresp_done  ;74
+         .pword  dresp_done  ;75
+         .pword  dresp_done  ;76
+         .pword  dresp_done  ;77
+         .pword  dresp_done  ;78
+         .pword  dresp_done  ;79
+         .pword  dresp_done  ;80
+         .pword  dresp_done  ;81
+         .pword  dresp_done  ;82
+         .pword  dresp_done  ;83
+         .pword  dresp_done  ;84
+         .pword  dresp_done  ;85
+         .pword  dresp_done  ;86
+         .pword  dresp_done  ;87
+         .pword  dresp_done  ;88
+         .pword  dresp_done  ;89
+         .pword  dresp_done  ;90
+         .pword  dresp_done  ;91
+         .pword  dresp_done  ;92
+         .pword  dresp_done  ;93
+         .pword  dresp_done  ;94
+         .pword  dresp_done  ;95
+         .pword  dresp_done  ;96
+         .pword  dresp_done  ;97
+         .pword  dresp_done  ;98
+         .pword  dresp_done  ;99
+         .pword  dresp_done  ;100
+         .pword  dresp_done  ;101
+         .pword  dresp_done  ;102
+         .pword  dresp_done  ;103
+         .pword  dresp_done  ;104
+         .pword  dresp_done  ;105
+         .pword  dresp_done  ;106
+         .pword  dresp_done  ;107
+         .pword  dresp_done  ;108
+         .pword  dresp_done  ;109
+         .pword  dresp_done  ;110
+         .pword  dresp_done  ;111
+         .pword  dresp_done  ;112
+         .pword  dresp_done  ;113
+         .pword  dresp_done  ;114
+         .pword  dresp_done  ;115
+         .pword  dresp_done  ;116
+         .pword  dresp_done  ;117
+         .pword  dresp_done  ;118
+         .pword  dresp_done  ;119
+         .pword  dresp_done  ;120
+         .pword  dresp_done  ;121
+         .pword  dresp_done  ;122
+         .pword  dresp_done  ;123
+         .pword  dresp_done  ;124
+         .pword  dresp_done  ;125
+         .pword  dresp_done  ;126
+         .pword  dresp_done  ;127
+         .pword  dresp_done  ;128
+         .pword  dresp_done  ;129
+         .pword  dresp_done  ;130
+         .pword  dresp_done  ;131
+         .pword  dresp_done  ;132
+         .pword  dresp_done  ;133
+         .pword  dresp_done  ;134
+         .pword  dresp_done  ;135
+         .pword  dresp_done  ;136
+         .pword  dresp_done  ;137
+         .pword  dresp_done  ;138
+         .pword  dresp_done  ;139
+         .pword  dresp_done  ;140
+         .pword  dresp_done  ;141
+         .pword  dresp_done  ;142
+         .pword  dresp_done  ;143
+         .pword  dresp_done  ;144
+         .pword  dresp_done  ;145
+         .pword  dresp_done  ;146
+         .pword  dresp_done  ;147
+         .pword  dresp_done  ;148
+         .pword  dresp_done  ;149
+         .pword  dresp_done  ;150
+         .pword  dresp_done  ;151
+         .pword  dresp_done  ;152
+         .pword  dresp_done  ;153
+         .pword  dresp_done  ;154
+         .pword  dresp_done  ;155
+         .pword  dresp_done  ;156
+         .pword  dresp_done  ;157
+         .pword  dresp_done  ;158
+         .pword  dresp_done  ;159
+         .pword  dresp_done  ;160
+         .pword  dresp_done  ;161
+         .pword  dresp_done  ;162
+         .pword  dresp_done  ;163
+         .pword  dresp_done  ;164
+         .pword  dresp_done  ;165
+         .pword  dresp_done  ;166
+         .pword  dresp_done  ;167
+         .pword  dresp_done  ;168
+         .pword  dresp_done  ;169
+         .pword  dresp_done  ;170
+         .pword  dresp_done  ;171
+         .pword  dresp_done  ;172
+         .pword  dresp_done  ;173
+         .pword  dresp_done  ;174
+         .pword  dresp_done  ;175
+         .pword  dresp_done  ;176
+         .pword  dresp_done  ;177
+         .pword  dresp_done  ;178
+         .pword  dresp_done  ;179
+         .pword  dresp_done  ;180
+         .pword  dresp_done  ;181
+         .pword  dresp_done  ;182
+         .pword  dresp_done  ;183
+         .pword  dresp_done  ;184
+         .pword  dresp_done  ;185
+         .pword  dresp_done  ;186
+         .pword  dresp_done  ;187
+         .pword  dresp_done  ;188
+         .pword  dresp_done  ;189
+         .pword  dresp_done  ;190
+         .pword  dresp_done  ;191
+         .pword  dresp_done  ;192
+         .pword  dresp_done  ;193
+         .pword  dresp_done  ;194
+         .pword  dresp_done  ;195
+         .pword  dresp_done  ;196
+         .pword  dresp_done  ;197
+         .pword  dresp_done  ;198
+         .pword  dresp_done  ;199
+         .pword  dresp_done  ;200
+         .pword  dresp_done  ;201
+         .pword  dresp_done  ;202
+         .pword  dresp_done  ;203
+         .pword  dresp_done  ;204
+         .pword  dresp_done  ;205
+         .pword  dresp_done  ;206
+         .pword  dresp_done  ;207
+         .pword  dresp_done  ;208
+         .pword  dresp_done  ;209
+         .pword  dresp_done  ;210
+         .pword  dresp_done  ;211
+         .pword  dresp_done  ;212
+         .pword  dresp_done  ;213
+         .pword  dresp_done  ;214
+         .pword  dresp_done  ;215
+         .pword  dresp_done  ;216
+         .pword  dresp_done  ;217
+         .pword  dresp_done  ;218
+         .pword  dresp_done  ;219
+         .pword  dresp_done  ;220
+         .pword  dresp_done  ;221
+         .pword  dresp_done  ;222
+         .pword  dresp_done  ;223
+         .pword  dresp_done  ;224
+         .pword  dresp_done  ;225
+         .pword  dresp_done  ;226
+         .pword  dresp_done  ;227
+         .pword  dresp_done  ;228
+         .pword  dresp_done  ;229
+         .pword  dresp_done  ;230
+         .pword  dresp_done  ;231
+         .pword  dresp_done  ;232
+         .pword  dresp_done  ;233
+         .pword  dresp_done  ;234
+         .pword  dresp_done  ;235
+         .pword  dresp_done  ;236
+         .pword  dresp_done  ;237
+         .pword  dresp_done  ;238
+         .pword  dresp_done  ;239
+         .pword  dresp_done  ;240
+         .pword  dresp_done  ;241
+         .pword  dresp_done  ;242
+         .pword  dresp_done  ;243
+         .pword  dresp_done  ;244
+         .pword  dresp_done  ;245
+         .pword  dresp_done  ;246
+         .pword  dresp_done  ;247
+         .pword  dresp_done  ;248
+         .pword  dresp_done  ;249
+         .pword  dresp_done  ;250
+         .pword  dresp_done  ;251
+         .pword  dresp_done  ;252
+         .pword  dresp_done  ;253
+         .pword  dresp_done  ;254
+         .pword  dresp_done  ;255
+
+.end

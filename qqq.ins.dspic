@@ -1,0 +1,137 @@
+;   ***************************************************************
+;   * Copyright (C) 2009, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Include file used by all the modules that are private to this application.
+;
+;   ***  INSERT DESCRIPTION OF THE APPLICATION HERE  ***
+;
+;   Hardware peripheral usage:
+;
+
+;
+;   Debug switches.  All these should be set to FALSE for normal operation.
+;
+/const   debug_icd bool = false ;build for debugging with in-circuit debugger
+/const   debug_cmddel bool = false ;delay command to receive parameters in FIFO
+
+/include "qq2lib.ins.dspic"
+
+;*******************************************************************************
+;
+;   Application configuration parameters
+;
+
+;
+;   Priority levels for each of the interrupts.
+;
+.equiv   ipr_clock, 1        ;periodic clock timer interrupt priority
+.equiv   ipr_uart_recv, 2    ;UART receive interrupt priority
+.equiv   ipr_uart_xmit, 1    ;UART transmit interrupt priority
+;
+;   Response stream opcodes.
+;
+/const   rsp_nop integer = 0 ;NOP
+/const   rsp_pong integer = 1 ;response to PING command
+/const   rsp_fwinfo integer = 2 ;firmware type, version, and sequence
+
+/loop symbols symq const     ;define response opcodes as ASM30 constants too
+  /var local sym string
+  /set sym [sym symq name]
+  /if [< [slen sym] 5] then  ;too short to be RSP_xxx symbol ?
+    /repeat
+    /endif
+  /if [<> [substr 1 4 sym] "rsp_"] then ;doesn't start with "rsp_" ?
+    /repeat
+    /endif
+.equiv   [chars sym], [v [chars sym]]
+  /endloop
+;
+;   Software error IDs.
+;
+.equiv   err_traposc, 1      ;oscillator failure trap
+.equiv   err_trapadr, 2      ;address error trap
+.equiv   err_hard, 3         ;hard error trap
+.equiv   err_trapstk, 4      ;stack error trap
+.equiv   err_trapmat, 5      ;math error trap
+.equiv   err_dmac, 6         ;DMAC error trap
+.equiv   err_soft, 7         ;soft trap error
+
+.equiv   err_notask, 8       ;task table overflow on attempt to create new task
+.equiv   err_uarthwov, 9     ;UART receive hardware overrun
+.equiv   err_uartswov, 10    ;UART receive software FIFO overrun
+;
+;   The registers listed in TSKSAVE are saved accross task swaps (calls
+;   to TASK_YIELD).
+;
+.set     ii,     regf0 | regf1 | regf2 | regf3
+.set     ii,     ii | regf4 | regf5 | regf6 | regf7
+.set     ii,     ii | regf8 | regf9 | regf10 | regf11
+.set     ii,     ii | regf12 | regf13 | regf14
+.equiv   tsksave, ii         ;mask of registers preserved by TASK_YIELD
+
+.equiv   tsknsave, (~tsksave) & 0x7FFF ;mask of registers trashed by TASK_YIELD
+;
+;   Derived constants.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /endblock
+
+;*******************************************************************************
+;
+;   Global flags.
+;
+;   All flags are initialized to 0 in the STRT module.
+;
+/flag    usb_host            ;host may be connected to USB
+/flag    usb_app             ;app may have logical connection over the USB
+
+;*******************************************************************************
+;
+;   I/O pin declarations.
+;
+
+;*******************************************************************************
+;
+;   Macro INDICATE_ERROR id
+;
+;   Provide an external indication that a fatal error has occurred.  This macro
+;   is required by the standard TRAP module.
+;
+.macro indicate_error id
+  .endm
+
+;*******************************************************************************
+;
+;   Macro SWERR id
+;
+;   Indicate a fatal error has occurred.  The argument is the ID for the
+;   error.  When debugging, this will jump to SW_ERROR in the TRAP module
+;   with the ID in W0.  When this firmware is built for production mode,
+;   the ID is ignored and the processor is reset and restarted.
+;
+.macro swerr id
+
+  .if debug
+         mov     #\id, w0
+         gjump   sw_error
+    .else
+         reset
+    .endif
+  .endm

@@ -1,0 +1,70 @@
+;   ***************************************************************
+;   * Copyright (C) 2009, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Perform system-level initialization.  The individual modules have
+;   already been initialized.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+
+;
+;   Derived constants.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_init, bss
+
+;*******************
+;
+;   Local state.
+;
+
+
+.section .code_init, code
+;*******************************************************************************
+;
+;   Routine INIT
+;
+;   This routine is jumped to from the STRT module after the individual
+;   modules have been initialized.
+;
+         glbent  init
+
+         mov     #500, w0    ;wait a little while for things to stabalize
+         gcall   waitms
+
+         gcall   cmd_start   ;start host command processing
+
+         gjump   main        ;run main event handling task
+
+.end

@@ -1,0 +1,67 @@
+;   Routines that are only for interfacing with C code.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+.equiv   stacksz, 512        ;C task stack size, bytes
+;
+;   Derived constants.
+;
+
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_c, bss
+
+
+;*******************
+;
+;   Local state.
+;
+alloc    stack_c, stacksz, 2 ;C task stack
+
+
+.section .code_c, code
+;*******************************************************************************
+;
+;   Subroutine C_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  c_init
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine C_START
+;
+;   Start the main C code task.
+;
+         glbsub  c_start, regf13 | regf14
+
+         mov     #stacksz, w13 ;pass size of data stack
+         mov     #stack_c, w14 ;pass start address of data stack
+         call    task_new    ;create UART command processing task
+         goto    c_task      ;start point of the new task
+
+         leaverest
+
+;*******************************************************************************
+;
+;   C task.  The code here is just a assembler stub that runs the C main code.
+;
+c_task:                      ;C task starts here
+         gcall   _cmain      ;run the main C operating loop
+         reset               ;should never get here, but reset processor if it does
+
+.end

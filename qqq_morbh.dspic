@@ -1,0 +1,119 @@
+;   Morbus host application layer.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+
+;
+;   Derived constants.
+;
+
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_morbh, bss
+
+
+;*******************
+;
+;   Local state.
+;
+
+
+.section .code_morbh, code
+;*******************************************************************************
+;
+;   Subroutine MORBH_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  morbh_init
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MORBH_RESET
+;
+;   Called by the EmCan host layer whenever the bus is reset.
+;
+;   All the registers W0-W14 may be trashed.
+;
+         glbsub  morbh_reset
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MORBH_ASSIGN
+;
+;   Called by the EmCan host layer when a bus node has been assigned a address,
+;   a attempt has been made to enable the node for this application, and the
+;   node has acknowledged that attempt.  If the node can support this
+;   application then its application-specific actions are enabled, otherwise
+;   not.  This routine is called in either case, but only after the node's
+;   application enable status has been resolved.  This routine is also called
+;   once for each device when enumeration is requested.
+;
+;   W0 contains the node ID, and W1 points to the 7 byte globally unique ID of
+;   the device.
+;
+;   All the registers W0-W14 may be trashed.
+;
+         glbsub  morbh_assign
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MORBH_UNASSIGN
+;
+;   Called by the EmCan host layer whenever the address of a existing bus node
+;   is unassigned.  This usually means the mode was unplugged and then the
+;   address assignment eventually timed out.
+;
+;   W0 contains the node ID, and W1 points to the 7 byte globally unique ID of
+;   the device.
+;
+;   All the registers W0-W14 may be trashed.
+;
+         glbsub  morbh_unassign
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MORBH_FRAME
+;
+;   Called by the EmCan host layer whenever a frame is received that can not be
+;   handled silently as part of the EmCan protocol.  The received CAN frame
+;   data will be in the CANIN_xxx variables.  This will be held until
+;   EMCANH_RELEASE is called to release the received frame state.  This routine
+;   should be called as soon as possible and before waiting on any other events.
+;   The received CAN frame state is held until it is released, which means no
+;   other received CAN frames can be processed.  If held too long, new incoming
+;   CAN frames may be lost.  The existing received CAN frame state is
+;   automatically released when this routine returns, if it was not already
+;   previously released by this routine.
+;
+;   All the registers W0-W14 may be trashed.
+;
+;   When done, this routine may execute a RETURN from its top level, or it may
+;   jump to EMCANH_DFRAME at any time from any nesting level.  The stack is
+;   then reset, so jumping to EMCANH_DFRAME with additional return addresses or
+;   data on the stack is permissible.
+;
+         glbsub  morbh_frame
+
+         leaverest
+
+.end

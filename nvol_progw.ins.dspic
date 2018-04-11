@@ -1,0 +1,511 @@
+;   See the comments in QQQ_NVOLW.DSPIC.
+;
+/if [not [exist "name"]] then
+  /const name string = ""
+  /endif
+
+/if [not [exist "nvwords"]] then
+  /show "  NVWORDS not defined.  This constant is required."
+         .error  "NVWORDS"
+         .end
+  /endif
+
+/if [not [exist "progsz"]] then
+  /show "  PROGSZ not defined.  This constant is required."
+         .error  "PROGSZ"
+         .end
+  /endif
+
+/if [not [exist "endfree"]] then
+  /const endfree integer = 1;
+  /endif
+;
+;   Constants that indicate values beyond the control of this firmware.  These
+;   are not user choices.
+;
+/const   erasesz integer = 512 ;erase block size, program memory words
+/const   writesz integer = 64 ;write block size, program memory words
+;
+;   Derived constants.
+;
+/const   eradr   integer = [* erasesz 2] ;erase block size, prog mem adresses
+/const   nerblk  integer = [div [+ nvwords erasesz -1] erasesz] ;N erase blocks
+/const   nprogw  integer = [* nerblk erasesz] ;N prog mem words for nvol data
+/const   stadr   integer = [- progsz [* [+ nerblk endfree] eradr]] ;prog mem nvol start adr
+/const   cawsz   integer = [min erasesz nvwords] ;required RAM size, words
+/const   cabsz   integer = [* 2 cawsz] ;required RAM size, bytes
+/const   wrerase integer = [div erasesz writesz] ;write blocks per erase block
+/const   blklog2 integer = [rnd [log2 erasesz]] ;Log2 erase block size
+/const   blkmask integer = [and 16#FFFF [shiftl 16#FFFF blklog2]] ;mask for block number of adr
+/const   ofsmask integer = [and 16#FFFF [~ blkmask]] ;maks of offset within block
+
+/if [<> [exp 2 blklog2] erasesz] then
+  /show "  Erase block size (" erasesz ") is not a power of 2."
+         .error  "ERASESZ"
+         .end
+  /stop
+  /endif
+/if [<> [* wrerase writesz] erasesz] then
+  /show "  Erase block size (" erasesz ") not a multiple of write block size (" writesz ")"
+         .error  "ERASESZ WRITESZ"
+         .end
+  /stop
+  /endif
+
+/if [= name ""]
+  /then                      ;no unique name for the subroutines
+    /const uname string = ""
+  /else                      ;subroutine names will be customized
+    /const uname string = [str "_" name]
+  /endif
+
+;*******************************************************************************
+;
+;   Local state.
+;
+.section .ram_nvol[chars uname], bss
+
+alloc    cawofs              ;nvol word offset of start of cached data
+alloc    cache,  [v cabsz], 2 ;cache for up to one erase block of data
+;
+;   Local state in near RAM.
+;
+.section .near_nvol[chars uname], bss, near
+
+alloc    flags               ;individual flag bits
+;
+;   Constants for the bit numbers of individual flags in the FLAGS word.
+;
+.equiv   flg_cache, 0        ;block of data is cached in RAM
+.equiv   flg_dirty, 1        ;RAM cached data was changed from that in nvol storage
+
+
+.section .code_nvol[chars uname], code
+;*******************************************************************************
+;
+;   Subroutine NVOL_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  nvol[chars uname]_init
+
+         clr     flags       ;init all local flags to off
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_READ
+;
+;   Read the non-volatile word at the address in W1 into W0.  Results are
+;   undefined when W1 contains a address past the end of the non-volatile words.
+;   W1 is incremented by one.  Successive calls to this routine therefore return
+;   successive non-volatile words.
+;
+         glbsub  nvol[chars uname]_read, regf2
+;
+;   Check for the addressed word is in the RAM cache.
+;
+         btss    flags, #flg_cache ;there is data in the cache ?
+         jump    rd_ncache   ;no
+         mov     cawofs, w0  ;get start address of cached data
+         cp      w1, w0
+         bra     ltu, rd_ncache ;addressed word is before cache ?
+         mov     #[- cawsz 1], w2 ;make address of last word in cache
+         add     w0, w2, w2
+         cp      w1, w2
+         bra     gtu, rd_ncache ;addressed word is after cache ?
+;
+;   The addressed word is in the cache.  W0 contains the address of the first
+;   word in the cache.
+;
+         sub     w1, w0, w0  ;make word offset into the cache
+         sl      w0, #1, w0  ;make byte offset of addressed word into the cache
+         mov     #cache, w2  ;get start address of the cache in memory
+         add     w2, w0, w2  ;make address of the selected word in memory
+         mov     [w2], w0    ;fetch the word from the cache
+         jump    rd_leave
+;
+;   The addressed non-volatile word is not in the cache.  Read it directly from
+;   program memory.
+;
+rd_ncache:
+         mov     #0, w0      ;value to return for invalid address
+         mov     #[- nvwords 1], w2 ;get last valid address
+         cp      w1, w2
+         bra     gtu, rd_leave ;address is past end of non-volatile data ?
+
+         sl      w1, #1, w2  ;make program memory space offset for addressed word
+         mov     #tbloffset(nvol), w0 ;get low adr word of nvol data start
+         add     w0, w2, w0  ;make low 16 bits of selected prog mem word adr
+         mov     #tblpage(nvol), w2 ;make high bits of selected prog mem word adr
+         addc    #0, w2
+         mov     w2, Tblpag
+         tblrdl  [w0], w0    ;fetch the non-volatile word from program memory
+
+rd_leave:                    ;common exit point
+         add     #1, w1      ;increment the nvol word address for next time
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_WRITE
+;
+;   Write the word in W0 to the non-volatile address in W1.  W1 will be
+;   incremented by one.  Successive calls to this routine therefore write to
+;   successive non-volatile words.  The write is not performed if W1 indicates
+;   a address past the end of the non-volatile memory.
+;
+;   Data written with this routine may be cached.  Cached data is not guaranteed
+;   to be written to the physical non-volatile memory until NVOL_FLUSH is
+;   called.
+;
+         glbsub  nvol[chars uname]_write, regf2 | regf3 | regf4
+
+         mov     #[- nvwords 1], w2 ;get last valid address
+         cp      w1, w2
+         bra     gtu, wr_leave ;invalid address, nothing more to do ?
+
+         btss    flags, #flg_cache ;a block of data is in the cache ?
+         jump    wr_rdcache  ;no, go read this block into the cache
+
+         mov     #[v blkmask], w2
+         and     w1, w2, w2  ;make block start adr of word to write
+         mov     cawofs, w3  ;get start adr of the cached block
+         cp      w2, w3
+         bra     z, wr_cached ;the target block is already in the cache ?
+
+         btss    flags, #flg_dirty ;current block contains unwritten changes ?
+         jump    wr_rdcache  ;no, read target block into the cache
+         mcall   nvol[chars uname]_flush ;physically write current block to non-volatile memory
+;
+;   The cache does not contain the block the target word is in.  Read that block
+;   into the cache.
+;
+wr_rdcache:
+         mov     #tbloffset(nvol), w2 ;get nvol start adr in prog mem into W3:W2
+         mov     #tblpage(nvol), w3
+         mov     #[v blkmask], w4 ;get nvol adr block number mask
+         and     w1, w4, w4  ;make nvol offset of block start
+         mov     w4, cawofs  ;save nvol word offset of cached block start
+         add     w2, w4, w2  ;make program memory block start address in W3:W2
+         addc    #0, w3
+         add     w2, w4, w2
+         addc    #0, w3
+         mov     w3, Tblpag  ;set upper address bits for program mem access
+         ;
+         ;   Register usage in this section:
+         ;
+         ;     W0  -  Data word to write from caller, not used here.
+         ;
+         ;     W1  -  Non-volatile address to write to from caller, not used
+         ;            here.
+         ;
+         ;     W2  -  Low word of program memory address to read.
+         ;
+         ;     W3  -  Address of cache word to write to.
+         ;
+         ;     W4  -  Number of cache words left to write.
+         ;
+         mov     #cache, w3  ;init address to write first word to
+         mov     #[v cawsz], w4 ;init number of words left to copy
+wr_rdloop:                   ;back here to read each new word into the cache
+         tblrdl  [w2++], [w3++] ;copy word from program memory to the cache
+         sub     #1, w4      ;count one less word left to copy
+         bra     nz, wr_rdloop ;back to copy next word
+
+         bset    flags, #flg_cache ;indicate a block is in the cache
+;
+;   The cache holds the block containing the target word.
+;
+wr_cached:
+         mov     #[v ofsmask], w2 ;make nvol address offset into this block
+         and     w1, w2, w2
+         mov     #cache, w3  ;get cache start address
+         add     w3, w2, w3  ;make adr of selected word in the cache in W3
+         add     w3, w2, w3
+         cp      w0, [w3]    ;compare new word value to the old
+         bra     z, wr_leave ;no change, nothing to write ?
+
+         mov     w0, [w3]    ;write the new word into the cache
+         bset    flags, #flg_dirty ;indicate cache data has been changed
+
+wr_leave:                    ;common exit point
+         add     #1, w1      ;increment the nvol word address for next time
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_FLUSH
+;
+;   Write any cached and changed non-volatile data to the physical non-volatile
+;   memory.  Writes performed with NVOL_WRITE may be cached transparently to
+;   the caller.  The new data will be returned by NVOL_READ whether it is cached
+;   or not.  However, the new data will not survive a power down unless it is
+;   physically written to the non-volatile memory.  The only way to guarantee
+;   that is to call this routine.
+;
+;   No physical write is performed if there is no cached changed data.
+;
+         glbsub  nvol[chars uname]_flush, regf0 | regf1 | regf2 | regf3 | regf4 | regf5
+
+         btss    flags, #flg_dirty ;there is changed data in the cache ?
+         jump    fl_leave    ;no, nothing to do
+;
+;   Erase the program memory block covered by the cache.
+;
+         mov     #tbloffset(nvol), w0 ;get nvol start adr in prog mem into W1:W0
+         mov     #tblpage(nvol), w1
+         mov     cawofs, w2  ;get nvol word offset of this block
+         add     w0, w2, w0  ;add program memory address offset of block start
+         addc    #0, w1
+         add     w0, w2, w0
+         addc    #0, w1
+         mov     w1, Tblpag  ;set upper address bits of block
+         mov     #0xFFFF, w2
+         tblwtl  w2, [w0]    ;set low 16 address bits of block
+         tblwth  w2, [w0]
+         mov     #0b0100000001000010, w1
+                 ;  0--------------- don't start write/erase operation now
+                 ;  -1-------------- enable write/erase operation
+                 ;  --0------------- clear any previous error condition
+                 ;  ---XXXXXX------- unused
+                 ;  ---------1------ operation is erase, not write
+                 ;  ----------XX---- unused
+                 ;  ------------0010 erase one erase block
+         mov     w1, Nvmcon  ;select flash memory operation to perform
+
+         disi    #1000       ;don't allow interrupts during unlock
+         mov     #0x55, w1   ;perform the special erase/write unlock
+         mov     w1, Nvmkey
+         mov     #0xAA, w1
+         mov     w1, Nvmkey
+         bset    Nvmcon, #Wr ;start the erase operation
+         nop                 ;required NOPs after erase or write
+         nop
+         clr     Disicnt     ;re-enable interrupts
+;
+;   The block of program memory has been erased.  TBLPAG is set for this block
+;   of program memory, and W0 contains the low 16 bits of the program memory
+;   address of the start of the block.
+;
+;   Write the cache data to the block.  This is done in write blocks of WRITESZ
+;   program memory words at a time.  There are WRERASE write blocks in each
+;   erase block.
+;
+;   Register usage in this section:
+;
+;     W0  -  Low 16 bits of the program memory word to write to.
+;
+;     W1  -  Number of write blocks left to do.
+;
+;     W2  -  Data word.
+;
+;     W3  -  Data memory address to get the next word from.
+;
+;     W4  -  Number of words left in this write block.
+;
+;     W5  -  Last valid address of cached data in data memory.
+;
+         mov     #[v wrerase], w1 ;init number of write blocks left to do
+         mov     #cache, w3  ;init address to fetch the next word from
+         mov     #cache + [- cabsz 2], w5 ;data mem address of last cache word
+fl_wblock:                   ;back here each new write block
+         mov     #[v writesz], w4 ;init words left to write in this write block
+fl_wword:                    ;back here to write each word in write block
+         mov     #0xFFFF, w2 ;get data word for unused memory
+         cp      w3, w5      ;compare this address to last valid address
+         bra     gtu, fl_write ;past end of cache ?
+         mov     [w3++], w2  ;fetch this word from the cache
+fl_write:                    ;write the word in W2
+         tblwtl  w2, [w0++]  ;write this word to its write latch
+         sub     #1, w4      ;count one less word left to write
+         bra     nz, fl_wword ;back to write next word
+         ;
+         ;   The write latches for this write block have been set.  Now perform
+         ;   the actual write.
+         ;
+         mov     #0b0100000000000001, w2
+                 ;  0--------------- don't start write/erase operation now
+                 ;  -1-------------- enable write/erase operation
+                 ;  --0------------- clear any previous error condition
+                 ;  ---XXXXXX------- unused
+                 ;  ---------0------ operation is write, not erase
+                 ;  ----------XX---- unused
+                 ;  ------------0001 write one write block
+
+         mov     w2, Nvmcon  ;select flash memory operation to perform
+
+         disi    #1000       ;don't allow interrupts during unlock
+         mov     #0x55, w2   ;perform the special erase/write unlock
+         mov     w2, Nvmkey
+         mov     #0xAA, w2
+         mov     w2, Nvmkey
+         bset    Nvmcon, #Wr ;start the write operation
+         nop                 ;required NOPs after erase or write
+         nop
+         clr     Disicnt     ;re-enable interrupts
+
+         sub     #1, w1      ;count one less write block left to do
+         bra     nz, fl_wblock ;back to do the next write block
+
+         bclr    flags, #flg_dirty ;no unwritten changed data now in the cache
+
+fl_leave:                    ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Macro WORD val
+;
+;   Defines the initial value of the next non-volatile word to be VAL.  The VAL
+;   argument is optional with the default being FFFFh.
+;
+;   A label may be supplied on the macro invocation line.  If so, that symbol is
+;   set to the non-volatile word address of the word for which the initial value
+;   is being defined.  The symbol is made global so that it can be referenced by
+;   other modules.
+;
+/macro word
+  /if [>= nextofs nvwords] then
+    /show "  Too many initial values for the non-volatile data."
+         .error  "NVOL overflow"
+         .end
+    /stop
+    /endif
+  /var local val integer = 16#FFFF
+  /if [exist -1 arg] then
+.equiv   [arg -1], [v nextofs]
+         .global [arg -1]
+    /endif
+  /if [exist 1 arg] then
+    /set val [arg 1]         ;get the nvol word initial value
+    /endif
+         .pword  [v val]
+  /set nextofs [+ nextofs 1] ;update nvol address of next word
+  /endmac
+
+;*******************************************************************************
+;
+;   MACRO FP23F val
+;
+;   Defines the initial value of the next two non-volatile words to be the
+;   value VAL in Embed Inc dsPIC 32bit fast floating point format.  The VAL
+;   argument is optional with the default being 0.0.
+;
+;   A label may be supplied on the macro invocation line.  If so, that symbol is
+;   set to the non-volatile word address of the first word for which the initial
+;   value is being defined.  The symbol is made global so that it can be
+;   referenced by other modules.
+;
+/macro fp32f
+  /var local val real = 0.0  ;VAL argument value
+  /var local fpi integer     ;integer value of 32 bit floating point word
+  /if [exist 1 arg] then
+    /set val [arg 1]
+    /endif
+  /set fpi [fp32f_int val]   ;make integer value of the floating point word
+[arg -1] word    [and fpi 16#FFFF] ;define the low word
+         word    [shiftr fpi 16] ;define the high word
+  /endmac
+
+;*******************************************************************************
+;
+;   Subroutine REPORT_PAGE nextofs
+;
+;   Write a usage report of the page indicated by NEXTPAGE.  NEXTOFS is the
+;   offset of the next free word into this page.  NEXTPAGE will be incremented
+;   by 1.
+;
+/subroutine report_page
+  /var local nused integer = [arg 1] ;number of words used this page
+  /var local s string
+
+  /set s ""
+  /set s [str s "Page " nextpage ": " nused " words of " erasesz " used ("]
+  /set s [str s [rnd [* 100 [/ nused erasesz]]] "%)"]
+  /set s [str s ", " [- erasesz nused] " words left"]
+  /show "  " s
+
+  /set nextpage [+ nextpage 1] ;update number of page to report on next time
+  /endsub
+
+;*******************************************************************************
+;
+;   Subroutine FILL_PAGE
+;
+;   Write use statistics for the current page to standard output, and fill the
+;   rest of the page with FFFFh.
+;
+/subroutine fill_page
+  /var local page integer    ;0-N number of current page
+  /var local padr integer    ;start address of current page
+  /var local ofs integer     ;address offset into current page
+  /var local onxpag integer  ;original NEXTPAGE
+  /var local ii integer      ;scratch integer
+
+  /set page [div nextofs erasesz] ;0-N number of page next word goes on
+  /set padr [* page erasesz] ;start address of this page
+  /set ofs [- nextofs padr]  ;current offset into page
+//
+//   Write info about all previously unreported pages.  Since they have been
+//   skipped over without this routine called, we assume they are completely
+//   filled.
+//
+  /set onxpag nextpage       ;save number of first page reported this time
+  /block
+    /if [< nextpage page] then ;this page got skipped ?
+      /call report_page [v erasesz] ;report as completely full
+      /repeat
+      /endif
+    /endblock
+//
+//   Don't report and fill this page if the offset is at the start of the page
+//   and the previous page wasn't reported on before this routine was called.
+//   That combination of circumstances indicates the previous page was just
+//   exactly filled, and the next word offset was incremented into the next
+//   page.  If the previous page was previously reported, then we assume the
+//   current page is totally empty and report and fill it.
+//
+  /if [and [= ofs 0] [= onxpag [- page 1]]] then
+    /return
+    /endif
+//
+//   Report this page.
+//
+  /call report_page [v ofs]
+//
+//   Fill the remainder of this page.
+//
+  /set ii [- erasesz ofs]    ;init number of words left to fill
+  /block
+    /if [> ii 0] then        ;at least one more word to fill
+         word    16#FFFF
+      /set ii [- ii 1]       ;count one less word left to fill
+      /repeat
+      /endif
+    /endblock
+  /endsub
+
+;*******************************************************************************
+;
+;   Subroutine FILL_ALL
+;
+;   Fill all remaining space in all remaining pages.
+;
+/subroutine fill_all
+  /if [< nextpage nerblk] then
+    /call fill_page
+    /repeat
+    /endif
+  /endsub
+
+;*******************************************************************************
+;
+;   Initialize state so that the above macros can be used in the main part of
+;   the module.  The main part is intended to be copied from the template and
+;   modified per project, whereas this file is intended to be referenced without
+;   replication.
+;
+/var new nextpage integer = 0 ;next page to report on and fill
+/var new nextofs integer = 0 ;init word offset of next non-volatile word to define

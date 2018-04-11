@@ -1,0 +1,1028 @@
+//   Include file that contains the actual code of the generic menu system.
+//
+#include <string.h>
+#include <math.h>
+
+#define menu_flg_sel_k 0x0001          //entries are selectable
+#define menu_flg_2col_k 0x0002         //two column mode, 2 entries per line
+#define menu_flg_appent_k 0x0004       //app routine called to write entries
+#define menu_flg_refr_k 0x0008         //entries must be dynamically refreshed
+#define menu_flg_lr_k 0x0010           //left/right event allowed
+#define menu_flg_scroll_k 0x0020       //menu is scrollable, not fixed locations
+
+static machine_intu_t flags;           //individual flags, use MENU_FLG_xxx_K masks
+static machine_intu_t current;         //1-N current menu entry number
+static machine_intu_t lastent;         //last used 1-6 entry number, static only
+static machine_intu_t refrtk;          //dynamic entries refresh period, timeout ticks
+static machine_intu_t scroll;          //1-N number of top entry displayed, 0 = none
+static menu_entry_write write_ent;     //routine to call to write dynamic entry
+static machine_intu_t off;             //non-zero when user wants the device off
+
+//******************************************************************************
+//
+//   Subroutine MENU_SYS_INIT
+//
+//   One-time initialization of the menu system.
+//
+void menu_sys_init (void) {
+
+  off = false;
+  }
+
+//******************************************************************************
+//
+//   Subroutine MENU_SYS_ON (ON)
+//
+//   Indicate that the user wants the device on or off.  ON is 0 for off, and
+//   non-zero for on.
+//
+//   The on/off state is automatically switched to OFF when the state is ON and
+//   a press of the on/off button is detected.  All menus immediately abort with
+//   OFF status when the state is off.
+//
+//   This routine is usually called from the highest menu level when it has been
+//   externally detected that the user wants the device on again.  It needs to
+//   be called in other cases when the menu system can't detect user on/off
+//   requests on its own.
+//
+void menu_sys_on (                     //indicate user wants the device on or off
+  machine_intu_t on) {                 //0 for off, anything else for on
+
+  off = !on;
+  }
+
+//******************************************************************************
+//
+//   Local subroutine MENU_INIT
+//
+//   Initialize the display and the local state in preparation for setting up
+//   a new menu.
+//
+static void menu_init (void) {         //init for defining new menu
+
+  flags = 0;                           //init all flags to off
+  current = 0;                         //init number of last-written entry
+  lastent = 0;                         //init to no menu entries defined
+  disp_clear ();                       //clear the whole display
+  }
+
+//******************************************************************************
+//
+//   Local subroutine MENU_TITLE (TITLE)
+//
+//   Write a menu title line.  TITLE is the title string.  The menu abort left
+//   arrow is written, and the title is otherwise centered on the top line.
+//
+static void menu_title (               //write menu title
+  const char * title) {                //the title to write, will be centered
+
+machine_intu_t len;                    //length of title string
+
+  len = strlen(title);                 //get length of the title string
+  if (len > 19) len = 19;              //clip to max allowed length
+
+  disp_pos (0, 0);                     //write the menu abort indicator
+  disp_char (char_left_k);
+
+  disp_pos (10 - (len >> 1), 0);       //set position of first character
+  disp_string(title);                  //write the title string
+  }
+
+//******************************************************************************
+//
+//   Subroutine MENU_NEW_STATIC (TITLE)
+//
+//   Start a new menu with fixed (not scrollable) entries.  These menus can have
+//   up to 3 long (whole line) entries or 6 short (half line) entries.
+//
+void menu_new_static (                 //new fixed menu, 3 long entries or 6 short
+  const char * title) {                //title
+
+  menu_init ();                        //init display and menu state
+  flags = flags | menu_flg_sel_k;      //entries will be selectable
+  menu_title (title);                  //write the menu title
+  }
+
+//******************************************************************************
+//
+//   Function MENU_ENTRY_START_N (ENTNUM)
+//
+//   Set up the display for writing the text of menu entry number ENTNUM.  This
+//   is for a static menu only.  After this call, the normal display-writing
+//   routines can be used to write the menu entry.  The display position will
+//   be left at the first writable character of the specified menu entry.
+//
+//   The function returns the maximum number of characters that may be written.
+//
+//   Static menus allow for two formats:
+//
+//     1  -  The menu can have up to 3 entries, one on each line.  The name can
+//       be up to 19 characters long, with column 0 reserved for the selection
+//       indicator.  Entries are numbered 1-3 from top to bottom.
+//
+//     2  -  The menu can have up to 6 entries, two per line.  Each line is
+//       divided into two fields of 10 characters.  The leading character is
+//       reserved for the selection indicator, with up to 9 characters left
+//       for the name.  However, it is usually good to leave a gap between the
+//       end of the left entry on the line and the selection indicator for the
+//       right entry.  That leaves only 8 characters for entry names on the left
+//       side of each line.  The entries are numbered going down the columns
+//       starting in the upper left.  The entries are arranged:
+//
+//       1     4
+//       2     5
+//       3     6
+//
+//   The menu system learns which format is in use by the highest entry number
+//   defined.  Menu entries 1-3 therefore allow up to 19 characters.  It is the
+//   caller's responsibility to not provide a name longer than 9 characters
+//   (preferably 8) when defining menu entry 1-3 if the intent is to use the
+//   corresponding entry 4-6 in the right side of the same line.
+//
+machine_intu_t                         //max number of chars allowed to write
+menu_entry_start_n (                   //set up for writing static menu entry
+  machine_intu_t entnum) {             //1-6 entry number
+
+machine_intu_t col;                    //character column number
+machine_intu_t line;                   //character line number
+machine_intu_t len;                    //remaining num of chars allowed to write
+
+  if (entnum > 6) {                    //out of range entry number ?
+    disp_pos (0, 4);                   //position below display to minimize damage
+    return 0;
+    }
+
+  if (entnum > lastent) {              //save highest entry number seen
+    lastent = entnum;
+    }
+
+  current = entnum;                    //update number of entry last written
+
+  if (entnum > 3) {                    //two-column mode required ?
+    flags = flags | menu_flg_2col_k;   //indicate 2-column mode in use
+    }
+
+  col = 0;                             //init values for left column entry (1-3)
+  line = entnum;
+  len = 19;
+
+  if (entnum > 3) {                    //actually right column entry (4-6)?
+    col = 10;
+    line = entnum - 3;
+    len = 9;
+    }
+
+  disp_pos (col, line);                //go to first character position
+  disp_char ('>');                     //init selection character to unselected
+  return len;                          //return max remaining chars allowed to write
+  }
+
+//******************************************************************************
+//
+//   Subroutine MENU_ENTRY_SET_N (ENTNUM, NAME)
+//
+//   Set the entry number ENTNUM to the string NAME.  This only applies to
+//   static menus.
+//
+//   See the comments for function MENU_ENTRY_START_N for a description of
+//   static menu formats.
+//
+void menu_entry_set_n (                //set specific entry of fixed menu
+  machine_intu_t entnum,               //1-6 entry number
+  const char * name) {                 //entry name, 19 char long, 9 char short
+
+machine_intu_t len;                    //remaining num of chars allowed to write
+
+  len = menu_entry_start_n (entnum);   //set up display, get max chars allowed to write
+
+  while ((len > 0) && (*name != 0)) {  //write the entry name string
+    disp_char (*name++);               //write this character
+    len--;                             //count one character less allowed
+    }
+  }
+
+//******************************************************************************
+//
+//   Subroutine MENU_ENTRY_ADD (NAME)
+//
+//   Create the next sequential static menu entry and give it the name NAME.
+//
+void menu_entry_add (                  //add next entry to static menu
+  const char * name) {                 //entry name, 19 char long, 9 char short
+
+  menu_entry_set_n (++current, name);  //write entry in next available slot
+  }
+
+//******************************************************************************
+//
+//   Subroutine MENU_NEW_STATIC_ENTS (TITLE, NAMES)
+//
+//   This is a shortcut for creating a static menu in one call.  TITLE is the
+//   menu title, and will be displayed centered on the top line.
+//
+//   NAMES is a string containing all the entry names sequentially.  Each name
+//   is terminated by a NULL.  The end of the list is terminated by a additional
+//   NULL.  This can be achieved in the call by using the compile-time string
+//   concatenation:
+//
+//     "Option 1" "\x00"
+//     "Option 2" "\x00"
+//
+void menu_new_static_ents (            //new fixed menu, entries defined here
+  const char * title,                  //title
+  const char * names) {                //entries, NULL after each, extra NULL ends
+
+  menu_new_static (title);             //init the menu and write the title
+
+  while (*names != 0) {                //loop over each entry
+    menu_entry_add (names);            //write this menu entry
+    names = strchr(names, 0) + 1;      //advance to next entry in NAMES string
+    }
+  }
+
+//******************************************************************************
+//
+//   Subroutine MENU_NEW_SCROLL_LIST (TITLE, REFTIME, WENT)
+//
+//   Create a new list with scrollable entries.  The entries will not be
+//   selectable.  In other words, this routine creates a list of information to
+//   scroll thru and view, but not to select individual items of.  The user can
+//   only scroll the list and abort out of the list.
+//
+//   The last column is reserved to indicate scrollability.  The remaining 19
+//   colums are available for the list entry.
+//
+//   TITLE is the title, which is displayed centered in the top line.  The title
+//   is not scrolled.
+//
+//   REFTIME is the maximum allowed interval in units of EVWAITMS_K
+//   milliseconds between menu display refreshes.  A value of 0 disables dynamic
+//   refreshes.  In that case, the menu entries are only re-written when the
+//   menu is scrolled.
+//
+//   WENT is a pointer to the routine to write a specific entry string to the
+//   display.  See the description for the MENU_ENTRY_WRITE data type in the
+//   include file for details.
+//
+void menu_new_scroll_list (            //new scrollable list, not selectable
+  const char * title,                  //title
+  machine_intu_t reftime,              //dynamic refresh, timeout ticks, 0 = static
+  menu_entry_write went) {             //routine to call to write each entry
+
+  menu_init ();                        //init the display and menu state for new menu
+  flags = flags
+    | menu_flg_scroll_k                //the entries will be scrollable
+    | menu_flg_appent_k;               //entries written by calling app routine
+
+  if (reftime > 0) {                   //need to dynamically refresh entries
+    refrtk = reftime;                  //save refresh period, in timeout ticks
+    flags = flags | menu_flg_refr_k;   //remember that dynamic refresh needed
+    }
+
+  write_ent = went;                    //save routine for writing menu entries
+
+  menu_title (title);                  //write the menu title
+  }
+
+//******************************************************************************
+//
+//   Subroutine MENU_NEW_SCROLL (TITLE, REFTIME, WENT)
+//
+//   Create a new menu with scrollable entries.  Each entry will be on a
+//   separate line.  The first character of the line is used to indicate
+//   selection, and the last column is reserved to indicate scrollability.
+//
+//   TITLE is the title, which is displayed centered in the top line.  The title
+//   is not scrolled.
+//
+//   REFTIME is the maximum allowed interval in units of EVWAITMS_k
+//   milliseconds between menu display refreshes.  A value of 0 disables dynamic
+//   refreshes.  In that case, the menu entries are only re-written when the
+//   menu is scrolled.
+//
+//   WENT is a pointer to the routine to write a specific entry string to the
+//   display.  See the description for the MENU_ENTRY_WRITE data type in the
+//   include file for details.
+//
+void menu_new_scroll (                 //new scrollable menu
+  const char * title,                  //title
+  machine_intu_t reftime,              //dynamic refresh, timeout ticks, 0 = static
+  menu_entry_write went) {             //routine to call to write each entry
+
+  menu_new_scroll_list (title, reftime, went); //init list, entries not selectable
+
+  flags = flags | menu_flg_sel_k;      //make the entries selectable
+  }
+
+//******************************************************************************
+//
+//   Subroutine MENU_LEFTRIGHT_ALLOW
+//
+//   Allow the special left/right button held event in this menu.
+//
+void menu_leftright_allow (void) {     //allow special left/right button event
+
+  flags = flags | menu_flg_lr_k;       //allow left/right button special event
+  }
+
+//******************************************************************************
+//
+//   Local subroutine MENU_POS_CHAR (POS, CHR)
+//
+//   Write the character CHR to the position field of the menu entry POS.
+//   Nothing is done if POS indicates a non-existant entry or one that is not
+//   currently displayed.
+//
+//   The postion field is the character immediately left of the menu entry.  It
+//   is usually written with a right-pointing triangle when that menu entry is
+//   current, and a hollow right-pointer when not.
+//
+static void menu_pos_char (            //write character to position indicator
+  machine_intu_t pos,                  //1-N entry to write position indicator of
+  machine_intu_t chr) {                //the character to write
+
+machine_intu_t x, y;                   //character position to write to
+//
+//   Set X,Y to the display coordinates of the position character for the
+//   indicated entry.
+//
+  if (menu_flg_scroll_k & flags)
+    {                                  //scrollable menu
+      if (scroll == 0) return;         //scroll position is not known ?
+      if (pos < scroll) return;        //before first displayed entry ?
+      if (pos > (scroll + 2)) return;  //after last displayed entry ?
+      y = pos - scroll + 1;            //display line number of the entry
+      x = 0;                           //these entries are always whole lines
+      }
+    else {                             //fixed-position menu
+      if (pos == 0) return;            //before start of menu indicated ?
+      if (pos > lastent) return;       //past end of menu indicated ?
+      if (pos <= 3)
+        {                              //in first column
+          y = pos;
+          x = 0;
+          }
+        else {                         //in second column
+          y = pos - 3;
+          x = 10;
+          }
+        ;
+      }
+    ;
+//
+//   Write the character.
+//
+  disp_pos (x, y);                     //set the display position of next write
+  disp_char (chr);                     //write the position indication character
+  }
+
+//******************************************************************************
+//
+//   Local function MENU_DYN_WRITE (LINE, ENT)
+//
+//   Write the 1-N menu entry ENT to the 0-N display line LINE.  This routine
+//   must only be called when the MENU_FLG_APPENT_K flag is set, meaning that
+//   a app routine has been supplied to write the menu entries.
+//
+//   When the menu entry ENT exists, the entire display line is written and the
+//   function returns TRUE.  When ENT does not exist, nothing is written to the
+//   display, and the function returns FALSE.
+//
+static machine_intu_t menu_dyn_write ( //write dynamic entry to display
+  machine_intu_t line,                 //0-N display line number
+  machine_intu_t ent) {                //1-N number of menu entry to write
+
+  disp_pos (0, line);                  //go to the start of the display line
+  if (menu_flg_sel_k & flags) {        //menu entry is selectable ?
+    disp_char (' ');                   //leave room for position indicator, init to blank
+    }
+
+  if (write_ent (ent)) {               //entry exists, got written ?
+    disp_clearto (19);                 //clear the remainder of the line
+    return true;
+    }
+  return false;                        //no such menu entry, nothing written
+  }
+
+//******************************************************************************
+//
+//   Local subroutine MENU_REFRESH
+//
+//   Refresh the display of a dynamic menu.  Nothing is done if there is no app
+//   routine supplied to write menu entries.
+//
+//   SCROLL indicates the entry to display in the top line.
+//
+//   If entries are selectable, the entry matching CURRENT will be indicated as
+//   the current entry.
+//
+//   SCROLL will be altered when CURRENT indicates the last line and there is
+//   room to scroll up one more line so that the current entry is at the
+//   bottom line.
+//
+static void menu_refresh (void) {      //refresh dynamic menu display
+
+machine_intu_t line;                   //0-N display line number to write
+
+  if (!(menu_flg_appent_k & flags)) return; //no app write routine ?
+//
+//   Write the bottom line.  This may cause the display to be scrolled down to
+//   fill the bottom line.
+//
+  while (true) {                       //loop until final SCROLL decided upon
+    if (menu_dyn_write (3, scroll + 2)) break; //bottom line written successfully ?
+    if (scroll <= 1) {                 //can't scroll down any further ?
+      disp_pos (0, 3);                 //no entry on this line, clear it
+      disp_clearto (19);
+      break;                           //done with this line
+      }
+    scroll--;                          //scroll one line down
+    continue;                          //back to try with new scroll position
+    }
+//
+//   Write the scroll down indicator if the menu can be scrolled down.
+//
+  disp_pos (0, 4);                     //to start of first line below display
+  if (write_ent (scroll + 3)) {        //entry below display exists ?
+    disp_pos (19, 3);                  //write scroll down indicator
+    disp_char (char_down_k);
+    }
+//
+//   Write the remaining lines, bottom to top.
+//
+  for (line = 2; line > 0; line--) {   //loop over remaining lines, bottom to top
+    if (!menu_dyn_write (line, scroll + line - 1)) { //no such entry, couldn't write it ?
+      disp_pos (0, line);              //clear the line
+      disp_clearto (19);
+      }
+    }                                  //back to write next line up
+//
+//   Write the current entry marker if entries are selectable.
+//
+  if (menu_flg_sel_k & flags) {        //entries are selectable ?
+    if (current < scroll) current = scroll; //clip the current entry to the displayed
+    if (current > (scroll + 2)) current = scroll + 2;
+    disp_pos (0, current - scroll + 1); //go to current entry indicator position
+    disp_char (char_right_k);          //write the current entry marker
+    }
+//
+//   Write the scroll up indicator if the menu can be scrolled up.
+//
+  if (scroll > 1) {                    //menu can be scrolled up ?
+    disp_pos (19, 1);                  //write scroll up indicator
+    disp_char (char_up_k);
+    }
+  }
+
+//******************************************************************************
+//
+//   Local subroutine MENU_POS (POS)
+//
+//   Position to the 1-N menu entry POS.  CURRENT will be set to the resulting
+//   positioned-to menu entry.  CURRENT will be clipped to the actual available
+//   entries, so can end up differently from POS.
+//
+//   CURRENT must indicate the currently selected entry when this routine is
+//   called.  A value of 0 indicates no entry is currently positioned to.
+//
+//   If the menu can be scrolled, then SCROLL is set to the menu entry number
+//   being displayed on the top menu entry line.
+//
+//   For selectable entries (menu, not list), the entry position indicator is
+//   erased from the line previously positioned to, and written to the line that
+//   is newly positioned to.  The position indicator is a solid right-pointing
+//   triangle.
+//
+//   For non-selectable entries (list, not menu), there is no position
+//   indicator.  The first column of each list entry line can be used to show
+//   the list entry value.
+//
+//   For scrollable lists or menus, the last column of the top and bottom
+//   entries are reserved to indicate more entries are above or below the group
+//   that is displayed.  These indicators are a solid up-pointing and
+//   down-pointing triangles.
+//
+static void menu_pos (                 //set position within menu
+  machine_intu_t pos) {                //1-N desired entry position
+
+machine_intu_t chr;                    //the position indication character to write
+
+  if (pos == 0) pos = 1;               //clip to minimum valid position
+//
+//   Handle scrollable menu or list.
+//
+  if (menu_flg_scroll_k & flags) {     //scrollable menu ?
+    //
+    //   If this is a list (entries not selectable), then POS is the number of
+    //   the entry being displayed on the middle line.  SCROLL and POS are set
+    //   together accordingly.
+    //
+    if (!(menu_flg_sel_k & flags)) {   //list, not menu ?
+      scroll = pos - 1;                //init top line is one above desired mid
+      if (scroll < 1) scroll = 1;      //clip to can't display above top entry
+      pos = scroll + 1;                //set entry to display in middle
+      }
+
+    if (current == pos) return;        //already at desired position ?
+    //
+    //   Set CURRENT to the entry number that will be current.  This is POS
+    //   clipped to the valid entry numbers range.
+    //
+    while (true) {                     //loop until POS is valid
+      if (pos == 1) break;             //can't go before entry 1
+      disp_pos (0, 4);                 //go to start of first line below display
+      if (write_ent (pos)) break;      //POS is valid ?
+      pos--;                           //no, go back one
+      }                                //back to check this new POS
+    current = pos;                     //entry that will be displayed as current
+    //
+    //   Set SCROLL to the entry number to display on the top line.
+    //
+    scroll = 1;                        //init to scrolled to the top
+    if (current > 2) scroll = current - 1; //scroll for current entry on middle line
+    menu_refresh ();                   //redraw the menu with the current state
+
+    if (!(menu_flg_sel_k & flags)) {   //no current entry indicator ?
+      if (current > (scroll + 1)) current = scroll + 1;
+      }
+    return;
+    }
+//
+//   Handle static (not scrollable) menu.
+//
+  if (current) {                       //existing position is known ?
+    menu_pos_char (current, '>');      //erase current position indicator
+    }
+  if (pos > lastent) pos = lastent;    //clip to end of menu
+
+  menu_pos_char (pos, char_right_k);   //write indication that POS is curr entry
+  chr = char_left_k;                   //init to normal abort indication
+  if (pos >= 4) chr = '<';
+  disp_pos (0, 0);                     //write menu abort indicator
+  disp_char (chr);
+
+  current = pos;                       //update number of current entry
+  }
+
+//******************************************************************************
+//
+//   Function MENU_SELECT (STENT, TIMEOUT)
+//
+//   Let the user choose a menu entry.  The function returns the 1-N menu entry
+//   number when a positive selection is made.  It can also return one of these
+//   special values:
+//
+//     MENU_SEL_LEFTRIGHT_K
+//
+//       The user asserted the special left/right button sequence.  This can
+//       only occur if MENU_LEFTRIGHT_ALLOW was called after the menu was
+//       created and before MENU_SELECT was called.
+//
+//     MENU_SEL_CANCEL_K
+//
+//       The menu was deliberately cancelled by the user.  No selection was
+//       made.
+//
+//     MENU_OFF_K
+//
+//       The user wants to turn off the system or the user interface.  No
+//       selection was made.  Subsequent calls to MENU_SELECT, for any menu,
+//       will immediately return this value until the menu system is turned on
+//       again by calling MEN_SYS_ON (TRUE).
+//
+//     MENU_SEL_TIMEOUT_K
+//
+//       The user performed no action for a whole timeout period.  No selection
+//       was made.
+//
+//   STENT is the 1-N number of the entry to initially position at.
+//
+//   TIMEOUT is a time value in EVWAITMS_K intervals.  If the user does not
+//   perform any action for this amount of time, the function returns with the
+//   special value of MENU_SEL_TIMEOUT_K.
+//
+machine_ints_t                         //1-N entry number or MENU_SEL_xxx_K special IDs
+menu_select (                          //let user select menu entry
+  machine_intu_t stent,                //1-N entry to start at
+  machine_intu_t timeout) {            //timeout, units of EVWAITMS_K ms
+
+machine_intu_t waitt;                  //max timeout ticks to wait for event
+machine_intu_t waited;                 //timeout ticks since last user event
+machine_intu_t ev;                     //event ID
+
+  if (off) {                           //user previously wanted the device off ?
+    return menu_sel_off_k;
+    }
+
+  events_clear ();                     //clear any previously occuring events
+  current = 0;                         //init to no entry currently selected
+  menu_pos (stent);                    //init current selected entry
+  waitt = timeout;                     //init max ticks to wait for events
+  if (menu_flg_refr_k & flags) {       //need to dynamically refresh the menu ?
+    if (refrtk < waitt) waitt = refrtk; //don't wait longer than refresh interval
+    }
+
+  waited = 0;                          //init time since last user action
+  while (true) {                       //back here to wait for each new event
+    ev = event_wait (waitt);           //get user action or timeout
+    if (menu_flg_lr_k & flags) {       //left/right buttons event enabled ?
+      ev = event_check_lr (ev);        //check for left/right button event
+      }
+    switch (ev) {                      //which event is it ?
+
+case event_none_k:                     //no event, timed out
+      waited = waited + waitt;         //accumulate time since last user action
+      if (waited >= timeout) {         //genuine timeout ?
+        return menu_sel_timeout_k;
+        }
+      menu_refresh ();                 //refresh the dynamic menu
+      break;
+
+case event_onoff_press_k:              //on/off button pressed
+      off = true;                      //remember that user wants the device off
+      return menu_sel_off_k;
+
+case event_leftright_k:                //left and right buttons held for a while
+      return menu_sel_leftright_k;
+
+case event_down_press_k:               //down button pressed
+      waited = 0;                      //reset time since last user action
+      menu_pos (current + 1);          //go to next menu entry
+      break;
+
+case event_up_press_k:                 //up button pressed
+      waited = 0;                      //reset time since last user action
+      menu_pos (current - 1);          //go to previous menu entry
+      break;
+
+case event_right_press_k:              //right button pressed
+      waited = 0;                      //reset time since last user action
+      if ((menu_flg_2col_k & flags) && (current <= 3)) { //from left to right column ?
+        menu_pos (current + 3);
+        break;
+        }
+      break;                           //ignore this event
+
+case event_left_press_k:               //left button pressed
+      waited = 0;                      //reset time since last user action
+      if ((menu_flg_2col_k & flags) && (current > 3)) { //from right to left column ?
+        menu_pos (current - 3);
+        break;
+        }
+      return menu_sel_cancel_k;        //user aborted the menu
+
+case event_mid_press_k:                //middle button pressed
+      waited = 0;                      //reset time since last user action
+      if (menu_flg_sel_k & flags) {    //menu entries are selectable ?
+        return current;                //return 1-N selection number
+        }
+      break;                           //entries not selectable, ignore this event
+
+      }                                //end of event type cases
+    }                                  //back to get next event
+  }
+
+//******************************************************************************
+//
+//   Function MENU_LIST_RUN (STENT, TIMEOUT)
+//
+//   Like MENU_SELECT, but for non-selectable lists.  The function return value
+//   is the same as that of a standard menu routine.  The call to this function
+//   can therefore be the argument of a RETURN from a menu routine.  The
+//   function return value is one of:
+//
+//     TRUE  -  Continue in the menu system normally.
+//
+//     FALSE  -  Abort the menu system.
+//
+//   STENT is the 1-N starting list entry number.  This entry will be included
+//   in the initial display.  This entry will be center in the initial display,
+//   unless the list has only one entry.
+//
+//   TIMEOUT is the user inactivity timeout in units of EVWAITMS_K milliseconds.
+//
+machine_intu_t                         //list aborted by user, not timed out
+menu_list_run (                        //show the list, handle user actions
+  machine_intu_t stent,                //1-N entry to start at
+  machine_intu_t timeout) {            //timeout, units of EVWAITMS_K ms
+
+  switch (menu_select(stent, timeout)) { //why was list ended ?
+case menu_sel_off_k:
+case menu_sel_timeout_k:
+    return false;
+default:
+    return true;
+    }
+  }
+
+//******************************************************************************
+//
+//   Function MENU_VAL_FX32U (TITLE, &VAL, MINV, MAXV, FDIG)
+//
+//   Allow the user to modify a 32 bit unsigned fixed point value.  The call
+//   parameters are:
+//
+//     TITLE  -  String to display centered on the first line.
+//
+//     &VAL  -  The address of the 32 bit value to modify.
+//
+//     MINV, MAXV  -  The min and max allowed values.
+//
+//     FDIG  -  The number of fraction digits in the fixed point value.  This
+//       many digits will be displayed right of the decimal point.  When FDIG is
+//       0, then the value is really integer and no decimal point will be shown.
+//
+//   The function returns one of:
+//
+//     0  -  The user actively or passively aborted the menu system.  This
+//           happens when the user presses the on/off button, or does nothing
+//           within the standard menu activity timeout.  The value was not
+//           modified.
+//
+//     1  -  The user explicitly cancelled the operation.  The value was not
+//           modified.
+//
+//     2  -  The user confirmed the value.  The value may have been modified.
+//
+//   The TRUE/FALSE state of the return value is compatible with that from a
+//   normal menu.  It can be used like a menu return value directly.  In
+//   addition, it is possible to distinguish between the user deliberately
+//   cancelling the operation, and confirming a possibly new value.
+//
+machine_intu_t                         //0 menu abort, 1 cancelled, 2 new confirmed
+menu_val_fx32u (                       //user edit a 32 bit unsigned fixed point value
+  const char * title,                  //title to display during editing
+  int32u_t *val,                       //pointer to the value to modify
+  int32u_t minv,                       //min allowed value
+  int32u_t maxv,                       //max allowed value
+  machine_intu_t fdig) {               //number of digits right of decimal point
+
+int32u_t edv;                          //the value being modified
+int32u_t i32;                          //scratch 32 bit integers
+int32u_t incdec;                       //increment or decrement amount for curr digit
+machine_intu_t nchar;                  //number of characters to display max value
+machine_intu_t ii;                     //scratch integer
+machine_intu_t colstrt;                //column of number start
+machine_intu_t colpnt;                 //column of decimal point, 65535 if none
+machine_intu_t col;                    //current column
+char ticks[21];                        //tick marks above and below number, one line
+
+  edv = *val;                          //get the value to modify
+  if (edv < minv) edv = minv;          //clip it to the valid range
+  if (edv > maxv) edv = maxv;
+//
+//   Init the display and draw the title line.
+//
+  disp_clear ();                       //clear display, to top left corner
+
+  ii = strlen(title);                  //get length of the title string
+  if (ii > 19) ii = 19;                //clip at max supported
+  col = (20 - ii) / 2;                 //starting column for title
+  disp_pos (col, 0);                   //go to start of title
+  disp_string (title);                 //write the title
+//
+//   Determine the number of characters needed to display the maximum value.
+//
+  nchar = 0;                           //init number of digits in max value
+  i32 = maxv;                          //get number to find digits of
+  while (i32) {                        //loop until got all digits
+    nchar++;                           //one more digit
+    i32 = i32 / 10;                    //one less digit left in number
+    }
+  if (!nchar) nchar++;                 //always at least one digit
+
+  if (fdig) {                          //there will be a decimal point
+    nchar++;                           //count one more char due to decimal point
+    ii = fdig + 2;                     //min chars for the number of fraction digits
+    if (nchar < ii) nchar = ii;        //always at least one digit left of point
+    }
+  if (nchar > 20) nchar = 20;          //shouldn't happen, but guarantee no special case
+//
+//   Determine what column the number starts in, and where the decimal point
+//   goes, if any.  Set up the TICKS string, which is the string to write to the
+//   whole lines above and below the number before the digit indicators are
+//   drawn.
+//
+  colstrt = (21 - nchar) / 2;          //make starting column of the number
+  colpnt = 65535;                      //init to no decimal point
+  if (fdig) {                          //there are fraction digits ?
+    colpnt = colstrt + nchar - fdig - 1; //decimal point column
+    }
+
+  for (ii = 0; ii < 20; ii++) {        //loop over every character in a ticks line
+    ticks[ii] = ' ';                   //init to blank here
+    if (ii >= colstrt) ticks[ii] = '-'; //in or after number ?
+    if (ii == colpnt) ticks[ii] = ' '; //decimal point ?
+    if (ii >= (colstrt + nchar)) ticks[ii] = ' '; //after number ?
+    }
+  ticks[20] = 0;                       //string termination
+//
+//   Initialize the edit state to adjusting the one's digit.
+//
+  incdec = 1;                          //init increment/decrement amount for this digits
+
+  col = colstrt + nchar - 1;           //init to one's digit if integer value
+  if (fdig) {                          //there are fraction digits ?
+    col = colpnt - 1;                  //go to first digit left of point
+    for (ii = 0; ii < fdig; ii++) {    //once for each fraction digit
+      incdec = incdec * 10;
+      }
+    }
+//
+//   Back here whenever the digit to edit has shifted.  COL is the 0-19 display
+//   column number of the digit being edited.
+//
+vfx32u_newdig:                         //just moved to editing a new digit
+  disp_pos (0, 1);                     //draw the top tick line
+  disp_string (ticks);
+  disp_pos (col, 1);                   //draw the up triangle
+  disp_char (char_up_k);
+
+  disp_pos (0, 3);                     //draw the bottm tick line
+  disp_string (ticks);
+  disp_pos (col, 3);                   //draw the down triangle
+  disp_char (char_down_k);
+
+vfx32u_newval:                         //back here after edit value changed
+  disp_pos (colstrt, 2);               //to start of number
+  disp_int32fx (                       //draw the current value of the number
+    edv,                               //the current value being adjusted
+    nchar,                             //field width
+    fdig,                              //number of fraction digits right of point
+    0);                                //no special handling
+
+vfx32u_getev:                          //back here to get next user event
+  switch (event_wait(inactive_k)) {    //what did the user do ?
+case event_none_k:                     //inactivity timeout
+case event_onoff_press_k:              //power off
+    return false;
+
+case event_left_press_k:               //left arrow
+    if (col <= colstrt) goto vfx32u_canc; //past left end of number, do cancel dialog
+
+    col--;                             //move one digit left
+    incdec = incdec * 10;              //update adjust amount
+    if (col == colpnt) {               //now on decimal point ?
+      col--;                           //skip over the decimal point
+      }
+    goto vfx32u_newdig;
+
+case event_right_press_k:              //right arrow
+    if (col < (colstrt + nchar - 1)) { //not at right-most digit ?
+      col++;                           //move one digit right
+      incdec = incdec / 10;            //update adjust amount
+      }
+    if (col == colpnt) {               //now on decimal point ?
+      col++;                           //skip over the decimal point
+      }
+    goto vfx32u_newdig;
+
+case event_up_press_k:                 //up arrow
+    i32 = maxv - edv;                  //max amount allowed to increment
+    if (incdec < i32) i32 = incdec;    //make actual amount to increment
+    edv = edv + i32;                   //do the increment
+    goto vfx32u_newval;
+
+case event_down_press_k:               //down arrow
+    i32 = edv - minv;                  //max amount allowed to decrement
+    if (incdec < i32) i32 = incdec;    //make actual amount to decrement
+    edv = edv - i32;                   //do the decrement
+    goto vfx32u_newval;
+
+case event_mid_press_k:                //ENTER
+    *val = edv;                        //set to the new edited value
+    return 2;                          //return indicating value edited
+
+    }                                  //end of user action cases
+  goto vfx32u_getev;                   //ignore this event, back for next
+//
+//   The user has tried to move past the end of the number.  Now offer the
+//   option of cancelling the whole operation.
+//
+vfx32u_canc:
+  disp_pos (0, 1);                     //top ticks line
+  disp_string (ticks);
+
+  disp_pos (colstrt, 2);               //show the original value, result of cancel
+  disp_int32fx (                       //draw the current value of the number
+    *val,                              //the original value, will be result of cancel
+    nchar,                             //field width
+    fdig,                              //number of fraction digits right of point
+    0);                                //no special handling
+
+  disp_pos (0, 3);                     //show CANCEL choice
+  disp_char (char_left_k);
+  disp_string ("Cancel");
+  disp_clearto (9);                    //show CONTINUE choice
+  disp_char (char_right_k);
+  disp_string ("Continue");
+  disp_clearto (19);
+
+vfx32u_cancev:
+  switch (event_wait(inactive_k)) {    //what did the user do ?
+case event_none_k:                     //inactivity timeout
+case event_onoff_press_k:              //power off
+    return false;
+case event_left_press_k:               //CANCEL
+    return true;
+case event_right_press_k:              //CONTINUE
+    goto vfx32u_newdig;                //back to editing the value again
+    }                                  //end of user action choices
+  goto vfx32u_cancev;                  //ignore this event, back for next
+  }
+
+//******************************************************************************
+//
+//   Function MENU_VAL_FX32U (TITLE, &VAL, MINV, MAXV, FDIG)
+//
+//   Like MENU_VAL_FX32U except that the value is 16 bit unsigned fixed point
+//   instead of 32 bit.
+//
+machine_intu_t                         //0 menu abort, 1 cancelled, 2 new confirmed
+menu_val_fx16u (                       //user edit a 16 bit unsigned fixed point value
+  const char * title,                  //title to display during editing
+  int16u_t *val,                       //pointer to the value to modify
+  int16u_t minv,                       //min allowed value
+  int16u_t maxv,                       //max allowed value
+  machine_intu_t fdig) {               //number of digits right of decimal point
+
+int32u_t val32;                        //32 bit value to edit
+machine_intu_t ret;                    //function return value
+
+  val32 = *val;                        //copy the value into 32 bits
+
+  ret = menu_val_fx32u (               //call 32 bit routine to do the work
+    title,                             //title string
+    &val32,                            //local 32 bit value to edit
+    minv, maxv,                        //min/max allowed value
+    fdig);                             //number of fraction digits
+  if (ret == 2) {                      //the value was modified ?
+    *val = val32;                      //return the 16 result
+    }
+  return ret;
+  }
+
+//******************************************************************************
+//
+//   Function MENU_VAL_FLOAT (TITLE, &VAL, MINV, MAXV, FDIG)
+//
+//   Allow the user to modify a 32 bit floating point value.  The call
+//   parameters are:
+//
+//     TITLE  -  String to display centered on the first line.
+//
+//     &VAL  -  The address of the value to modify.
+//
+//     MINV, MAXV  -  The min and max allowed values.
+//
+//     FDIG  -  The number of digits to show right of the decimal point.  When
+//       FDIG is 0, then the value is really integer and no decimal point will
+//       be shown.
+//
+//   The function returns one of:
+//
+//     0  -  The user actively or passively aborted the menu system.  This
+//           happens when the user presses the on/off button, or does nothing
+//           within the standard menu activity timeout.  The value was not
+//           modified.
+//
+//     1  -  The user explicitly cancelled the operation.  The value was not
+//           modified.
+//
+//     2  -  The user confirmed the value.  The value may have been modified.
+//
+//   The TRUE/FALSE state of the return value is compatible with that from a
+//   normal menu.  It can be used like a menu return value directly.  In
+//   addition, it is possible to distinguish between the user deliberately
+//   cancelling the operation, and confirming a possibly new value.
+//
+machine_intu_t                         //0 menu abort, 1 cancelled, 2 new confirmed
+menu_val_float (                       //user edit a floating point value
+  const char * title,                  //title to display during editing
+  float *val,                          //pointer to the value to modify
+  float minv,                          //min allowed value
+  float maxv,                          //max allowed value
+  machine_intu_t fdig) {               //number of digits to show right of decimal point
+
+float scale;                           //scale from floating to fixed point
+int32u_t fxval;                        //fixed point value
+machine_intu_t ii;                     //scratch integer
+machine_intu_t ret;                    //function return value
+
+  scale = 1.0f;                        //init scale factor to get to fixed point
+  for (ii = 0; ii < fdig; ii++) {
+    scale = scale * 10.0f;
+    }
+  fxval = fp32_fixu (*val * scale, 0); //make the fixed point value to edit
+
+  ret = menu_val_fx32u (               //have user edit the fixed point value
+    title,                             //title to display during editing
+    &fxval,                            //the value to edit
+    fp32_fixu(minv * scale, 0),        //min allowed value
+    fp32_fixu(maxv * scale, 0),        //max allowed value
+    fdig);                             //digits to show right of decimal point
+  if (ret < 2) return ret;             //other than new value confirmed
+
+  *val = fxval / scale;                //return the modified value
+  return 2;
+  }

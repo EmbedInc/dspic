@@ -1,0 +1,85 @@
+;   ***************************************************************
+;   * Copyright (C) 2005, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+
+;
+;   Derived constants.
+;
+
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_clip15, bss
+
+
+;*******************
+;
+;   Local state.
+;
+
+
+.section .code_clip15, code
+;*******************************************************************************
+;
+;   Subroutine UTIL_CLIP15
+;
+;   Clip the value in W0 to the 0-32767 range.  Many 16 bit values in this
+;   system map 0 to 32767 to their full scale range.  This leaves half the 16
+;   bit range unused.  We split this range to provide 1/2 full scale overrange
+;   and underrange.  This routine will set the value to 32767 if it is
+;   overrange, and will set it to 0 if underrange.
+;
+;   The input value can be up to 1/2 scale below the minimum (0) or above the
+;   maximum (32767).  Values below 0 (FFFFh down to C000h) will be interpreted
+;   as 0, and values above 32767 (8000h up to BFFFh) will be interpreted as
+;   32767.  Another way of looking at this is to consider only the high two bits
+;   of the input value:
+;
+;     10  -  Above range, will be returned 32767.
+;     01  -  In range, interpreted as specified.
+;     00  -  In range, interpreted as specified.
+;     11  -  Below range, will be returned 0.
+;
+;   This shows that the high bit indicates outside of the range, and if so, the
+;   next highest bit indicates whether overrange or underrange.
+;
+         glbsub  util_clip15
+
+         btss    w0, #15     ;outside of range ?
+         return              ;no, nothing to do
+
+         push    w1          ;temp save W1
+         mov     #0, w1      ;init clip value to 0
+         btss    w0, #14     ;is below range ?
+         mov     #32767, w1  ;is above range, set clip value to maximum
+         mov     w1, w0      ;set to the clip value
+         pop     w1          ;restore W1
+
+         leaverest
+
+.end

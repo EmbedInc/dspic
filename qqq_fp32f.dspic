@@ -1,0 +1,105 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Fast 32 bit floating point routines.  These routines use 32 bits per
+;   floating point value since data memory comes in useful chunks of 16 bits on
+;   this machine.  Instead of optimizing for the most precision with a
+;   reasonable dynamic range, like IEEE 32 bit floating point, the format used
+;   here is optimized for speed considering the available arithmetic hardware.
+;
+;   This floating point format uses 1 sign bit, 15 exponent bits, and 16
+;   mantissa bits.  The implied leading 1 bit of the mantissa is not stored, so
+;   this format effectively has 17 bits of precision.
+;
+;   The 16 mantissa bits are stored in the least significant word.  These 16
+;   bits are fraction bits, with the integer part always 1.  Since the integer
+;   part is constant, it is not stored.  The mantissa can therefore express a
+;   value from 1.0000h (1.000000) to 1.FFFFh (1.999985).
+;
+;   The exponent is stored in the low 15 bits of the high word in excess 16384
+;   notation.  This means the exponent field contains the actual exponent value
+;   plus 16384, with the field itself being a unsigned integer.  The field value
+;   16384 indicates exponent 0, 32767 indicates exponent 16383, and 0 indicates
+;   exponent -16384.  The exponent is the power of 2 to be multiplied by the
+;   mantissa to make the final magnitude of the floating point number.
+;
+;   The sign bit is the high bit of the high word.  0 indicates positive and 1
+;   indicates negative.  The magnitude is interpreted by the remaining bits
+;   independently of the sign bit.
+;
+;   The special value of all zero bits indicates the value 0.
+;
+;   Since these routines are intended for small embedded systems usually
+;   without any user interface or operating system, there is no exception
+;   processing or special not-a-number handling.  Results from arithmetic
+;   operations that can not be directly expressed result in the closest or most
+;   reasonable number that can be expressed.  For example, dividing by 0 yields
+;   the largest magnitude number with the sign of the numerator.  In some cases
+;   arbitrary results have to be returned.  For example, there is no reasonable
+;   answer to the square root of -2.  Such cases are usually a result of
+;   previous errors that will be caught later in the process with the result of
+;   the floating point computation being irrelevant.
+;
+/include "qq2.ins.dspic"
+;
+;   Each routine is in a separate include file so only those routines actually
+;   used will be included in the build.  This file should only reference the
+;   include files for the routines that are directly called by the application.
+;   Some of these routines call others, but those automatically cause the files
+;   for implicitly called routines to be included.  Each file contains a
+;   interlock so that no harm is done by referencing a file more than once.
+;
+/include "(cog)src/dspic/fp32f_add.ins.dspic"
+/include "(cog)src/dspic/fp32f_comp.ins.dspic"
+/include "(cog)src/dspic/fp32f_div.ins.dspic"
+/include "(cog)src/dspic/fp32f_fixs.ins.dspic"
+/include "(cog)src/dspic/fp32f_fixu.ins.dspic"
+/include "(cog)src/dspic/fp32f_flts.ins.dspic"
+/include "(cog)src/dspic/fp32f_fltu.ins.dspic"
+/include "(cog)src/dspic/fp32f_max.ins.dspic"
+/include "(cog)src/dspic/fp32f_min.ins.dspic"
+/include "(cog)src/dspic/fp32f_mul.ins.dspic"
+/include "(cog)src/dspic/fp32f_neg.ins.dspic"
+/include "(cog)src/dspic/fp32f_neg_op.ins.dspic"
+/include "(cog)src/dspic/fp32f_sub.ins.dspic"
+/include "(cog)src/dspic/fp32f_exp.ins.dspic"
+;
+;   The firmware build script will need to grab all the files that are
+;   ultimately used, including from any implicit dependencies.  The commands to
+;   get the complete set of files is given here for easy copying into the build
+;   script.  No harm is done if unused files are grabbed.  These will not be
+;   included in the build unless actually referenced.
+;
+/if false then
+
+call     src_get_ins_dspic dspic fp32f_add
+call     src_get_ins_dspic dspic fp32f_comp
+call     src_get_ins_dspic dspic fp32f_div
+call     src_get_ins_dspic dspic fp32f_fixs
+call     src_get_ins_dspic dspic fp32f_fixu
+call     src_get_ins_dspic dspic fp32f_flts
+call     src_get_ins_dspic dspic fp32f_fltu
+call     src_get_ins_dspic dspic fp32f_max
+call     src_get_ins_dspic dspic fp32f_min
+call     src_get_ins_dspic dspic fp32f_mul
+call     src_get_ins_dspic dspic fp32f_neg
+call     src_get_ins_dspic dspic fp32f_neg_op
+call     src_get_ins_dspic dspic fp32f_sub
+call     src_get_ins_dspic dspic fp32f_exp
+
+  /endif
+
+         .end

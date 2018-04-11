@@ -1,0 +1,3617 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   This is the second of two canned files included from the
+;   application-specific EMCAN module.  All the executable code is in this
+;   module.  This module relies on the application-specific customizations
+;   to have already been made, so is included at the end of the EMCAN
+;   module.
+;
+;   See the header comments of the EMCAN1.INS.DSPIC module for overall
+;   information and customization options of the EMCAN module.
+;
+
+;*******************************************************************************
+;
+;   Derived constants.
+;
+/if [not [exist "emcan_ports"]] then
+  /const emcan_ports integer = nports
+  /endif
+/if [or [< emcan_ports 0] [> emcan_ports 65535]] then
+  /show "  EMCAN_PORTS out of range, must be 0-65535."
+         .error  "emcan_ports"
+         .end
+  /stop
+  /endif
+/if [<> nports emcan_ports] then
+  /show "  The number of defined ports does not match EMCAN_PORTS defined"
+  /show "  in the project include file."
+         .error  "EMCAN_PORTS"
+         .end
+  /stop
+  /endif
+/if [not [exist "debug_icd"]] then
+  /const debug_icd bool = false
+  /endif
+
+/show "  " emcan_ports " EmCan ports defined."
+
+;*******************************************************************************
+;
+;   Finish the port definitions.  The port definition setup was done in the
+;   EMCAN1.INS.DSPIC file, then the application-specific port definitions in the
+;   main module file, then this file is included.  At this point, all ports have
+;   been defined and the ports definition table written.  The preprocessor
+;   constant EMCAN_PORTS has been set to the number of ports defined.
+;
+;   Define the description strings referenced from the port definitions.  All
+;   the description strings have been saved in preprocessor constants named
+;   PORTn_DESC, where N is the port number.  Multiple description strings with
+;   the same value were detected and the references pointed to the same location
+;   for all.  The string name of the first port with the multiple-used string
+;   was used.  For example, if ports 4, 7, and 8 all had the same description
+;   string, then the definition of all three ports points to PORT4_DESC.
+;
+;   This section should therefore detect common strings in the same way and
+;   only define the first instance of each string in memory.
+;
+empty_string pgstring ""     ;this string is always assumed to exist
+
+/block                       ;define the static port description strings
+  /var local port integer    ;number of the current port
+  /var local desc string     ;description string of the current port
+  /var local pp integer      ;previous port to check for redundant string in
+  /var local newstring bool  ;this port has a new string ?
+
+  /set port -1               ;init previous port done
+  /block                     ;back here each new port
+    /set port [+ port 1]     ;make number of this port to process
+    /if [>= port emcan_ports] then ;done with all the ports ?
+      /quit
+      /endif
+    /set desc port[v port]_desc ;get description string for this port
+    /if [= desc ""] then     ;description is the empty string ?
+      /repeat                ;skip this port, on to next
+      /endif
+
+    /set pp 0                ;init next previous port to check
+    /set newstring false     ;init to this is not a new string
+    /block                   ;back here each previous port to check
+      /if [>= pp port] then  ;done checking all previous ports ?
+        /set newstring true  ;this is a new description string
+        /quit
+        /endif
+      /if [= port[v pp]_desc desc] then ;found previous string of same value ?
+        /quit
+        /endif
+      /set pp [+ pp 1]       ;advance to next previous port to check
+      /repeat
+      /endblock
+
+    /if newstring then       ;this is a new string ?
+port[v port]_desc pgstring [v desc] ;define this string
+      /endif
+    /repeat                  ;back to do next port
+    /endblock
+  /endblock
+
+;*******************************************************************************
+;
+;   Global state.
+;
+.section .ram_emcan, bss
+
+allocg   nodeadr             ;our 1-127 EmCan node address, 0 = unassigned
+allocg   emcan_role, 4       ;role of this unit within the application
+allocg   emcan_vblockid, 4   ;vendor block ID and device within block ID
+allocg   emcmd_id, 4         ;saved ID of CAN frame being processed
+
+;*******************************************************************************
+;
+;   Local state.
+;
+alloc    stack_emcan, stacksz ;EmCan task stack
+
+alloc    lasttick            ;last clock tick updated to
+alloc    tkreq               ;ticks until allowed to send next address request
+alloc    tklife              ;ticks until node address expires
+alloc    lockcnt             ;output stream lock count, 0 = not locked
+alloc    locktask            ;ID of task holding lock, meaningless when LOCKCNT = 0
+alloc    recvseq             ;expected sequence number in next STROUT frame
+alloc    sendwait            ;ticks until allowed to send output stream frame
+alloc    sendwnext           ;wait time after next output stream packet
+alloc    sendseq             ;sequence number to send in next STRIN frame
+alloc    sentn               ;number of bytes sent in last output stream packet
+alloc    sendp               ;output FIFO PUT index
+alloc    sendg               ;output FIFO GET index
+alloc    sendq,  sendby, 1   ;circular output FIFO buffer
+alloc    portnum             ;port number of port-related frame
+alloc    portdat, 6          ;port data buffer
+alloc    nportdat            ;number of bytes in PORTDAT
+alloc    nsync               ;number of bytes to send before next STRIN sync
+
+         fifob_define fiforecv, recvsz ;FIFO for received stream bytes
+
+/if [<> emcan_nvol_flush ""] then
+alloc    tkflush             ;ticks until do non-volatile memory flush
+  /endif
+
+.section .near_emcan, bss, near
+
+alloc    emcflags            ;local flag bits, use FLG_xxx bit numbers
+;
+;   Symbols for the local flags.  These symbols are bit numbers within EMCFLAGS.
+;
+.equiv   flg_reqadr, 0       ;time to send request for node address
+.equiv   flg_ack, 1          ;send response as ACK, not new data
+.equiv   flg_recvres, 2      ;received stream (via STROUT frames) has been reset
+.equiv   flg_recv, 3         ;received stream is open
+.equiv   flg_recvack, 4      ;send ACK when receive FIFO can take full frame of data
+.equiv   flg_sendkn, 5       ;sending stream open/close known (ACK or NACK received}
+.equiv   flg_send, 6         ;sending stream to host is open
+.equiv   flg_sent, 7         ;output stream packet sent, awaiting ACK
+.equiv   flg_sync, 8         ;do STRIN sync next whole response break
+.equiv   flg_sendsyn, 9      ;send a STRIN sync frame after NSYNC bytes
+.equiv   flg_sendfl, 10      ;flush stored bytes to be sent via STRIN to the host
+.equiv   flg_flush, 11       ;do non-volatile memory flush when next convenient
+.equiv   flg_portfr, 12      ;current frame is a port frame
+
+
+.section .code_emcan, code
+;*******************************************************************************
+;
+;   Subroutine EMCAN_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  emcan_init, regf0
+;
+;   Init global state managed by this module.
+;
+         mov     #0, w0
+         mov     w0, nodeadr ;set CAN node address to invalid
+
+/if [exist "emcan_roleid"]
+  /then                      ;use fixed role ID from constant
+         mov     #[and emcan_roleid 16#FFFF], w0
+         mov     w0, emcan_role+0
+         mov     #[shiftr emcan_roleid 16], w0
+         mov     w0, emcan_role+2
+  /else                      ;use default role ID
+         mov     #0xFFFF, w0
+         mov     w0, emcan_role+0
+         mov     w0, emcan_role+2
+  /endif
+
+         mov     #[and emcan_vblock_id 16#FFFF], w0
+         mov     w0, emcan_vblockid+0
+         mov     #[shiftr emcan_vblock_id 16], w0
+         mov     w0, emcan_vblockid+2
+;
+;   Init local state.
+;
+         clr     emcflags    ;init all local flags to 0
+         mov     #0, w0
+         mov     w0, tkreq   ;allow node address request immediately
+         mov     w0, tklife  ;init node address lifetime to expired
+         mov     w0, sendwait ;init to no wait to try to open output stream
+         mov     w0, lockcnt ;init to output stream not locked by a task
+/if [<> emcan_nvol_flush ""] then
+         mov     w0, tkflush ;init to no non-volatile memory flush pending
+  /endif
+
+         popsaved            ;restore registers saved on entry
+
+         gjump   ecstr_init  ;init EmCan stream processing, return to caller
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_START
+;
+;   Start CAN input frame processing.  This routine will launch two tasks, one
+;   for processing incoming CAN frames, and one for processing the received
+;   EmCan stream.  The latter is in the ECSTR module, which is a extension of
+;   this module.
+;
+         glbsub  emcan_start, regf13 | regf14
+
+         mov     #stacksz, w13 ;pass new task stack size
+         mov     #stack_emcan, w14 ;pass stack start address
+         call    task_new    ;create EmCan processing task
+         goto    emcan_task  ;go to execution start of the new task
+
+         popsaved            ;restore registers saved on entry
+
+         gjump   ecstr_start ;start EmCan stream processing, return to caller
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_WROTENV
+;
+;   This routine is called whenever a non-volatile memory write is performed by
+;   the EmCan layer.  It starts or restarts a timer.  When the timer expires,
+;   the non-volatile memory flush routine will be called.  The time is long
+;   enough so that flush will only be called once when the host sends a sequence
+;   of non-volatile memory changes.
+;
+/if [= emcan_nvol_flush ""]
+  /then                      ;flushing not required
+         glbsub  emcan_wrotenv
+         leaverest
+
+  /else                      ;non-volatile memory needs to be flushed after write
+         glbsub  emcan_wrotenv, regf0
+
+         mov     #ntkflush, w0
+         mov     w0, tkflush ;reset to the full wait time before flush
+         bclr    emcflags, #flg_flush ;cancel any pending flush not done yet
+
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_GET
+;
+;   Get the next byte from the byte stream from the host.  If the stream was
+;   reset since the last byte was returned, then W0 is returned with all zeros
+;   except for the high bit (8000h).  Otherwise, the byte value is returned in
+;   W0, which also means that the upper 8 bits of W0 will be 0.
+;
+;   If a byte is not immediately available, then TASK_YIELD_SAVE will be called
+;   in a loop until one is.  To avoid this routine taking a indefinitely long
+;   time, the caller can check the EMCAN_INBYTE flag.  This flag is set iff one
+;   or more bytes are immediately available.  When the EMCAN_INBYTE flag is set,
+;   this routine will always return quickly.
+;
+         glbsub  emcan_get
+;
+;   Wait for a event to return.
+;
+emget_wait:
+         ;
+         ;   Check for the received stream has been reset.
+         ;
+         btss    emcflags, #flg_recvres ;stream has been reset ?
+         jump    emget_nreset ;no, skip this section
+
+         bclr    emcflags, #flg_recvres ;clear the reset condition
+         mov     #0x8000, w0 ;return the reset indication
+         jump    emget_leave;
+
+emget_nreset:                ;the stream has not been reset
+         ;
+         ;   The received stream has not been reset.
+         ;
+         skip_nflag emcan_inbyte ;nothing immediately available ?
+         jump    emget_gbyte ;a byte is available now
+
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    emget_wait  ;back to check for a input byte again
+;
+;   Get the next byte from the FIFO and reset the EMCAN_INBYTE flag if the FIFO
+;   becomes empty after draining this byte.
+;
+emget_gbyte:                 ;at least one byte is available
+         push    w1          ;temp save registers that will be trashed
+         push    w2
+         fifob_get fiforecv  ;get the next byte from the input stream FIFO into W0
+         mov     w0, w1      ;temp save the byte to return
+
+         fifob_z_empty fiforecv ;set Z if the FIFO is now empty
+         skip_nz             ;didn't just empty the FIFO ?
+         clrflag emcan_inbyte ;FIFO is now empty, indicate no byte available
+
+         mov     w1, w0      ;pass back the byte in W0
+         pop     w2          ;restore registers that were trashed
+         pop     w1
+
+emget_leave:                 ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_LOCK
+;
+;   Acquire exclusive access to the EmCan output stream for this task.  If the
+;   lock is currently held by another task, then this routine waits until it is
+;   available.  This routine can be called multiple times by the same task.
+;   The number of times the lock is locked is tracked, and it must be unlocked
+;   the same number of times to release the lock so that other tasks can acquire
+;   it.
+;
+         glbsub  emcan_lock
+
+lck_check:                   ;back here to re-check whether the lock is available
+         push    w0          ;save registers that will be trashed
+         push    w1
+
+         mov     lockcnt, w0 ;get number of levels locked
+         cp0     w0
+         bra     z, lck_grab ;not locked, go grab it
+
+         mov     locktask, w0 ;get ID of task holding the lock
+         mov     currtask, w1 ;get ID of this task
+         cp      w0, w1
+         bra     z, lck_grab ;this task is holding the lock, go increment count
+
+         pop     w1          ;restore registers, use less stack space
+         pop     w0
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    lck_check   ;go back and check or lock available again
+;
+;   This task can acquire the lock or increment its lock level.  W0 and W1 have
+;   been saved on the stack.
+;
+lck_grab:                    ;grab the lock for this task
+         mov     lockcnt, w0 ;get the current locked level
+         add     #1, w0      ;locked one more level
+         skip_ncarr          ;lock count didn't just overflow ?
+         mov     #0xFFFF, w0 ;did overflow, substitute maximum value
+         mov     w0, lockcnt ;save updated lock count
+
+         mov     currtask, w0 ;get the ID of this task
+         mov     w0, locktask ;indicate this task is holding the lock
+
+         pop     w1          ;restore trashed registers
+         pop     w0
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_UNLOCK
+;
+;   Release the EmCan output stream lock one level.  The lock is released, and
+;   other tasks are able to acquire it, when this routine is called the same
+;   number of times ithat EMCAN_LOCK was called to acquire the lock.  Nothing is
+;   done if this task does not have the lock acquired.
+;
+         glbsub  emcan_unlock, regf0 | regf1
+
+         mov     locktask, w0 ;get ID of the task holding the lock
+         mov     currtask, w1 ;get the ID of this task
+         cp      w0, w1
+         bra     nz, ulck_leave ;this task isn't holding the lock ?
+
+         mov     lockcnt, w0 ;get the lock level into W0
+         sub     #1, w0      ;count one less level locked
+         skip_nborr          ;lock count didn't just underflow ?
+         mov     #0, w0      ;did underflow, substitute zero
+         mov     w0, lockcnt ;update number of levels locked
+
+ulck_leave:                  ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_UNLOCK_ALL
+;
+;   Unconditionally release the EmCan output stream lock if it is held by this
+;   task.  The lock will be released regardless of how many times it was
+;   acquired with EMCAN_LOCK.  Nothing is done if this task is not holding the
+;   lock.
+;
+         glbsub  emcan_unlock_all, regf0 | regf1
+
+         mov     locktask, w0 ;get ID of the task holding the lock
+         mov     currtask, w1 ;get the ID of this task
+         cp      w0, w1
+         bra     nz, ulcka_leave ;this task isn't holding the lock ?
+
+         mov     #0, w0
+         mov     w0, lockcnt ;completely release the lock
+
+ulcka_leave:                 ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_SYNC
+;
+;   Send a STRIN synchronization frame at the next known break between whole
+;   responses.
+;
+         glbsub  emcan_sync
+
+         bset    emcflags, #flg_sync
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine EMCAN_NSEND
+;
+;   Get the number of bytes in the output stream sending FIFO into W0.  The Z
+;   flag is set according to the number of bytes.
+;
+         locsub  emcan_nsend, regf1
+
+         mov     sendp, w0   ;get PUT index into W0
+         mov     sendg, w1   ;get GET index into W1
+         sub     w0, w1, w0  ;make PUT-GET in W0
+         mov     #sendby, w1 ;get buffer wrap offset in case needed
+         skip_ge             ;no buffer wrap from GET to PUT ?
+         add     w0, w1, w0  ;make bytes in buffer, accounting for buffer wrap
+         cp0     w0          ;set Z flag according to number of bytes available
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PUT
+;
+;   Write the byte in the low 8 bits of W0 to the output stream to the host.
+;   Nothing is done if the stream is not open.  If the stream is open, this
+;   routine waits for the stream to be able to accept another byte.
+;   TASK_YIELD_SAVE is called during any such wait.
+;
+;   The byte will be stored for sending to the host, but is not guaranteed to be
+;   send immediately.  Usually bytes are held until a full frame can be sent.
+;   Call EMCAN_FLUSH to force any buffered data to be sent without waiting for
+;   a full frame.
+;
+;   This routine should only be called if the calling task is holding the EmCan
+;   output stream lock.  See the EMCAN_LOCK routine description for details of
+;   this lock.
+;
+         glbsub  emcan_put, regf1 | regf2
+
+emput_wait:                  ;back here to wait for ready to accept the byte
+         ;
+         ;   Abort if the output stream is not open.
+         ;
+         btss    emcflags, #flg_send ;the sending stream is open ?
+         jump    emput_leave ;no nothing to do here
+         ;
+         ;   Jump to EMPUT_PUT if there is room for at least one more byte in
+         ;   the output FIFO.  The FIFO is full when the GET index is one plus
+         ;   the PUT index, after taking buffer wrapping into account.
+         ;
+         mov     sendp, w1   ;get the put index
+         add     #1, w1      ;make next index without buffer wrapping
+         mov     #sendby, w2 ;get first invalid index
+         cp      w1, w2      ;compare new index to first invalid
+         skip_ltu            ;still within the buffer
+         mov     #0, w1      ;no wrap back to the start of the buffer
+         mov     sendg, w2   ;get GET index into W2
+         cp      w1, w2      ;compare PUT+1 and GET indexes
+         bra     nz, emput_put ;the FIFO has room ?
+
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    emput_wait  ;back and check the sending state again
+;
+;   The FIFO has room for at least one more byte.  W1 already contains the
+;   updated PUT index for after the byte is written.
+;
+emput_put:                   ;write the byte to the sending FIFO
+         mov     sendp, w2   ;get the index for where to write this byte
+         mov     w1, sendp   ;update the saved PUT index for next time
+         mov     #sendq, w1  ;get start address of FIFO buffer
+         add     w1, w2, w1  ;make address of where to write this byte
+         mov.b   w0, [w1]    ;stuff this byte into the buffer
+
+emput_leave:                 ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_FLUSH
+;
+;   Cause any buffered output stream data to be sent quickly.
+;
+         glbsub  emcan_flush
+
+         btsc    emcflags, #flg_send ;skip this if sending stream not open
+         bset    emcflags, #flg_sendfl ;cause output stream flush next opportunity
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine ECM_UNASSIGN
+;
+;   Make sure we have no node address assigned.
+;
+         locsub  ecm_unassign, regf0
+
+         mov     #0, w0
+         mov     w0, nodeadr ;indicate no node address assigned
+         mov     w0, tklife  ;clear time left in current node address assignment
+         mov     w0, emcflags ;reset all local flags
+         clrflag emcan_appon ;disable application level interactions
+         clrflag emcan_config ;make sure we are not in config mode
+         fifob_init fiforecv ;reset received byte stream FIFO
+         bset    emcflags, #flg_recvres ;indicate received stream has been reset
+         bclr    emcflags, #flg_recv ;receiving stream is not open
+         bclr    emcflags, #flg_send ;sending stream is not open
+         bclr    emcflags, #flg_sent ;no STRIN packet is awating ACK
+         bclr    emcflags, #flg_sync ;no request to send STRIN sync
+         bclr    emcflags, #flg_sendsyn ;don't send STRIN sync
+         bclr    emcflags, #flg_sendfl ;no pending flush of output stream
+
+/if [<> emcan_reset ""] then
+         gcall   [chars emcan_reset] ;call app routine to reset its layer
+  /endif
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine ECM_RESET
+;
+;   Reset the EmCan state of this device.  This includes unassigning its
+;   address.
+;
+         locsub  ecm_reset, regf0 | regf1
+
+         clrflag emcan_others ;reset to no other nodes detected
+
+         mov     tkreq, w0   ;get tick until allowed to request address assignment
+         mov     #ntkreqres, w1 ;get min required wait after reset
+         cp      w0, w1
+         skip_geu            ;already at least at the minimum ?
+         mov     w1, tkreq   ;no, set wait to the minimum after reset
+
+         popsaved            ;restore registers from stack
+         jump    ecm_unassign ;unassign our EmCan address, return to caller
+
+;*******************************************************************************
+;
+;   Local subroutine STRIN_SEND
+;
+;   Send a STRIN frame with output stream data to the host.  W0 contains the
+;   maximum number of bytes to send, and must never exceed 8.  Up to that many
+;   bytes will be sent, but never more than are available in the output FIFO.
+;
+;   The wait time in SENDWAIT is set to the value in SENDWNEXT, and SENDWNEXT is
+;   udpated according to the increasing wait time interval as specified in the
+;   EmCan spec for the STRIN and STROUT commands.
+;
+;   All the W0-W14 registers may be trashed.
+;
+         locsub  strin_send
+;
+;   Save the desired number of bytes to send in W1.  If a sync frame is pending,
+;   then clip this to the number of bytes until the next break.
+;
+         mov     w0, w1      ;init desired number of bytes to send
+
+         btss    emcflags, #flg_sendsyn ;sending sync frame is pending ?
+         jump    stris_npsyn ;no, skip this section
+
+         mov     nsync, w0   ;get bytes until the next reponse break
+         cp      w1, w0      ;compare desired bytes to bytes until break
+         skip_leu
+         mov     w0, w1      ;reduce desired to not go past the break
+
+stris_npsyn:
+;
+;   Determine the number of bytes available in the FIFO, and set W2 to the
+;   number of bytes to transmit in this frame.  The SENDFL flag is cleared if
+;   this frame will result in the FIFO being empty.
+;
+         ;
+         ;   Set W2 to the actual number of bytes to send.  The desired number
+         ;   of bytes to send is in W1.
+         ;
+         mov     w1, w2      ;init number of bytes to send to the desired number
+         mcall   emcan_nsend ;get number of available bytes in W0
+         cp      w2, w0      ;compare desired number to available bytes
+         skip_leu            ;desired number of bytes is available ?
+         mov     w0, w2      ;no, send all available bytes
+         ;
+         ;   Register contents:
+         ;
+         ;     W0  -  Number of bytes available to send.
+         ;
+         ;     W1  -  Desired number of bytes to send passed in by the caller.
+         ;
+         ;     W2  -  Number of bytes to actually send this frame.
+         ;
+         ;   Clear the SENDFL flag if all available bytes will now be sent.
+         ;
+         cp      w2, w0      ;compare number to send to number available
+         skip_nz             ;not going to send all bytes in this frame ?
+         bclr    emcflags, #flg_sendfl ;FIFO will be emptied, flush performed
+         ;
+         ;   Abort if at least one byte was requested but there is nothing to
+         ;   send.  0 requested bytes is a special case of sending a sync frame,
+         ;   so we always proceed sending a frame in that case.
+         ;
+         cp0     w1
+         bra     z, stris_nby ;0 bytes were explicitly requested ?
+         cp0     w2
+         bra     z, stris_leave ;1 or more bytes requested, but nothing to send ?
+;
+;   Send the frame.  W2 contains the number of data bytes to send, which is 0 to
+;   8.
+;
+stris_nby:                   ;W2 contains number of bytes to send, which is 0-8
+         mov     w2, sentn   ;save number of bytes sent in last frame
+
+         mov     #0b01, w0   ;select extended data frame
+         gcall   can_send_init
+
+/call init_extid
+/set extid_opcode 1023       ;STRIN opcode
+/set extid_ackreq true       ;request ACK response
+/set extid_first false       ;not first frame of sequence
+/set extid_last false        ;not last frame of sequence
+/set extid_bcast false       ;node-addressed
+/call make_extid             ;build the frame ID and load it into W1:W0
+         mov     sendseq, w3 ;get the sequence number
+         sl      w3, #8, w3  ;move it into position in the frame ID
+         ior     w0, w3, w0  ;merge the sequence number into the frame ID
+         gcall   can_send_id ;set the ID of the CAN frame to send
+         ;
+         ;   Write the data bytes into the CAN frame.  W2 contains the number of
+         ;   data bytes to send.
+         ;
+         ;   Register usage in this section:
+         ;
+         ;     W0  -  Data byte and general scratch.
+         ;
+         ;     W1  -  Buffer GET index.
+         ;
+         ;     W2  -  Number of bytes left to do.
+         ;
+         mov     sendg, w1   ;init GET index
+stris_byte:                  ;back here each new byte to send
+         cp0     w2
+         bra     z, stris_dbytes ;done writing all data bytes to CAN frame ?
+         mov     #sendq, w0  ;init pointer to start of buffer
+         add     w0, w1, w0  ;make address of where to fetch this byte from
+         mov.b   [w0], w0    ;fetch this byte into W0
+         gcall   can_send_dat ;write this data byte into the CAN frame
+
+         add     #1, w1      ;advance to next buffer index
+         mov     #sendby, w0
+         cp      w1, w0      ;compare it to first invalid index
+         skip_ltu            ;still within buffer ?
+         mov     #0, w1      ;no, wrap back to start of buffer
+         sub     #1, w2      ;count one less byte left to do
+         jump    stris_byte  ;back to do next byte
+stris_dbytes:                ;done writing all the data bytes to the CAN frame
+
+         gcall   can_send    ;send the CAN frame
+;
+;   Update state to this new data frame being sent.
+;
+         bset    emcflags, #flg_sent ;indicate frame sent, awaiting ACK
+
+         mov     sendwnext, w0 ;set time to wait for resend after this frame
+         mov     w0, sendwait
+         lsr     w0, #1, w1  ;make 1.5 times for next wait time
+         add     w0, w1, w0
+         mov     #ntkstmax, w1 ;get max necessary wait time
+         cp      w0, w1
+         skip_leu            ;new wait time is below max ?
+         mov     w1, w0      ;no, substitute max
+         mov     w0, sendwnext ;set how long to wait after next resend
+
+stris_leave:                 ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_OFFLINE
+;
+;   Take this device off the EmCan bus.  If we have a address assigned, the
+;   EmCan processing thread will attempt to notify the bus controller that we
+;   are going off line.
+;
+         glbsub  emcan_offline
+
+         setflag emcan_offline ;tell EmCan thread to go offline
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_ONLINE
+;
+;   Attempt to have this device participate on the EmCan bus again.  Nothing is
+;   done if the device is already enabled for EmCan operations.  This call
+;   undoes what EMCAN_OFFLINE does.
+;
+         glbsub  emcan_online
+
+         clrflag emcan_offline ;tell EmCan thread to participate on bus
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_RELEASE
+;
+;   Release the current received CAN frame if it was not already previously
+;   released.  The received CAN frame data is locked when a frame processing
+;   routine is called.  This is indicated by FLAG_CANIN being set.  Clearing
+;   this flag releases the received CAN frame state so that the data from the
+;   next frame can be written into the received CAN frame state, at which time
+;   FLAG_CANIN is set again.
+;
+;   The code processing a received CAN frame must therefore clear FLAG_CANIN
+;   exactly once.  Once it is cleared, a new frame can be written into the
+;   received state and FLAG_CANIN set again quickly, so FLAG_CANIN being set
+;   can not be used as a indication that the frame has not already been
+;   released.
+;
+;   This routine provides a more flexible mechanism for releasing the received
+;   CAN state.  Before a received frame processing routine is run from this
+;   module, the additional flag EMCAN_REL is cleared.  This indicates that this
+;   particular received frame has not yet been released.  This routine uses flag
+;   EMCAN_REL to guarantee that FLAG_CANIN is only cleared once, regardless of
+;   how many times this routine is called.  This routine is then also called by
+;   the code in this module after a frame processing routine returns, to
+;   guarantee the received CAN state is released.
+;
+         glbsub  emcan_release
+
+         skip_flag emcan_rel ;received frame already released previously ?
+         clrflag canin       ;no, release it
+         setflag emcan_rel   ;we definitely released the received frame now
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine EMCAN_POINT_PORT
+;
+;   Set W13:W12 to the program memory address of the ports table entry for the
+;   port indicated in W14, plus W0.  W0 is therefore the program memory address
+;   offset into the table entry for this port.  TBLPAG is set to the upper bits
+;   of the address (the W13 value).
+;
+         locsub  emcan_point_port
+
+         mov     #[v emcan_portdeflen], w12 ;get addresses per table entry
+         mul.uu  w14, w12, w12 ;make offset into the start of the table
+
+         push    w0
+         mov     #tbloffset(tbl_ports), w0 ;add table start address
+         add     w12, w0, w12
+         mov     #tblpage(tbl_ports), w0
+         addc    w13, w0, w13
+         pop     w0
+
+         add     w12, w0, w12 ;add the offset
+         addc    #0, w13
+         and     #0x7F, w13
+         mov     w13, Tblpag ;set high bits for next table read
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine EMCAN_POINT_NVOL
+;
+;   Sets W2:W1 to the non-volatile memory address stored in a port descriptor.
+;   W14 indicates the port number.  W0 is the offset of the non-volatile memory
+;   address from the start of the node descriptor.  The Z flag is set iff no
+;   non-volatile memory address is indicated.  In that case, the returned value
+;   of W2:W1 will be FFFFFFh.
+;
+         locsub  emcan_point_nvol, regf12 | regf13
+
+         mcall   emcan_point_port ;point W13:W12 and TBLPAG to the adr field
+
+         tblrdl  [w12], w1   ;get the low word of the non-volatile address
+         tblrdh  [w12], w2   ;get the high word of the nvol address
+
+         push    w2          ;temp save W2
+         and.b   w2, w1, w2  ;make the AND of all three nvol address bytes
+         swap    w1
+         and.b   w2, w1, w2
+         swap    w1          ;restore W1
+         sub.b   #0xFF, w2   ;set Z iff the nvol address is invalid
+         pop     w2          ;restore W2
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_NPORTS
+;
+;   Returns the number of EmCan ports defined by this node in W0.
+;
+         glbsub  emcan_nports
+         mov     #[v emcan_ports], w0
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_TYPE
+;
+;   Returns the TYPE word in W0 for the port indicated in W14.  W14 must be a
+;   valid port number of this device.
+;
+         glbsub  emcan_port_type, regf12 | regf13
+
+         mov     #0, w0      ;offset into port table entry
+         mcall   emcan_point_port ;point W13:W12 to BITS/TYPE word, load TBLPAG
+
+         tblrdl  [w12], w0   ;get the TYPE word
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_BITS
+;
+;   Get the number of bits in the data value of a port into W0.  W14 is the port
+;   number.  If the port is not implemented, then W0 is returned 0 and the Z
+;   flag is set.  Otherwise, W0 will be 1-256 and the Z flag cleared.
+;
+         glbsub  emcan_port_bits, regf12 | regf13
+
+         mov     #0, w0      ;init to return value for unimplemented port
+         mov     #[v emcan_ports], w12 ;get number of implemented ports
+         cp      w14, w12
+         bra     geu, pbits_leave ;port number is out of range ?
+
+         mov     #0, w0      ;offset into port table entry
+         mcall   emcan_point_port ;point W13:W12 to BITS/TYPE word, load TBLPAG
+
+         tblrdl  [w12], w0   ;get TYPE ID
+         lsr     w0, #14, w0 ;extract just the read/write bits
+         cp0     w0
+         bra     z, pbits_leave ;this port is not implemented ?
+
+         tblrdh  [w12], w0   ;get the BITS field
+         add     #1, w0      ;make the number of bits
+
+pbits_leave:                 ;common exit point
+         cp0     w0          ;set Z flag iff port not implemented
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_DIM
+;
+;   Get the DIM ID for a port into W0.  W14 is the port number.
+;
+         glbsub  emcan_port_dim, regf12 | regf13
+
+         mov     #2, w0      ;offset into port table entry
+         mcall   emcan_point_port
+
+         tblrdl  [w12], w0   ;get the DIM
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_DFORM
+;
+;   Get the DFORM ID for a port into W0.  W14 is the port number.
+;
+         glbsub  emcan_port_dform, regf12 | regf13
+
+         mov     #2, w0      ;offset into port table entry
+         mcall   emcan_point_port
+
+         tblrdh  [w12], w0   ;get the DFORM byte
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_OFFSET
+;
+;   Get the data value offset for a port into W3:W2:W1.  W14 is the port number.
+;
+         glbsub  emcan_port_offset, regf0 | regf12 | regf13
+
+         mov     #4, w0      ;offset into port table entry
+         mcall   emcan_point_port ;point W13:W12 and Tblpag to zero offset field
+         tblrdl  [w12], w1
+         tblrdh  [w12], w2
+
+         add     #2, w12
+         addc    #0, w13
+         mov     w13, Tblpag
+         tblrdl  [w12], w3
+         sl      w3, #8, w0
+         ior     w2, w0, w2
+         lsr     w3, #8, w3
+         tblrdh  [w12], w0
+         sl      w0, #8, w0
+         ior     w3, w0, w3
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_SCALE
+;
+;   Get the data value scale for a port into W3:W2:W1.  W14 is the port number.
+;
+         glbsub  emcan_port_scale, regf0 | regf12 | regf13
+
+         mov     #8, w0      ;offset into port table entry
+         mcall   emcan_point_port ;point W13:W12 and Tblpag to scale factor field
+         tblrdl  [w12], w1
+         tblrdh  [w12], w2
+
+         add     #2, w12
+         addc    #0, w13
+         mov     w13, Tblpag
+         tblrdl  [w12], w3
+         sl      w3, #8, w0
+         ior     w2, w0, w2
+         lsr     w3, #8, w3
+         tblrdh  [w12], w0
+         sl      w0, #8, w0
+         ior     w3, w0, w3
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_DESC
+;
+;   Sets W13:W12 to the program memory address of the start of the fixed
+;   description string of a port.  W14 is the port number.  The first byte of
+;   description string is the number of characters, which is then followed by
+;   exactly that many bytes, one for each character.  TBLPAG is also set to the
+;   high bits of the program memory address (the W13 value).
+;
+         glbsub  emcan_port_desc, regf0
+
+         mov     #12, w0     ;pass offset into table entry
+         mcall   emcan_point_port ;point W13:W12 and Tblpag to desc str address
+
+         tblrdh  [w12], w13  ;get high word of string address
+         tblrdl  [w12], w12  ;get low word of string address
+         mov     w13, Tblpag ;set TBLPAG for start of the string
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_ROLE_GET
+;
+;   Gets the 32 bit role ID of a port into W1:W0.  The port number is indicated
+;   in W14.
+;
+/if [= emcan_nvol_read ""]
+  /then                      ;no nonvolatile memory exists
+         glbsub  emcan_port_role_get
+         mov     #0, w0
+         mov     #0, w1
+         leaverest
+
+  /else                      ;we can read the non-volatile memory
+         glbsub  emcan_port_role_get, regf2 | regf3
+
+         mov     #14, w0     ;pass nvol role address offset into port desc
+         mcall   emcan_point_nvol ;get the non-volatile address into W2:W1
+         bra     nz, prole_get ;address is valid, go fetch the role ID ?
+
+         mov     #0, w0      ;return the default role ID
+         mov     #0, w1
+         jump    prole_leave
+;
+;   The non-volatile memory address of the role ID is valid and is in W2:W1.
+;
+prole_get:
+         gcall   [chars emcan_nvol_read] ;get role byte 0 into W0
+         mov     w0, w3      ;save it
+         gcall   [chars emcan_nvol_read] ;get role byte 1
+         swap    w0          ;assemble the low word in W0
+         ior     w0, w3, w0
+         push    w0          ;temp save it
+
+         gcall   [chars emcan_nvol_read] ;get role byte 2
+         mov     w0, w3      ;save it
+         gcall   [chars emcan_nvol_read] ;get role byte 3
+         swap    w0          ;assemble the high word in W1
+         ior     w0, w3, w1
+         pop     w0          ;get the low word back into W0
+
+prole_leave:                 ;common exit point
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_ROLE_SET
+;
+;   Sets the 32 bit role ID of a port from W1:W0.  The port number is indicated
+;   in W14.  Nothing is done if access to writing non-volatile memory is not
+;   provided, or no non-volatile address for the role ID was given.
+;
+/if [= emcan_nvol_write ""]
+  /then                      ;we have no access to writing to non-volatile memory
+         glbsub  emcan_port_role_set
+         leaverest
+
+  /else                      ;we can write to the non-volatile memory
+         glbsub  emcan_port_role_set, regf2 | regf3 | regf4
+         mov     w0, w3      ;save the new role ID in W4:W3
+         mov     w1, w4
+
+         skip_flag emcan_config ;in configuration state ?
+         jump    proles_leave ;no, nothing to do
+
+         mov     #14, w0     ;pass nvol role address offset into port desc
+         mcall   emcan_point_nvol ;get the non-volatile address into W2:W1
+         bra     z, proles_leave ;no nvol address supplied, nothing to do ?
+;
+;   The non-volatile memory address of the role ID is valid and is in W2:W1.
+;   The new role ID is in W4:W3.
+;
+         mov     w3, w0
+         gcall   [chars emcan_nvol_write] ;write role ID byte 0
+         swap    w0
+         gcall   [chars emcan_nvol_write] ;write role ID byte 1
+         mov     w4, w0
+         gcall   [chars emcan_nvol_write] ;write role ID byte 2
+         swap    w0
+         gcall   [chars emcan_nvol_write] ;write role ID byte 3
+
+    /if [<> emcan_nvol_flush ""] then
+         mcall   emcan_wrotenv ;cause non-volatile memory flush later
+      /endif
+
+proles_leave:                ;common exit point
+         mov     w3, w0      ;restore the role ID into W1:W0
+         mov     w4, w1
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_INIADR
+;
+;   Get the non-volatile memory address of the initial value of a port into
+;   W2:W1.  The port number is passed in W14.  The Z flag is set iff no initial
+;   value exists, in which case the W2:W1 value is undefined.
+;
+         glbsub  emcan_port_iniadr, regf0
+
+         mov     #16, w0     ;pass offset of nvol adr into port descriptor
+         mcall   emcan_point_nvol ;get nvol adr into W2:W1, set Z flag
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_CFGADR
+;
+;   Get the non-volatile memory address of the configuration data of a port into
+;   W2:W1.  The port number is passed in W14.  The Z flag is set iff no config
+;   data exists, in which case the W2:W1 value is undefined.
+;
+         glbsub  emcan_port_cfgadr, regf0
+
+         mov     #18, w0     ;pass offset of nvol adr into port descriptor
+         mcall   emcan_point_nvol ;get nvol adr into W2:W1, set Z flag
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_PORT_USEADR
+;
+;   Get the non-volatile memory address of the usage description string of a
+;   port into W2:W1.  The port number is passed in W14.  The Z flag is set iff
+;   no usage string exists, in which case the W2:W1 value will be FFFFFFh.
+;
+         glbsub  emcan_port_useadr, regf0
+
+         mov     #20, w0     ;pass offset of nvol adr into port descriptor
+         mcall   emcan_point_nvol ;get nvol adr into W2:W1, set Z flag
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Macro LOAD_TABLE table
+;
+;   Load the address of TABLE in program memory into W3:W2.  This is used below
+;   to select the particular dispatch table for a received CAN frame.
+;
+.macro load_table table
+         mov     #tbloffset(\table), w2
+         mov     #tblpage(\table), w3
+         and     #0xFF, w3
+  .endm
+
+;*******************************************************************************
+;
+;   EmCan protocol processing task.
+;
+emcan_task:                  ;execution start point of this task
+;
+;   Perform one-time initialization of the state that persists between bus
+;   connections.
+;
+/if [<> emcan_getrole ""] then ;routine provided to get app role ?
+         gcall   [chars emcan_getrole] ;call app routine to set EMCAN_ROLE
+  /endif
+;
+;   Jump back here to EmCan restart.
+;
+emt_reset:
+         mcall   ecm_reset   ;make sure our EmCan state starts out reset
+         clrflag emcan_inbyte ;no input stream byte is available to read
+         skip_flag emcan_offline ;off line ?
+         jump    emt_doffline ;no, skip offline loop to avoid discarding CAN frames
+
+emt_offline:                 ;loop back here when offline EmCan
+         gcall   task_yield  ;give all other tasks a chance to run
+         ;
+         ;   Handle received CAN frame by discarding it.
+         ;
+         skip_flag canin     ;we received a CAN frame ?
+         jump    emt_ofldcan ;no, skip this section
+         clrflag canin       ;indicate done with this CAN frame
+         jump    emt_offline ;back to start of offline loop
+emt_ofldcan:
+         ;
+         ;   Go to main operating loop if app wants to participate in EmCan.
+         ;
+         skip_nflag emcan_offline ;app wants to go online ?
+         jump    emt_offline ;no, back to offline loop
+
+emt_doffline:
+         mov     tick100ms, w0 ;init last clock tick updated to
+         mov     w0, lasttick
+
+;***************************************
+;
+;   Main event loop.  Jump back here when done processing any event.
+;
+tsk_loop:                    ;top of event loop
+         gcall   task_yield  ;give other tasks a chance to run
+;
+;   Check for application wants to go offline.
+;
+         skip_flag emcan_offline ;app wants to be offline ?
+         jump    emt_online  ;no, skip this section
+
+         mov     nodeadr, w0 ;get our assigned address
+         cp0     w0
+         bra     z, emt_nrelease ;no adr assigned, don't try to release it
+
+         mov     #0b00, w0   ;init for sending a standard data frame
+         gcall   can_send_init
+
+         mov     #(13 << 7), w0 ;ADRELEASE opcode, broadcast
+         gcall   can_send_id
+
+         mov     nodeadr, w0 ;data byte is address being released
+         gcall   can_send_dat
+
+         gcall   can_send    ;send the ADRELEASE frame
+emt_nrelease:                ;done releasing our assigned address, if any
+
+         jump    emt_reset   ;reset state and go into offline mode
+
+emt_online:
+;
+;   Check for CAN frame received.
+;
+         skip_nflag canin
+         jump    tsk_inframe ;new CAN frame is available
+;
+;   Check for new clock tick.
+;
+         mov     tick100ms, w0 ;get current clock value
+         mov     lasttick, w1 ;get last clock value updated to
+         cp      w1, w0
+         bra     z, tsk_dtick ;no new clock tick ?
+         add     #1, w1
+         mov     w1, lasttick ;update last clock value updated to
+;
+;   A new clock tick has occurred.
+;
+         ;
+         ;   Decrease the remaining valid time for our bus node address.
+         ;
+         mov     tklife, w0  ;get current lifetime
+         cp0     w0
+         bra     z, tsk_dlife ;already 0, nothing to do ?
+         sub     #1, w0      ;count one less tick left
+         mov     w0, tklife
+         bra     nz, tsk_dlife ;lifetime didn't just expire ?
+
+         mcall   ecm_unassign ;lifetime expired, unassign our node address
+tsk_dlife:                   ;done updating node address lifetime
+         ;
+         ;   Decrement time until allowed to send next node address request.
+         ;
+         mov     tkreq, w0   ;get ticks until next adr request allowed
+         sub     #1, w0      ;count one less tick
+         btss    w0, #15     ;not already 0 ?
+         mov     w0, tkreq   ;update counter
+         ;
+         ;   Decrement time until allowed to try or re-try to open the output
+         ;   stream to the host.
+         ;
+         mov     sendwait, w0 ;get ticks until next send allowed
+         sub     #1, w0      ;count one less tick
+         btss    w0, #15     ;not already 0 ?
+         mov     w0, sendwait ;update counter
+         ;
+         ;   Set the local flag REQADR if we should try to send a address
+         ;   request.  This is the case if it has been long enough since the
+         ;   last request was sent (TKREQ = 0), and the current address
+         ;   assignment lifetime is NTKNAG ticks or less.
+         ;
+         mov     tkreq, w0   ;get ticks until allowed to request address
+         cp0     w0
+         bra     nz, tsk_dsreq ;too soon after last request ?
+
+         mov     tklife, w0  ;get ticks left in current assignment
+         mov     #ntknag, w1
+         cp      w0, w1
+         bra     gt, tsk_dsreq ;enough life left in current assignment ?
+
+         bset    emcflags, #flg_reqadr ;indicate we should request address soon
+tsk_dsreq:                   ;skip to here to not flag address request needed
+         ;
+         ;   Indicate to call the non-volatile memory flush routine if the flush
+         ;   timer expires with this tick.
+         ;
+/if [<> emcan_nvol_flush ""] then
+         mov     tkflush, w0 ;get ticks until do a flush
+         cp0     w0
+         bra     z, tsk_dflushf ;timer not active, nothing to do ?
+
+         sub     #1, w0      ;count one less tick until timeout expires
+         mov     w0, tkflush ;update the counter
+         bra     nz, tsk_dflushf ;didn't expire with this tick ?
+         bset    emcflags, #flg_flush ;indicate to flush soon
+tsk_dflushf:
+  /endif                     ;done updating pending flush state
+
+tsk_dtick:                   ;done with new clock tick processing
+;
+;   Send a request for a node address if the local flag REQADR is set.
+;
+         skip_nflag cansend  ;CAN sending mechanism is immediately available ?
+         jump    tsk_nareq   ;no, don't try acquiring it now
+         btss    emcflags, #flg_reqadr ;address request is pending ?
+         jump    tsk_nareq   ;no, skip this section
+         bclr    emcflags, #flg_reqadr ;clear the event condition
+
+         mov     #0b00, w0   ;indicate standard data frame
+         gcall   can_send_init ;set up for sending CAN frame
+
+         mov     #15 << 7, w0 ;get opcode for requesting address from unassigned
+         mov     nodeadr, w1 ;get our current node address
+         cp0     w1
+         skip_z              ;we really don't have assigned address right now ?
+         mov     #14 << 7, w0 ;have valid adr, get opcode for renewing assignment
+         gcall   can_send_id
+
+         mov     emcan_vblockid+2, w0 ;send VBLOCKID
+         gcall   can_send_dat
+         mov     emcan_vblockid+0, w0
+         gcall   can_send_dat16
+         mov     serial+2, w0 ;send our serial number
+         gcall   can_send_dat16
+         mov     serial+0, w0
+         gcall   can_send_dat16
+
+         gcall   can_send    ;send the CAN frame
+
+         mov     #ntkreq, w0 ;reset time until next allowed adress request
+         mov     w0, tkreq
+         jump    tsk_loop
+
+tsk_nareq:                   ;skip to here to not send address request
+;
+;   Send a ACK to the last STROUT frame if there was insufficient room in the
+;   receiving FIFO to allow for sending the ACK at the time the STROUT frame was
+;   received, and there is now sufficient room.  Replying with ACK to a STROUT
+;   frame indicates that the data was accepted and that we are ready to
+;   receive the next STROUT frame.  To be ready to receive a STROUT frame, there
+;   must be room in the receiving FIFO for all its data bytes.  The maximum
+;   number of data bytes in one STROUT frame is 8, so we can't send the ACK
+;   unless the receiving FIFO has room for 8 bytes.  When this is not the case
+;   after the STROUT frame data is stored, then the local RECVACK flag is set
+;   instead of sending the ACK.  We send the ACK here if the RECVACK flag is set
+;   and the receive FIFO has room for at least 8 bytes.
+;
+         mov     nodeadr, w0 ;get our assigned address
+         cp0     w0
+         bra     z, tsk_nack ;no address assigned ?
+
+         btss    emcflags, #flg_recvack ;pending ACK to STROUT ?
+         jump    tsk_nack    ;no, skip this section
+
+         fifob_empty_n fiforecv ;get number of empty FIFO slots into W0
+         cp      w0, #8      ;compare to min required to accept new frame
+         bra     ltu, tsk_nack ;not enough room to accept a new frame ?
+         ;
+         ;   Send the ACK.
+         ;
+         bclr    emcflags, #flg_recvack ;clear the event condition
+
+/call init_extid             ;build the extended frame ID
+/set extid_opcode 1022       ;STROUT opcode
+/set extid_ack true
+/set extid_first false
+/set extid_last false
+/set extid_seq 0
+/set extid_bcast false
+/call make_extid             ;init extended id in W1:W0 from above settings
+         btss    emcflags, #flg_recv ;the stream is still open ?
+         bclr    w0, #12     ;no, set LAST indicator
+         mov     recvseq, w2 ;get next expected sequence number into W2
+         sub     #1, w2      ;make sequence number this ACK is for
+         and     #15, w2
+         sl      w2, #8, w2  ;move it into position in the frame ID
+         ior     w0, w2, w0  ;merge sequence number into frame ID
+         gcall   can_send_id ;set the ID of this CAN frame
+         gcall   can_send    ;send the CAN frame
+         jump    tsk_loop    ;back to start of event loop
+
+tsk_nack:                    ;no pending ACK to STROUT sent this time
+;
+;   Possibly try to open the serial stream to the host.
+;
+         mov     nodeadr, w0 ;get our assigned address
+         cp0     w0
+         bra     z, tsk_nsendop ;no address assigned ?
+
+         btsc    emcflags, #flg_sendkn ;output stream state not already resolved ?
+         jump    tsk_nsendop
+
+         mov     sendwait, w0 ;get ticks until allowed to try stream open
+         cp0     w0
+         bra     nz, tsk_nsendop ;not allowed to send open request yet ?
+         ;
+         ;   Send a STRIN frame to try to open the stream.
+         ;
+         mov     #0b01, w0   ;select extended data frame
+         gcall   can_send_init ;init for sending the CAN frame
+/call init_extid
+/set extid_opcode 1023       ;STRIN opcode
+/set extid_ackreq true       ;request ACK response
+/set extid_first true        ;indicate first frame of sequence
+/set extid_last false
+/set extid_seq 0
+/call make_extid             ;build frame ID and load it into W1:W0
+         gcall   can_send_id ;set the frame ID
+         gcall   can_send    ;send the CAN frame
+
+         mov     #ntkopen, w0 ;start timer before can send another request
+         mov     w0, sendwait
+         jump    tsk_loop    ;back to start of event loop
+
+tsk_nsendop:                 ;no output stream open request sent this time
+;
+;   Resend the last output stream packet if no ACK has been received for it.
+;
+         btss    emcflags, #flg_sent ;output stream packet sent and ACK not received ?
+         jump    tsk_nresend ;don't resend output stream packet now
+
+         mov     sendwait, w0 ;get ticks until resend allowed
+         cp0     w0
+         bra     nz, tsk_nresend ;not time to resend yet ?
+
+         mov     sentn, w0   ;pass number of data bytes to send
+         mcall   strin_send  ;send the STRIN frame
+         jump    tsk_loop    ;back to start of event loop
+
+tsk_nresend:                 ;output stream packet not resent
+;
+;   Indicate to send a STRIN sync frame if that was requested and we are in a
+;   break between responses.
+;
+         btss    emcflags, #flg_sync ;STRIN sync was requested ?
+         jump    tsk_nsync   ;no
+
+         mov     lockcnt, w0 ;get output stream lock indicator
+         cp0     w0
+         bra     nz, tsk_nsync ;output stream is locked, could be in response ?
+
+         bclr    emcflags, #flg_sync ;clear the event condition
+         btss    emcflags, #flg_send ;the output stream is open ?
+         jump    tsk_nsync   ;no
+         btsc    emcflags, #flg_sendsyn ;not already flagged to send sync ?
+         jump    tsk_nsync
+
+         mcall   emcan_nsend ;get number of pending output bytes into W0
+         mov     w0, nsync   ;number of bytes to send before sync frame
+         bset    emcflags, #flg_sendsyn ;indicate to send sync frame
+
+tsk_nsync:
+;
+;   Send a output stream sync frame if one is pending and we are at the right
+;   point in the data stream.
+;
+         btss    emcflags, #flg_sendsyn ;flagged to send sync frame ?
+         jump    tsk_nsendsyn ;no
+
+         btss    emcflags, #flg_send ;the output stream is open ?
+         jump    tsk_nsendsyn ;no
+
+         btsc    emcflags, #flg_sent ;no previous packet waiting for ACK ?
+         jump    tsk_nsendsyn ;previous attempt not complete yet
+
+         mov     nsync, w0   ;get number of bytes until break to send sync
+         cp0     w0
+         bra     nz, tsk_nsendsyn ;not at break right now ?
+         ;
+         ;   Send a sync frame now.
+         ;
+         bclr    emcflags, #flg_sendsyn ;clear the event condition
+
+         mov     #0, w0      ;pass number of data bytes to send
+         mcall   strin_send  ;send the sync frame
+         jump    tsk_loop    ;back to start of event loop
+
+tsk_nsendsyn:
+;
+;   Send a new output stream data frame if there is a full frame of data to
+;   send, or there is at least one byte and the flush flag is set.
+;
+         btss    emcflags, #flg_send ;the output stream is open ?
+         jump    tsk_nsend   ;no
+         btsc    emcflags, #flg_sent ;no previous packet waiting for ACK ?
+         jump    tsk_nsend   ;previous attempt not complete yet
+
+         mcall   emcan_nsend ;get number of bytes waiting to be sent into W0
+         skip_nz
+         bclr    emcflags, #flg_sendfl ;clear flush flag on nothing to send
+         bra     z, tsk_nsend ;no bytes waiting to be sent, nothing to do ?
+         ;
+         ;   W0 contains the number of bytes waiting to be sent, which is at
+         ;   least 1.
+         ;
+         btsc    emcflags, #flg_sendfl ;not flush whatever is there ?
+         jump    tsk_send    ;send frame regardless of full or not
+         cp      w0, #8      ;compare available bytes to full frame
+         bra     ltu, tsk_nsend ;can't fill frame now, don't send packet
+         ;
+         ;   Send a new packet now.
+         ;
+tsk_send:
+         mov     #ntkstdat, w0
+         mov     w0, sendwnext ;set resend wait time for after this packet
+         mov     #8, w0      ;send up to full frame of data bytes
+         mcall   strin_send  ;send the STRIN frame and update state accordingly
+         jump    tsk_loop    ;back to start of event loop
+
+tsk_nsend:                   ;new output packet not sent
+;
+;   Do a flush of non-volatile memory if one is pending.
+;
+/if [<> emcan_nvol_flush ""] then
+         btss    emcflags, #flg_flush ;pending flush ?
+         jump    tsk_nflush  ;no, skip this section
+
+         bclr    emcflags, #flg_flush ;clear the event condition
+         gcall   [chars emcan_nvol_flush] ;do the flush
+
+tsk_nflush:                  ;done handling flush, if any
+  /endif
+;
+;   Done processing all possible events.  Go back and check everything again.
+;
+         jump    tsk_loop
+
+;********************
+;
+;   A new CAN frame has been received.  Process it.
+;
+tsk_inframe:                 ;a new CAN frame has been received
+         clrflag emcan_rel   ;init to we have not yet released this frame
+         clrflag emcan_ack   ;init to no ACK sent in response to this frame
+         bclr    emcflags, #flg_portfr ;init to this is not a port frame
+;
+;   Save the frame ID information locally and extract the opcode into W0 and the
+;   node address into W1.
+;
+         mov     canin_id+0, w2 ;get the full frame ID into W3:W2
+         mov     canin_id+2, w3
+         mov     w2, emcmd_id+0 ;save it locally
+         mov     w3, emcmd_id+2
+
+         mov     #0x7F, w1   ;get mask for node address
+         and     w2, w1, w1  ;extract just the node address into W1
+         skip_nflag canin_ext ;this is a standard frame ?
+         jump    gid_ext     ;extended frame
+         ;
+         ;   Standard frame (11 bit ID).
+         ;
+         clrflag emcmd_ext   ;save locally that this is a standard frame
+         lsr     w2, #7, w0  ;extract 4 bit opcode into W0
+         and     #15, w0
+         jump    gid_done
+         ;
+         ;   Extended frame (29 bit ID).
+         ;
+gid_ext:
+         setflag emcmd_ext   ;save locally that this is a extended frame
+         lsr     w3, #3, w0  ;extract 10 bit opcode into W0
+         and     #1023, w0
+
+gid_done:                    ;done getting opcode into W0, node address into W1
+;
+;   Determine which dispatch table applies to this frame.  The node address from
+;   the frame is in W1 and the opcode in W0.  The start address of the dispatch
+;   table in program memory will be loaded into W3:W2.  Once a dispatch table
+;   has been determined, jump to DSPATCH.  If it is determined the frame is not
+;   relevant to us, then jump to EMCMD_ABORT.
+;
+         cp0     w1
+         bra     z, adr0     ;node address 0, this is a broadcast frame ?
+         mov     nodeadr, w4 ;get our node address
+         cp      w1, w4
+         bra     z, adrus    ;this frame is specifically addressed to us
+         ;
+         ;   Node addressed frame to some other node.
+         ;
+         setflag emcan_others ;indicate there are other nodes on this bus
+         jump    emcmd_abort ;frame is not for us, nothing more to do
+
+adrus:                       ;this frame is specifically addressed to us
+         skip_nflag canin_ext ;standard frame ?
+         jump    adruext     ;extended frame
+         skip_flag emcan_appon ;application is enabled ?
+         jump    emcmd_abort ;app is off, ignore this frame
+         skip_nflag canin_rtr ;data frame ?
+         jump    adrurtr     ;remote request
+         ;
+         ;   Unicast, standard data frame.
+         ;
+         load_table tbl_std
+         jump    dspatch
+         ;
+         ;   Unicast, standard remote request frame.
+         ;
+adrurtr:
+         load_table tbl_stdrtr
+         jump    dspatch
+
+adruext:                     ;unicast, extended
+         mov     #992, w4    ;get first EmCan opcode
+         cp      w0, w4
+         bra     geu, adruextem ;unicast, extended, in EmCan opcode range ?
+         skip_flag emcan_appon ;application is enabled ?
+         jump    emcmd_abort ;app is off, ignore this frame
+         skip_nflag canin_rtr ;data frame ?
+         jump    adruextrtr  ;unicast, extended, app opcod, remote request
+         ;
+         ;   Unicast, extended, app opcode range, data frame.
+         ;
+         load_table tbl_ext
+         jump    dspatch
+         ;
+         ;   Unicast, extended, app opcode range, remote request.
+         ;
+adruextrtr:
+         load_table tbl_extrtr
+         jump    dspatch
+
+adruextem:                   ;unicast, extended, EmCan opcode range
+         skip_nflag canin_rtr ;data frame ?
+         jump    adruextrem  ;remote request
+         ;
+         ;   Unicast, extended, EmCan opcode range, data frame.
+         ;
+         load_table tbl_ext_e
+         jump    dspatch
+         ;
+         ;   Unicast, extended, EmCan opcode range, remote request.
+         ;
+adruextrem:
+         load_table tbl_extrtr_e
+         jump    dspatch
+
+adr0:                        ;broadcast frame (node addres is 0)
+         skip_nflag canin_ext ;standard frame ?
+         jump    adr0ext     ;extended frame
+         skip_nflag canin_rtr ;data frame ?
+         jump    adr0rtr     ;remote request
+         ;
+         ;   Broadcast, standard, data frame.
+         ;
+         load_table tbl_bus
+         jump    dspatch
+         ;
+         ;   Broadcast, standard, remote request.
+         ;
+adr0rtr:
+         load_table tbl_busrtr
+         jump    dspatch
+
+adr0ext:                     ;broadcast, extended
+         skip_flag emcan_appon ;application is enabled ?
+         jump    emcmd_abort ;app is off, ignore this frame
+         skip_nflag canin_rtr ;data frame ?
+         jump    adr0extrtr  ;remote request
+         ;
+         ;   Broadcast, extended, data frame.
+         ;
+         load_table tbl_extb
+         jump    dspatch
+         ;
+         ;   Broadcast, extended, remote request.
+         ;
+adr0extrtr:
+         load_table tbl_extbrtr
+;
+;   Dispatch to the specific routine for this opcode.  The registers currently
+;   contain:
+;
+;     W0  -  Opcode
+;
+;     W3:W2  -  Start address of the dispatch table.
+;
+;   All dispatch tables have the same format, which is described in the header
+;   comments of the CANCMD macro defined in EMCAN1.INS.DSPIC.  If no entry is
+;   found in the table for the opcode in W0, then this section jumps to
+;   EMCMD_ABORT.  Otherwise, the command routine is run.
+;
+dspatch:
+
+dsp_loop:                    ;back here each new table entry
+         mov     w3, Tblpag  ;set high bits of word to read
+         tblrdl  [w2], w1    ;fetch opcode word from table entry into W1
+         cp      w1, w0
+         bra     z, dsp_found ;found table entry for this opcode
+         add     #1, w1
+         bra     z, emcmd_abort ;hit end of table ?
+
+         add     #4, w2      ;advance to next table entry
+         addc    #0, w3
+         jump    dsp_loop    ;back to try next table entry
+         ;
+         ;   The table entry for this opcode has been found.  W3:W2 contains the
+         ;   address of the first word of the entry, which is in W1.
+         ;
+dsp_found:
+         mov     #tbloffset(emcmd_done), w1 ;seed stack with normal command end return point
+         push    w1
+         mov     #tblpage(emcmd_done), w1
+         and     #0xFF, w1
+         push    w1
+
+         add     #2, w2      ;make address of table entry second prog mem word
+         addc    #0, w3
+         mov     w3, Tblpag  ;set high bits of address to read from
+         tblrdl  [w2], w1    ;get low word of command routine address
+         push    w1
+         tblrdh  [w2], w1    ;get high word of command routine address
+         push    w1
+         return              ;jump to the command routine
+
+;*******************************************************************************
+;
+;   Command routine exit points.
+;
+
+;   EMCMD_DONE
+;
+;   Send a ACK for the current frame if that was requested and no ACK has
+;   already been sent.  This entry point is intended to be the normal return
+;   point for most CAN frame processing routines.  The address of this entry
+;   point is seeded on the stack before the command processing routine is run.
+;   Processing routines can therefore jump here to end the command by executing
+;   a RETURN from their top nesting level.
+;
+;   It is permissible to jump here with the stack in any state, which allows
+;   jumping here from nested subroutines.  The stack will be reset to empty
+;   before any further actions are taken.
+;
+         glbent  emcmd_done
+         disi    #1
+         mov     #stack_emcan, w15 ;reset the stack to empty
+
+         mcall   emcan_release ;make sure the received CAN frame is released
+         mcall   emcmd_ack   ;send ACK frame if appropriate
+         jump    tsk_loop    ;back to look for something to do
+;
+;   EMCMD_ABORT
+;
+;   Same as EMCMD_DONE except that no ACK frame is sent.
+;
+;   It is permissible to jump here with the stack in any state, which allows
+;   jumping here from nested subroutines.  The stack will be reset to empty
+;   before any further actions are taken.
+;
+         glbent  emcmd_abort ;done processing the command
+         disi    #1
+         mov     #stack_emcan, w15 ;reset the stack to empty
+
+         mcall   emcan_release ;make sure the received CAN frame is released
+         jump    tsk_loop    ;back to look for something to do
+
+;*******************************************************************************
+;
+;   Subroutine EMCMD_ACK
+;
+;   Send a ACK frame for the current received frame, if appropriate.  Only the
+;   EMCMD_ID saved frame ID state is used, so this routine can be called before
+;   or after the received frame is released.
+;
+;   A ACK is only sent if all of these conditions are met:
+;
+;     1 - The received frame is a extended frame.
+;
+;     2 - The received frame is not already a ACK or NACK.
+;
+;     3 - The ACK request bit <14> in the frame ID is set.
+;
+;     4 - A ACK has not already been sent in response to the current received
+;         frame.
+;
+;   Non-port frames:
+;
+;     The ACK frame will have no data bytes and the same ID as the received
+;     frame except the ACK bit will be set and the ACK request bit will not be
+;     set.
+;
+;   Port frames:
+;
+;     The ACK frame will be the same as for non-port frames, except that it will
+;     contain data bytes.  The first two data bytes will be the port number
+;     saved from the received port frame in PORTNUM, and the remaining data
+;     bytes will be the data in the PORTDAT buffer.  This was initialized to the
+;     data in the received port frame, but my have been altered by the
+;     application.  NPORTDAT is the number of bytes in PORTDAT.
+;
+         glbsub  emcmd_ack, regf0 | regf1
+
+         skip_flag emcmd_ext ;extended frame ?
+         jump    eack_leave  ;no
+
+         skip_nflag emcan_ack ;ACK not already sent ?
+         jump    eack_leave  ;already sent
+
+         mov     emcmd_id+2, w0 ;get high word of ID
+         btss    w0, #0      ;not responding to ACK/NACK frame ?
+         jump    eack_leave
+
+         mov     emcmd_id+0, w0 ;get low word of the frame ID
+         btss    w0, #14     ;ACK response requested ?
+         jump    eack_leave  ;no
+;
+;   Send the ACK frame.
+;
+         mov     #0b01, w0
+                 ;  0-       data frame, not remote request
+                 ;  -1       extended frame, not standard
+         gcall   can_send_init ;init for sending the ACK frame
+
+         mov     emcmd_id+0, w0 ;get the received frame ID
+         mov     emcmd_id+2, w1
+         bclr    w1, #0      ;this frame is ACK
+         bclr    w0, #14     ;do not request ACK response
+         gcall   can_send_id ;set the ID of the ACK frame
+;
+;   Add data bytes to the ACK frame if this is in response to a port frame.
+;
+         btss    emcflags, #flg_portfr ;response to a port frame ?
+         jump    eack_ddat   ;no, all done sending data bytes
+
+         mov     portnum, w0 ;port number is first two data bytes
+         gcall   can_send_dat16
+
+         mov     #portdat, w1 ;init pointer to first data byte
+         mov     nportdat, w2 ;get number of data bytes to add
+eack_portbyte:               ;back here to send each new port data byte
+         cp0     w2
+         bra     z, eack_dportbyte ;done sending all port data bytes ?
+         mov.b   [w1++], w0  ;get this data byte
+         gcall   can_send_dat ;write it into the CAN frame
+         sub     #1, w2      ;count one less byte left to do
+         jump    eack_portbyte ;back to do the next byte
+eack_dportbyte:              ;done sending the port data bytes
+
+eack_ddat:                   ;done adding data bytes to the ACK frame
+         gcall   can_send    ;send the ACK frame, release sending state
+         setflag emcan_ack   ;indicate that ACK has now been sent
+
+eack_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine EMCAN_CHECKEXT
+;
+;   This is a utility routine that may be useful in processing some frames.  It
+;   checks for a "normal" extended frame.  The fields in the frame ID and how
+;   they are checked are:
+;
+;     Opcode <28:19>
+;
+;       Ignored.  It is assumed this routine is being called from a routine
+;       that has already been dispatched to according to the opcode.
+;
+;     Reserved bits <18:17>
+;
+;       Must be 0.
+;
+;     NOT ACK bit <16>
+;
+;       Must be 1 to indicate this is not a ACK.
+;
+;     ASYNC <15>
+;
+;       Must be 0 to indicate this is a deliberate command.
+;
+;     ACK reqested bit <14>
+;
+;       Ignored.  Most commands are valid whether a ACK is requested or not.
+;
+;     Continuation bit <13>
+;
+;       Must be 0 to indicate this is not a continuation of a multi-frame
+;       message.
+;
+;     Continued bit <12>
+;
+;       Must be 0 to indicate there will not be subsequent frames of a multi
+;       frame message.
+;
+;     Sequence <11:8>
+;
+;       May have any value, but is extracted and returned in W0.
+;
+;     Reserved bit <7>
+;
+;       Must be 0.
+;
+;     Node address <6:0>
+;
+;       Ignored.  The node address has already been checked and found to be
+;       a broadcast or specifically for us else the frame processing routine
+;       would not have been run.
+;
+;   If any bits are found differently than required, then the frame is
+;   discarded and the command aborted by jumping to EMCMD_ABORT.  In that case
+;   this routine will not return.  If the required settings are found, then
+;   the 0-15 SEQ field value is returned in W0.
+;
+         glbsub  emcan_checkext, regf1
+
+         mov     emcmd_id+0, w0 ;get the low word of the frame ID into W0
+         mov     #0b1011000010000000, w1 ;get mask of bits to check
+                 ;  1--------------- ansync
+                 ;  -0-------------- ACK request
+                 ;  --1------------- not first
+                 ;  ---1------------ not last
+                 ;  ----0000-------- sequence number
+                 ;  --------1------- reserved
+                 ;  ---------0000000 node address
+         and     w0, w1, w0  ;mask in only the bits to check
+         mov     #0b0000000000000000, w1
+                 ;  0--------------- not async, deliberate command
+                 ;  --0------------- must be first
+                 ;  ---0------------ must be last
+                 ;  --------0------- reserved bit must be 0
+         cp      w0, w1
+         bra     nz, emcmd_abort ;something doesn't match
+
+         mov     emcmd_id+2, w0 ;get the high word of the frame ID into W0
+         mov     #0b1110000000000111, w1 ;get mask of bits to check
+                 ;  111------------- unused high bits
+                 ;  ---0000000000--- opcode
+                 ;  -------------11- reserved bits
+                 ;  ---------------1 not-ACK
+         and     w0, w1, w0  ;mask in only the bits to check
+         mov     #0b0000000000000001, w1
+                 ;  000------------- unused bits must be 0
+                 ;  -------------00- reserved bits must be 0
+                 ;  ---------------1 must not be ACK
+         cp      w0, w1
+         bra     nz, emcmd_abort ;something doesn't match
+;
+;   All the required fields check out.  Return the sequence number in W0.
+;
+         mov     emcmd_id+0, w0 ;get the low word of the frame ID into W0
+         lsr     w0, #8, w0  ;move sequence number into LSB
+         and     #15, w0     ;mask in only the sequence number
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine CHECK_PORT
+;
+;   Check the port number in W14 for validity.  It must be within our port
+;   number range, and that port must be defined.
+;
+;   The routine may only be called in a received port-related CAN frame
+;   processing routine.  If the port is valid, W13:W12 will be returned pointing
+;   to the start of the port definition in program memory.  If the port number
+;   is invalid, then a NACK will be sent for the current received CAN frame and
+;   this routine will not return.
+;
+         locsub  check_port, regf0
+
+         mov     #[v emcan_ports], w0 ;get the number of implemented ports
+         cp      w14, w0
+         bra     geu, send_port_nack ;port number is out of range ?
+
+         mov     #0, w0      ;pass offset into port definition
+         mcall   emcan_point_port ;point W13:W12 and TBLPAG to port definition
+         tblrdl  [w12], w0   ;get the port type ID into W0
+         lsr     w0, #14, w0 ;get the read/write bits
+         bra     z, send_port_nack ;this port is not implemented ?
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine CHECK_PORTREQ
+;
+;   Checks the header of the current received CAN frame for being a valid ACK
+;   request with a supplied port number.  Most of the commands that return data
+;   about a port can be solicited by sending a ACK request frame with the port
+;   number as the data.  This routine either jumps to EMCMD_ABORT to ignore the
+;   received frame, sends a NACK and then aborts, or returns with the port
+;   number in W14.  In that case the port number is guaranteed to be valid, the
+;   CAN frame will have been released, W13:W12 will be pointing to the start of
+;   the port definition in program memory, and TBLPAG will be set for access to
+;   that memory.
+;
+         locsub  check_portreq, regf0
+
+         mov     canin_id+2, w14 ;get the high word of the frame ID
+         btsc    w14, #2     ;reserved bit 18 is zero ?
+         jump    emcmd_abort ;no
+         btsc    w14, #1     ;reserved bit 17 is zero ?
+         jump    emcmd_abort ;no
+         btss    w14, #0     ;not ACK/NACK ?
+         jump    emcmd_abort ;no, is ACK/NACK
+
+         mov     canin_id+0, w14 ;get the low word of the frame ID
+         btsc    w14, #15    ;synchronous ?
+         jump    emcmd_abort ;no
+         btss    w14, #14    ;ACK requested ?
+         jump    emcmd_abort ;no
+         lsr     w14, #7, w14
+         and     #0x7F, w14  ;mask in NOT FIRST, NOT LAST, SEQ and reserved bit 7
+         bra     nz, emcmd_abort ;one of the above not set correctly
+
+         mov     canin_ndat, w14 ;get the number of data bytes
+         cp      w14, #2     ;compare to the required value
+         bra     nz, emcmd_abort ;wrong number of data bytes ?
+
+         mov     canin_d0, w14 ;get the port number into W14
+         swap    w14
+         mcall   emcan_release ;done with the recieved CAN frame
+         mcall   check_port  ;send NACK on unimplemented port
+;
+;   This is a valid port ACK request.
+;
+         bset    emcflags, #flg_portfr ;indicate this is a port frame
+         mov     w14, portnum ;save the port number
+         mov     #0, w0
+         mov     w0, nportdat ;init the additional port data to empty
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local entry point SEND_PORT_NACK
+;
+;   Send a NACK in response to the last received frame if ACK was requested.
+;   This frame is assumed to be a port request, so the NACK frame will include
+;   the port number as its only two data bytes.  The port number is passed in
+;   W14.  The received frame may already be released.
+;
+send_port_nack:
+         mcall   emcan_release ;make sure the received frame is released
+
+         mov     emcmd_id+0, w0 ;get low word of the received frame ID
+         btss    w0, #14     ;ACK was requested ?
+         jump    emcmd_abort ;no, nothing more to do here
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+         mov     emcmd_id+0, w0 ;get the received frame ID into W1:W0
+         mov     emcmd_id+2, w1
+         bclr    w1, #0      ;this is ACK/NACK frame
+         bset    w0, #14     ;NACK, not ACK
+         gcall   can_send_id ;set the frame ID
+
+         mov     w14, w0     ;write the port number
+         gcall   can_send_dat16
+
+         gcall   can_send    ;send the frame
+         jump    emcmd_abort ;done processing this received frame
+
+;*******************************************************************************
+;
+;   Command ADR ASSIGN vblockid serial adr
+;
+;   Assigns a bus node address.  If VBLOCKID and SERIAL match our values, then
+;   ADR is our new address assignment.
+;
+ecm_nodeadr:
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #8      ;compare to the required number
+         bra     nz, emcmd_abort ;invalid number of data bytes
+;
+;   Check VBLOCKID and SERIAL to see if they match our values.  If so, then
+;   execution continues after this section.  If not, this section jumps to
+;   NADR_NOTUS.
+;
+         mov     #canin_dat, w1 ;init pointer to next CAN frame data byte
+
+         mov     #emcan_vblockid+2, w2 ;compare VBLOCKID
+         mov.b   [w1++], w0
+         cp.b    w0, [w2--]
+         bra     nz, nadr_notus
+         mov.b   [w1++], w0
+         cp.b    w0, [w2--]
+         bra     nz, nadr_notus
+         mov.b   [w1++], w0
+         cp.b    w0, [w2--]
+         bra     nz, nadr_notus
+
+         mov     #serial+3, w2 ;compare SERIAL
+         mov.b   [w1++], w0
+         cp.b    w0, [w2--]
+         bra     nz, nadr_notus
+         mov.b   [w1++], w0
+         cp.b    w0, [w2--]
+         bra     nz, nadr_notus
+         mov.b   [w1++], w0
+         cp.b    w0, [w2--]
+         bra     nz, nadr_notus
+         mov.b   [w1++], w0
+         cp.b    w0, [w2--]
+         bra     nz, nadr_notus
+;
+;   This command is for us.
+;
+         ze      [w1], w0    ;get the node address into W0
+         mcall   emcan_release ;all done with the received CAN frame
+
+         mov     #127, w1    ;get last valid node address
+         cp      w0, w1
+         bra     leu, nadr_ok ;valid node address ?
+         mov     #0, w0      ;no, substitute the value to indicate unassign
+nadr_ok:                     ;W0 contains valid 0-127 address
+         cp0     w0
+         bra     z, ecm_unassign ;we are being specifically unassigned ?
+         ;
+         ;   Assign the address.  The new address is in W0.
+         ;
+         mov     nodeadr, w1 ;get our existing node address assignment
+         cp      w0, w1
+         bra     z, nadr_ext ;just extending the existing assignment ?
+         ;
+         ;   This is a new assignment.
+         ;
+         mcall   ecm_unassign ;unassign the old address, reset state
+         mov     w0, nodeadr ;set our new address assignment
+         ;
+         ;   Extend the time of the existing assignment.
+         ;
+nadr_ext:
+         mov     #ntklife, w0 ;start full lifetime for this address
+         mov     w0, tklife
+         jump    emcmd_done
+;
+;   This assignment is not for us.  However, check that the address being
+;   assigned isn't the one we think we currently have assigned.  If so,
+;   something has gone wrong and we unassign our address to be safe and limit
+;   the damage to the bus as a whole.
+;
+nadr_notus:                  ;this command is not for us
+         setflag emcan_others ;indicate there are other nodes on this bus
+         mov     #canin_d7, w1
+         ze      [w1], w0    ;get the address being assigned into W0
+         mcall   emcan_release ;all done with the received CAN frame
+
+         cp0     w0
+         bra     z, emcmd_abort ;address is being unassigned, ignore ?
+
+         mov     nodeadr, w1 ;get our assigned address
+         cpseq   w1, w0      ;someone else is getting our address ?
+         return              ;no, everything is normal
+         jump    ecm_unassign ;yes, unassign our address
+
+;*******************************************************************************
+;
+;   Command SYNC
+;
+;   Send a STRIN sync if the stream at the next opportunity if the stream to the
+;   master is open.
+;
+ecm_sync:
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp0     w0
+         skip_z
+         return              ;invalid number of data bytes
+
+         jump    emcan_sync  ;request sync, return from CAN frame command
+
+;*******************************************************************************
+;
+;   Command ADRELEASE adr
+;
+;   Some node is releasing its address assignment.  Reset our state if this is
+;   also our address.  This shouldn't happen, so something is definitely screwed
+;   up if it does.  Resetting ourselves is the safest course of action.
+;
+ecm_adrelease:
+         mov     nodeadr, w1
+         cp0     w1
+         skip_nz             ;we have a assigned address ?
+         return              ;no, ignore this frame
+
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #1      ;compare to the required number
+         skip_z              ;correct number of data bytes ?
+         return              ;no, abort
+
+         mov     #canin_dat, w2 ;point to first data byte
+         ze      [w2++], w0  ;get the address being unassigned
+         cp      w0, w1      ;compare to our address
+         skip_z              ;someone else is unassigning our address ?
+         return              ;no, ignore this frame
+;
+;   Some other device is trying to release our address.
+;
+         mcall   ecm_reset   ;reset our bus state to unassigned
+         return
+
+;*******************************************************************************
+;
+;   Remote request FWINFO
+;
+;   We respond with FWINFO type majver minver sequence
+;
+ecm_fwinfo_r:
+         mcall   emcan_release ;all done with the received CAN frame
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init
+
+/call init_extid             ;set state to describe ext frame ID
+/set extid_opcode 1008
+/call make_extid             ;build the frame ID in W1:W0
+         gcall   can_send_id ;set the ID of the frame being built
+
+         mov     #fwtype, w0 ;firmware type ID
+         gcall   can_send_dat16
+         mov     #fwver, w0  ;version number
+         gcall   can_send_dat16
+         mov     #0, w0      ;minor version, not used
+         gcall   can_send_dat16
+         mov     #fwseq, w0  ;sequence number
+         gcall   can_send_dat16
+
+         gcall   can_send    ;send the frame, release frame sending lock
+
+/if [<> emcan_fwinfo ""] then
+         gcall   [chars emcan_fwinfo] ;call app routine to send additional info
+  /endif
+         return
+
+;*******************************************************************************
+;
+;   Remote request APPROLE
+;
+;   This is a simplified version of this command when this firmware can only
+;   implement a single application.  The preprocessor constant EMCAN_APPID is
+;   set to the single supported application ID.
+;
+;   We respond with APPROLE appid role
+;
+ecm_approle_r:
+         bclr    emcflags, #flg_ack ;send response as new data, not ACK
+;
+;   Entry point SEND_APPROLE.  Other code in this module can jump or call here
+;   to send a APPROLE command.  The command will be sent as a ACK (NEW DATA bit
+;   0) iff the local flag ACK is set.  The received frame may be released before
+;   this routine.  It will be released here if it wasn't already.
+;
+;   This code is implemented as a subroutine.  It will clear the EMCAN_ACK flag
+;   since it will send a ACK frame, although not the usual one.  This routine
+;   can also be jumped to from the top level of a command processing routine, in
+;   which case it will end the command.
+;
+send_approle:
+         mcall   emcan_release ;make sure the received frame is released
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init
+/call init_extid             ;set state to describe ext frame ID
+/set extid_opcode 1009
+/call make_extid             ;build the frame ID in W1:W0
+         btsc    emcflags, #flg_ack ;don't send as ACK ?
+         bclr    w1, #0      ;indicate this is in respose to ACK request
+         gcall   can_send_id ;set the ID of the frame being built
+
+         mov     #[shiftr emcan_appid 16], w0 ;get APPID high word
+         skip_nflag emcan_appon ;application is turned off right now ?
+         bset    w0, #15     ;indicate app is on
+         gcall   can_send_dat16
+         mov     #[and emcan_appid 16#FFFF], w0 ;get APPID low word
+         gcall   can_send_dat16
+
+         mov     emcan_role+2, w0 ;send ROLE
+         gcall   can_send_dat16
+         mov     emcan_role+0, w0
+         gcall   can_send_dat16
+
+         gcall   can_send    ;send the frame, release frame sending lock
+         setflag emcan_ack   ;indicate ACK response already sent
+         return
+
+;*******************************************************************************
+;
+;   Command APPROLE appid [dat ... dat]
+;
+;   Sets the app the host expects this unit to implement and turns application
+;   specific interactions on or off.
+;
+;   This is a simplified version of this command when this firmware can only
+;   implement a single application.  The preprocessor constant EMCAN_APPID is
+;   set to the ID of the single supported application.
+;
+;   This version ignores any optional DAT bytes.
+;
+ecm_approle:
+         mcall   emcan_checkext ;abort if not normal extended command frame
+         mov     canin_id+0, w0 ;get the low 16 bits of the frame ID
+         bclr    emcflags, #flg_ack ;init to ACK not requested
+         btsc    w0, #14     ;ACK not requested ?
+         bset    emcflags, #flg_ack ;remember that ACK is requested
+
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #4      ;compare to the minimum required
+         bra     ltu, emcmd_abort ;invalid number of data bytes ?
+
+         mov     canin_d0, w0 ;get high word of APPID
+         swap    w0          ;fix byte order
+         btss    w0, #15     ;app is being turned on ?
+         jump    appr_off    ;the app is being turned off
+;
+;   The application is being turned on.  This will only be done if the 31 bit
+;   application ID matches the single application we implement.  W0 contains the
+;   high word of APPID.
+;
+         mov     #canin_dat, w2 ;init pointer to first data byte to check
+
+         mov.b   [w2++], w0  ;check byte 3
+         and     #0x7F, w0
+         mov     #[and [shiftr emcan_appid 24] 127], w1
+         cp      w0, w1
+         bra     nz, appr_off
+
+         mov.b   [w2++], w0  ;check byte 2
+         mov     #[and [shiftr emcan_appid 16] 255], w1
+         cp      w0, w1
+         bra     nz, appr_off
+
+         mov.b   [w2++], w0  ;check byte 1
+         mov     #[and [shiftr emcan_appid 8] 255], w1
+         cp      w0, w1
+         bra     nz, appr_off
+
+         mov.b   [w2++], w0  ;check byte 0
+         mov     #[and emcan_appid 255], w1
+         cp      w0, w1
+         bra     nz, appr_off
+         ;
+         ;   The 31 bit app ID in the command matches our app ID.  Enable the
+         ;   application.
+         ;
+         setflag emcan_appon ;turn on the application
+         jump    appr_respond
+;
+;   The application is being turned off.
+;
+appr_off:
+         clrflag emcan_appon ;make sure application is off
+;
+;   Send the ACK response if this was requested.  This command responds
+;   differently to the ACK REQUESTED bit being set.  Instead of just sending a
+;   normal ACK, it sends a complete APPROLE response with the NEW DATA bit 0.
+;   The local flag ACK is set iff a response is to be sent.  The received frame
+;   may already be released.
+;
+appr_respond:
+         btss    emcflags, #flg_ack ;ACK was requested ?
+         jump    emcmd_abort ;no, nothing more to do
+         jump    send_approle ;send APPROLE as the ACK
+
+;*******************************************************************************
+;
+;   Command SETROLE role
+;
+;   Requests to switch to the 31 bit role specified in ROLE.  The application
+;   may have policies about when the role is allowed to be changed.  It should
+;   also save the new role in non-volatile memory.  Because of this we can only
+;   handle the basic mechanics of receiving the frame but must call a routine
+;   supplied by the application to actually change the role.  The preprocessor
+;   constant EMCAN_SETROLE is set to the name of this routine.  If this is the
+;   empty string, then no app routine is called and the role is not changed.
+;
+ecm_setrole:
+         mcall   emcan_checkext ;abort if not normal extended command frame
+         mov     canin_id+0, w0 ;get the low 16 bits of the frame ID
+         bclr    emcflags, #flg_ack ;init to ACK not requested
+         btsc    w0, #14     ;ACK really not requested ?
+         bset    emcflags, #flg_ack ;remember that ACK is requested
+
+/if [<> emcan_setrole ""] then ;app routine supplied to set the role ?
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #4
+         bra     nz, emcmd_abort ;invalid number of data bytes ?
+
+         mov     canin_d0, w1 ;get high word of new role
+         swap    w1          ;fix byte order
+         mov     canin_d2, w0 ;get low word of new role
+         swap    w0          ;fix byte order
+
+         mcall   emcan_release ;done with the received CAN frame
+         gcall   [chars emcan_setrole] ;call app routine to set to the new role
+  /endif
+
+         btss    emcflags, #flg_ack ;ACK was requested ?
+         jump    emcmd_abort ;no, nothing more to do
+         jump    send_approle ;send APPROLE as the ACK
+
+;*******************************************************************************
+;
+;   Command STROUT dat ... dat
+;
+;   This command is used to open, close and send data for the byte stream from
+;   the host to this node.  See the EmCan specification for details.
+;
+ecm_strout:
+         mov     canin_id+2, w0 ;get high word of frame ID
+         btss    w0, #0      ;not ACK/NACK ?
+         jump    emcmd_abort ;ACK/NACK doesn't make sense here, ignore the frame
+;
+;   Open or re-open the input stream if this is the first frame of the sequence.
+;   The sequence number in the received frame must be 0 in this case.
+;
+         mov     canin_id+0, w0 ;get low word of received frame ID
+         btsc    w0, #13     ;first frame of sequence ?
+         jump    strout_nopen ;no, skip this section
+
+         mov     canin_id+0, w0 ;get the received sequence number into W0
+         lsr     w0, #8, w0
+         and     #15, w0
+         bra     nz, emcmd_abort ;sequence number not 0, ignore this frame ?
+         ;
+         ;   This frame opens or re-opens the stream from the host.  W0 contains
+         ;   zero.
+         ;
+         mov     w0, recvseq ;init the expected sequence number
+         bset    emcflags, #flg_recvres ;indicate the received stream was reset
+         bset    emcflags, #flg_recv ;indicate the received stream is open
+         bclr    emcflags, #flg_recvack ;cancel any pending ACK on buffer available
+         fifob_init fiforecv ;reset the receiving FIFO to empty
+         clrflag emcan_inbyte ;no input stream byte is available to read
+         jump    strout_seqok ;skip ahead to sequence number is OK, already checked
+
+strout_nopen:                ;this frame does not open or re-open the stream
+         btss    emcflags, #flg_recv ;the receive stream is open ?
+         jump    emcmd_abort ;no, this frame is meaningless
+;
+;   Check the sequence number.  If it is the expected value, then continue to
+;   process the frame normally.  If it is one before the expected value, then
+;   reply with ACK but otherwise ignore the frame.  The frame is completely
+;   ignored on any other sequence number.
+;
+         mov     canin_id+0, w0 ;get the received sequence number into W0
+         lsr     w0, #8, w0
+         and     #15, w0
+         mov     recvseq, w1 ;get the expected sequence number into W1
+         cp      w0, w1
+         bra     z, strout_seqok ;sequence is the expected value, continue ?
+
+         sub     #1, w1      ;make previous sequence number in W1
+         and     #15, w1
+         cp      w0, w1
+         bra     z, emcmd_done ;previous sequence, ACK but otherwise ignore frame
+         jump    emcmd_abort ;invalid sequence number, completely ignore frame
+
+strout_seqok:                ;the sequence number is the expected value
+;
+;   Save any data bytes in this frame.
+;
+         mov     canin_ndat, w4 ;get number of data bytes
+         cp0     w4
+         bra     z, strout_ddata ;no data bytes ?
+         fifob_empty_n fiforecv ;get room in FIFO into W0
+         cp      w4, w0
+         bra     gtu, emcmd_abort ;no room for the data, can't accept frame now ?
+
+         mov     #canin_dat, w5 ;init pointer to where to get next byte
+strout_byte:                 ;back here to do each new data byte
+         mov.b   [w5++], w0  ;get this byte from the CAN frame
+         fifob_put fiforecv  ;stuff this byte into the FIFO
+         sub     #1, w4      ;count one less byte left to do
+         bra     nz, strout_byte ;back to do next byte
+         setflag emcan_inbyte ;at least one received byte is now available
+
+strout_ddata:                ;done handling data bytes, if any
+;
+;   Close the stream if this is the last frame of the sequence.
+;
+         mov     canin_id+0, w0 ;get low word of received frame ID
+         btsc    w0, #12     ;this is last frame in the sequence ?
+         jump    strout_dclose ;no, skip this section
+
+         bclr    emcflags, #flg_recv ;indicate the receive stream is closed
+         bclr    emcflags, #flg_recvack ;no point sending ACK when buffer empties
+
+strout_dclose:               ;done closing the stream if requested
+;
+;   Update our state to the next sequence number.
+;
+         mov     recvseq, w0 ;get the current sequence number
+         add     #1, w0      ;make the next one
+         and     #15, w0
+         mov     w0, recvseq ;update expected sequence number of next STROUT
+;
+;   Check the room in the receive buffer.  Send ACK now if there is room for
+;   another full frame (8 bytes).  Otherwise, set the RECVACK flag so that the
+;   ACK will get sent later when the buffer drains so that a minimum of 8 bytes
+;   are free.
+;
+         bclr    emcflags, #flg_recvack ;init to not send ACK later
+
+         fifob_empty_n fiforecv ;get room in FIFO into3 W0
+         cp      w0, #8      ;compare to min required room to send ACK
+         bra     geu, emcmd_done ;enough room, send ACK now ?
+
+         bset    emcflags, #flg_recvack ;flag to send ACK when buffer drains
+         jump    emcmd_abort
+
+;*******************************************************************************
+;
+;   Command STRIN dat ... dat
+;
+;   The STRIN frame is used to implement a byte stream from this device to the
+;   host.  We initiate all STRIN actions.  The only STRIN frames we should
+;   receive are ACKs or NACKs to STRIN frames we have sent.
+;
+ecm_strin:
+         mov     canin_id+2, w0 ;get high word of frame ID into W0
+         btsc    w0, #0      ;this is ACK/NACK, not new data ?
+         jump    emcmd_abort ;only ACK/NACK frames make sense here
+
+         mov     canin_id+0, w0 ;get low word of frame ID into W0
+         btss    w0, #12     ;not last ?
+         jump    emcmd_abort ;we never close stream, so ACK should not have LAST set
+
+         btsc    emcflags, #flg_send ;the stream is not open yet ?
+         jump    stri_isopen ;is already open
+;
+;   The stream is not open.  This can only be a ACK/NACK to a open request.  W0
+;   contains the low word of the frame ID.
+;
+         btsc    w0, #13     ;first frame of sequence ?
+         jump    emcmd_abort ;response to open request must always be first of seq
+
+         lsr     w0, #8, w1  ;extract the sequence number into W1
+         and     #15, w1
+         bra     nz, emcmd_abort ;seq not 0 as sent in open request ?
+
+         btss    w0, #14     ;NACK ?
+         jump    stri_opack  ;ACK
+         ;
+         ;   Our attempt to open the stream was NACKed.  This means the host
+         ;   does not support this stream.  We flag the stream state as being
+         ;   resolved but closed, which will keep us from wasting bus bandwidth
+         ;   trying to open it again.
+         ;
+         bset    emcflags, #flg_sendkn ;the stream state has been resolved
+         bclr    emcflags, #flg_send ;the stream is closed
+         jump    emcmd_abort ;done handling this received frame
+         ;
+         ;   This is a valid ACK to our open request, so officially open the
+         ;   stream.
+         ;
+stri_opack:
+         bset    emcflags, #flg_sendkn ;the stream state has been resolved
+         bset    emcflags, #flg_send ;the stream is open
+         bclr    emcflags, #flg_sent ;no pending data frame awaiting ACK
+         bclr    emcflags, #flg_sendfl ;no pending output flush
+         bclr    emcflags, #flg_sync ;clear any request to send sync
+         bclr    emcflags, #flg_sendsyn ;clear any pending sync to send
+         mov     #0, w0
+         mov     w0, sendwait ;allowed to send output data immediately
+         mov     w0, sendp   ;init the output FIFO to empty
+         mov     w0, sendg
+         mov     #1, w0
+         mov     w0, sendseq ;init sequence number of next frame to send
+         jump    emcmd_abort ;done handling this received frame
+;
+;   The stream is already open.  This can only be a ACK/NACK to a data frame we
+;   sent.  W0 contains the low word of the received frame ID.  At this point it
+;   is already known that this is a ACK/NACK frame and that it is not indicating
+;   the end of the sequence.
+;
+stri_isopen:
+         btss    emcflags, #flg_sent ;we sent a data frame awaiting ACK response
+         jump    emcmd_abort ;there is nothing valid for us to receive
+
+         btss    w0, #13     ;not first frame of sequence ?
+         jump    emcmd_abort ;first frame not valid since stream already open
+
+         lsr     w0, #8, w1  ;extract the received sequence number into W1
+         and     #15, w1
+         mov     sendseq, w2 ;get the expected sequence number
+         cp      w1, w2
+         bra     nz, emcmd_abort ;not the expected sequence number ?
+
+         btss    w0, #14     ;NACK ?
+         jump    stri_datack ;ACK
+         ;
+         ;   This is a NACK to our last data frame.  This is a valid response,
+         ;   and is used for flow control.  The host is saying it can't accept
+         ;   more data now, and that it will send a ACK later when it can.
+         ;
+         ;   We set our retry time to maximum.  In theory, we should do nothing
+         ;   until the promised ACK is received, but if that gets lost the
+         ;   stream would hang indefinitely.
+         ;
+         mov     #ntkstmax, w2 ;reset retry wait time to maximum
+         mov     w2, sendwait
+         jump    emcmd_abort ;done handling this received frame
+         ;
+         ;   This is a valid ACK to our last data frame.
+         ;
+stri_datack:
+         bclr    emcflags, #flg_sent ;no longer waiting for ACK to data frame
+
+         mov     sentn, w1   ;get number of bytes that were sent
+         mov     nsync, w0   ;update bytes until break to send sync at
+         sub     w0, w1, w0
+         mov     w0, nsync
+
+         mov     sendg, w0   ;get GET index for start of sent bytes
+         add     w0, w1, w0  ;make updated GET index
+         mov     #sendby, w1 ;get first invalid index
+         cp      w0, w1
+         skip_ltu            ;new index is within range ?
+         sub     w0, w1, w0  ;no, wrap back to start of buffer
+         mov     w0, sendg   ;update GET index for first unsent byte
+
+         mov     sendseq, w2 ;get the sequence number of the ACKed frame
+         add     #1, w2      ;make the next sequence number
+         and     #15, w2
+         mov     w2, sendseq ;update the sequence number for the next frame
+;
+;   Handle special case of ACK to sync frame.
+;
+         mov     sentn, w0   ;get number of data bytes sent
+         cp0     w0
+         bra     nz, stri_dsync ;was not a sync frame, skip this section
+
+         bclr    emcflags, #flg_sync ;cancel any new sync request
+         bclr    emcflags, #flg_sendsyn ;cancel pending sync frame to send
+
+stri_dsync:                  ;done handling ACK to sync frame
+
+         jump    emcmd_abort ;done handling this received frame
+
+;*******************************************************************************
+;
+;   Command PORTWR port data
+;
+;   Write the data to the port.  Can be in a sequence to support data sizes
+;   larger than 6 bytes (48 bits).
+;
+;   This implementation only supports single frame port data sequences, which
+;   means the port data must be 48 bits or less.
+;
+ecm_portwr:
+         mov     canin_id+2, w0 ;get high word of frame ID
+         btss    w0, #0      ;new data (not ACK/NACK) ?
+         jump    emcmd_abort ;no
+
+         mov     canin_id+0, w0 ;get low word of the frame ID
+         btsc    w0, #13     ;first ?
+         jump    emcmd_abort ;no
+         btsc    w0, #12     ;last ?
+         jump    emcmd_abort ;no
+         lsr     w0, #8, w0  ;extract the sequence number
+         and     #15, w0
+         skip_z              ;sequence 0 ?
+         jump    emcmd_abort ;no
+
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #3      ;compare to minimum meaningful
+         bra     ltu, emcmd_abort ;too few data bytes ?
+
+         mov     canin_d0, w14 ;get the port number into W14
+         swap    w14
+         mov     #[v emcan_ports], w0
+         cp      w14, w0
+         bra     geu, send_port_nack ;port number is out of range ?
+
+         mov     #0, w0
+         mcall   emcan_point_port ;set up state for reading port definition
+         tblrdl  [w12], w0   ;get TYPE ID into W0
+         btss    w0, #15     ;this port is writable ?
+         jump    send_port_nack ;no
+
+         tblrdh  [w12], w0   ;get port BITS parameter
+         add     #8, w0      ;make number of bytes to hold the data bits in W1
+         lsr     w0, #3, w1
+         add     w1, #2, w2  ;make data bytes this frame should have
+         mov     canin_ndat, w0 ;get actual number of data bytes
+         cp      w0, w2
+         bra     nz, emcmd_abort ;wrong number of data bytes ?
+
+         bset    emcflags, #flg_portfr ;indicate this is a port frame
+         mov     w14, portnum ;save the port number
+         mov     w1, nportdat ;save number of port-specific data bytes
+
+         mov     #canin_d2, w2 ;point to first data byte
+         mov     #portdat, w3 ;init pointer to where to save next data byte
+prtwr_byte:                  ;back here each new data byte
+         mov.b   [w2++], [w3++] ;get and save this data byte
+         sub     #1, w1      ;count one less data byte left to do
+         bra     nz, prtwr_byte ;back to get next data byte
+         mcall   emcan_release ;release the received CAN frame
+
+         add     #22, w12    ;point to write routine adr in port descriptor
+         addc    #0, w13
+         mov     w13, Tblpag
+         tblrdl  [w12], w2   ;get the write routine address into W3:W2
+         tblrdh  [w12], w3
+         mov     #portdat, w1 ;pass pointer to the data to write
+         push    w2          ;push the write routine address onto the stack
+         push    w3
+         return              ;jump to write routine, will return to EMCMD_DONE
+
+;*******************************************************************************
+;
+;   Command PORTRD port
+;
+;   Read data from a port.  Must request ACK.  We respond with:
+;
+;     PORTRD port data
+;
+ecm_portrd:
+         mcall   check_portreq ;check for valid port info request, port num --> W14
+
+         mov     #0, w0
+         mcall   emcan_point_port ;set up state for reading port definition
+         tblrdl  [w12], w0   ;get TYPE ID into W0
+         btss    w0, #14     ;this port is readable ?
+         jump    send_port_nack ;no
+;
+;   Everything checks out and the received frame has been released.
+;
+;   Call the read routine.
+;
+         sub     #4, w15     ;remove frame processing return point from stack
+
+         mov     #tbloffset(prtrd_aftrd), w0 ;push read routine return adr onto stack
+         push    w0
+         mov     #tblpage(prtrd_aftrd), w0
+         and     #0x7F, w0
+         push    w0
+
+         add     #24, w12    ;point to read routine adr in the port descriptor
+         addc    #0, w13
+         mov     w13, Tblpag
+         tblrdl  [w12], w0   ;push the read routine address onto the stack
+         push    w0
+         tblrdh  [w12], w0
+         push    w0
+         mov     #portdat, w1 ;pass pointer to where to write the port data
+         return              ;jump to the read routine, will return to PRTRD_AFTRD
+prtrd_aftrd:                 ;read routine returns to here
+         mov     portnum, w14 ;get port number back into W14
+;
+;   The port data is in PORTDAT.  W14 contains the port number.
+;
+         mov     #0b01, w0   ;init for sending extended data frame
+         gcall   can_send_init
+
+/call init_extid             ;define the CAN frame to send
+/set extid_opcode 993
+/set extid_ack true
+/call make_extid             ;make extended frame ID into W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mov     w14, w0     ;write the port number data bytes
+         gcall   can_send_dat16
+
+         mov     #0, w0
+         mcall   emcan_point_port ;set up state for reading port descriptor
+         tblrdh  [w12], w1   ;get port BITS parameter (number of bits - 1)
+         add     #8, w1      ;make number of data bytes in W1
+         lsr     w1, #3, w1
+         mov     #portdat, w2 ;init pointer where to read next byte from
+prtrd_byte:                  ;back here each new data byte
+         mov.b   [w2++], w0  ;get this data byte from the buffer
+         gcall   can_send_dat ;write it into the CAN frame
+         sub     #1, w1      ;count one less byte left to do
+         bra     nz, prtrd_byte ;back to do next byte
+
+         gcall   can_send    ;send the reply frame
+         jump    emcmd_abort ;all done processing this received frame
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_CONFIG_DEF
+;
+;   This is the default application routine for setting a new configuration.
+;   This routine is called as the app routine when EMCAN_CONFIG is the empty
+;   string.  The config bits from the host are passed in W0.  This routine
+;   should update the global flags EMCAN_SHOW, EMCAN_CFGALLOW, and EMCAN_CONFIG
+;   accordingly.
+;
+/if [= emcan_config ""] then
+         locsub  emcan_config_def
+
+         btsc    w0, #6
+         setflag emcan_show  ;enable user-visible indicator
+         btsc    w0, #5
+         clrflag emcan_show  ;clear user-visiblt indicator
+
+         clrflag emcan_cfgallow ;init to config state not allowed
+         skip_flag emcan_others
+         setflag emcan_cfgallow ;no other devices detected, allow config state
+
+         btsc    w0, #3
+         setflag emcan_config ;enable config state as requested by host
+         btsc    w0, #2
+         clrflag emcan_config ;disable config state as requested by host
+
+         skip_flag emcan_cfgallow ;config state is currenly allowed ?
+         clrflag emcan_config ;no, make sure it is off
+
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Command CONFIG flags
+;
+;   This command is used to set and clear configuration state, which allows
+;   non-volatile settings to be changed.  It also manages the user-initiated and
+;   host-initiated identification signalling of this device.  FLAGS contains:
+;
+;          7       6       5       4       3       2       1       0
+;      -----------------------------------------------------------------
+;      |       |       |       |       |       |       |       |       |
+;      |REQCFG | SETID | CLRID |  ID   |SETCFG |CLRCFG |CONFIG | ALLOW |
+;      |       |       |       |       |       |       |       |       |
+;      -----------------------------------------------------------------
+;
+;      REQCFG request received from host to enter config state, but actally
+;        entering it is pending some other condition or action.
+;
+;      SETID is set by the host to request the user-visible ID on.
+;
+;      CLRID is set by the host to request the user-visible ID off.
+;
+;      ID sent by us when user activated the local ID indicator.
+;
+;      SETCFG set by host to request config mode.
+;
+;      CLRCFG set by host to clear config mode.
+;
+;      CONFIG set by us to indicate config mode.
+;
+;      ALLOW set by us to indicate config mode can be entered now.
+;
+ecm_config:
+         mcall   emcan_checkext ;abort on invalid frame flags
+         cp0     w0
+         bra     nz, emcmd_abort ;sequence number not 0 ?
+
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #1
+         bra     nz, emcmd_abort ;not the required number of data bytes ?
+
+         mov     canin_d0, w0 ;get the data byte into W0
+         and     #0xFF, w0
+         mcall   emcan_release ;release the received frame
+;
+;   Process the requests in this frame.
+;
+/if [<> emcan_config ""]
+  /then                      ;call app routine to do the work
+         gcall   [chars emcan_config]
+  /else                      ;implement the default policy
+         mcall   emcan_config_def
+  /endif
+
+         mov     emcmd_id+0, w0 ;get low word of received frame ID
+         btss    w0, #14     ;ACK requested ?
+         jump    emcmd_abort ;no, all done with this frame
+;
+;   Send the ACK reply frame.
+;
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+         mov     emcmd_id+0, w0 ;get the received frame ID into W1:W0
+         mov     emcmd_id+2, w1
+         bclr    w1, #0      ;this is ACK frame
+         bclr    w0, #14     ;ACK, not NACK
+         gcall   can_send_id ;set the frame ID
+         setflag emcan_ack   ;indicate ACK will have been sent
+
+;*******************
+;
+;   Common code to finish sending a CONFIG frame.  The CAN frame has been
+;   started and the frame ID set.  All that is left to do is to build and write
+;   the data byte and send the CAN frame.  This entry point can be called as a
+;   subroutine.
+;
+;   W0 is trashed.
+;
+ecm_cfg_datsend:             ;common code to write CONFIG data byte and send the frame
+         mov     #0, w0      ;init the data byte
+         skip_nflag emcan_cfgreq
+         bset    w0, #7      ;ACK that host has requested config state
+         skip_nflag emcan_show
+         bset    w0, #4      ;user-visible indicator is enabled
+         skip_nflag emcan_config
+         bset    w0, #1      ;in configuration state
+         skip_nflag emcan_cfgallow
+         bset    w0, #0      ;configuration state currently allowed
+         gcall   can_send_dat ;write the data byte
+
+         gjump   can_send    ;send the frame and return to the caller
+
+;***************************************
+;
+;   Remote request for CONFIG frame.  See above for details of CONFIG frame.
+;
+ecm_config_r:
+         mcall   emcan_release ;release the received frame
+         mcall   emcan_checkext ;abort on invalid frame flags
+         cp0     w0
+         bra     nz, emcmd_abort ;sequence number not 0 ?
+
+         mov     emcmd_id+0, w0 ;get low word of received frame ID
+         btsc    w0, #14
+         jump    emcmd_abort ;ACK requested, invalid
+
+         mov     #0, w0      ;as if nothing requested by the host
+/if [<> emcan_config ""]
+  /then                      ;call host routine to do the work
+         gcall   [chars emcan_config]
+  /else                      ;implement the default policy
+         mcall   emcan_config_def
+  /endif
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+/call init_extid
+/set extid_opcode 1011       ;CONFIG opcode
+/call make_extid             ;build frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         jump    ecm_cfg_datsend ;finish the frame and send it
+
+;*******************************************************************************
+;
+;   Subroutine EMCAN_CONFIG_ASYNC
+;
+;   Send a asynchronous CONFIG frame with our current state.
+;
+         glbsub  emcan_config_async, regf0 | regf1
+
+         mov     nodeadr, w0
+         cp0     w0
+         bra     z, cfgasync_leave ;no node address assigned ?
+
+         mov     #0b01, w0   ;start extended data frame
+         gcall   can_send_init
+
+/call init_extid
+/set extid_opcode 1011       ;CONFIG opcode
+/set extid_async true        ;this is sent asynchronously
+/call make_extid             ;build the frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mcall   ecm_cfg_datsend ;build rest of config frame and send it
+
+cfgasync_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Remote request for:
+;
+;     NPORTS nports
+;
+;   Indicates the port range implemented by this node.
+;
+ecm_nports_r:
+         mcall   emcan_release ;release the received frame
+         mcall   emcan_checkext ;abort on invalid frame flags
+         cp0     w0
+         bra     nz, emcmd_abort ;sequence number not 0 ?
+
+         mov     emcmd_id+0, w0 ;get low word of received frame ID
+         btsc    w0, #14
+         jump    emcmd_abort ;ACK requested, invalid
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+/call init_extid
+/set extid_opcode 1012       ;NPORTS opcode
+/call make_extid             ;build frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mov     #[shiftr emcan_ports 8], w0 ;write the high byte
+         gcall   can_send_dat
+         mov     #[v emcan_ports], w0 ;write the low byte
+         gcall   can_send_dat
+
+         gcall   can_send    ;send the frame
+         jump    emcmd_abort
+
+;*******************************************************************************
+;
+;   Command PORTYPE port
+;
+;   Indicates the type of one port.  Must request ACK.  We respond with:
+;
+;     PORTYPE port type dim bits dform
+;
+ecm_portype:
+         mcall   check_portreq ;check for valid port info request, port num --> W14
+
+         mov     #0, w0
+         mcall   emcan_point_port ;set up state for reading port descriptor
+         tblrdl  [w12], w2   ;get TYPE into W2
+         tblrdh  [w12], w3   ;get BITS into W3
+
+         add     #2, w12
+         addc    #0, w13
+         mov     w13, Tblpag
+         tblrdl  [w12], w4   ;get DIM into W4
+         tblrdh  [w12], w5   ;get DFORM into W5
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+/call init_extid
+/set extid_opcode 1013       ;PORTYPE opcode
+/set extid_ack true
+/call make_extid             ;build frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mov     w14, w0     ;write the port number
+         gcall   can_send_dat16
+         mov     w2, w0      ;write TYPE
+         gcall   can_send_dat16
+         mov     w4, w0      ;write DIM
+         gcall   can_send_dat16
+         mov     w3, w0      ;write BITS
+         gcall   can_send_dat
+         mov     w5, w0      ;write DFORM
+         gcall   can_send_dat
+
+         gcall   can_send    ;send the reply frame
+         jump    emcmd_abort ;done processing this received frame
+
+;*******************************************************************************
+;
+;   Command PORTSCALE port
+;
+;   Indicates port scale factor.  Must request ACK.  We respond with:
+;
+;     PORTSCALE port scale
+;
+ecm_portscale:
+         mcall   check_portreq ;check for valid port info request, port num --> W14
+
+         mov     #8, w0      ;offset for scale factor in port descriptor
+         mcall   emcan_point_port ;set up state for reading port descriptor
+         tblrdl  [w12], w2   ;read the offset data into W5,W4,W3,W2
+         tblrdh  [w12], w3
+         add     #2, w12
+         addc    #0, w13
+         mov     w13, Tblpag
+         tblrdl  [w12], w4
+         tblrdh  [w12], w5
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+/call init_extid
+/set extid_opcode 1014       ;PORTSCALE opcode
+/set extid_ack true
+/call make_extid             ;build frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mov     w14, w0     ;write the port number
+         gcall   can_send_dat16
+
+         mov     w5, w0      ;write the 6 byte scale factor into CAN frame
+         gcall   can_send_dat
+         mov     w4, w0
+         gcall   can_send_dat16
+         mov     w3, w0
+         gcall   can_send_dat
+         mov     w2, w0
+         gcall   can_send_dat16
+
+         gcall   can_send    ;send the reply frame
+         jump    emcmd_abort ;done processing this received frame
+
+;*******************************************************************************
+;
+;   Command PORTOFS port
+;
+;   Indicates port zero offset.  Must request ACK.  We respond with:
+;
+;     PORTOFS port ofs
+;
+ecm_portofs:
+         mcall   check_portreq ;check for valid port info request, port num --> W14
+
+         mov     #4, w0      ;offset for port value offset into port descriptor
+         mcall   emcan_point_port ;set up state for reading port descriptor
+         tblrdl  [w12], w2   ;read the offset data into W5,W4,W3,W2
+         tblrdh  [w12], w3
+         add     #2, w12
+         addc    #0, w13
+         mov     w13, Tblpag
+         tblrdl  [w12], w4
+         tblrdh  [w12], w5
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+/call init_extid
+/set extid_opcode 1015       ;PORTOFS opcode
+/set extid_ack true
+/call make_extid             ;build frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mov     w14, w0     ;write the port number
+         gcall   can_send_dat16
+
+         mov     w5, w0      ;write the 6 byte scale factor into CAN frame
+         gcall   can_send_dat
+         mov     w4, w0
+         gcall   can_send_dat16
+         mov     w3, w0
+         gcall   can_send_dat
+         mov     w2, w0
+         gcall   can_send_dat16
+
+         gcall   can_send    ;send the reply frame
+         jump    emcmd_abort ;done processing this received frame
+
+;*******************************************************************************
+;
+;   Local subroutine READ_PROG_BYTE
+;
+;   Read the program memory byte pointed to by W13:W12 into W0 and update
+;   W13:W12 to point to the next byte.
+;
+;   W13:W12 is the direct program memory address except that the high bit set
+;   indicates the second (high) byte of the even word.
+;
+         locsub  read_prog_byte
+
+         btsc    w12, #0     ;even address ?
+         jump    rdpb_odd    ;odd address
+         btsc    w13, #15    ;first (low) byte ?
+         jump    rdpb_even2  ;second byte
+;
+;   Read the low byte of the even word.
+;
+         and     #0xFF, w13
+         mov     w13, Tblpag ;set high 8 bits of address to access
+         tblrdl  [w12], w0   ;read the word
+         and     #0xFF, w0   ;mask in only the target byte
+
+         bset    w13, #15    ;indicate to read high byte next time
+         jump    rdpb_leave
+;
+;   Read the high byte of the even word.
+;
+rdpb_even2:
+         and     #0xFF, w13
+         mov     w13, Tblpag ;set high 8 bits of address to access
+         tblrdl  [w12], w0   ;read the word, point to next word
+         lsr     w0, #8, w0  ;extract the high byte only and move it into place
+
+         add     #1, w12     ;point to odd word next time
+         jump    rdpb_leave
+;
+;   Read the odd word.  This word is only one byte wide.
+;
+rdpb_odd:
+         and     #0xFF, w13
+         mov     w13, Tblpag ;set high 8 bits of address to access
+         tblrdh  [w12], w0   ;read the byte into W0
+
+         add     #1, w12     ;update address to point to next byte
+         addc    #0, w12
+
+rdpb_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Command PORTFUNC port
+;
+;   Indicates port function ID.  Must request ACK.  We respond with:
+;
+;     PORTFUNC port functionid
+;
+ecm_portfunc:
+         mcall   check_portreq ;check for valid port info request, port num --> W14
+
+         mov     #26, w0     ;offset for number of function ID bytes
+         mcall   emcan_point_port ;point W13:W12 and TBLPAG into port table
+         tblrdl  [w12], w2   ;get number function ID bytes into W2
+         and     #7, w2
+         add     #2, w12     ;update address in W13:W12 to first function ID byte
+         addc    #0, w13
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+/call init_extid
+/set extid_opcode 1017       ;PORTFUNC opcode
+/set extid_ack true
+/call make_extid             ;build frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mov     w14, w0     ;write the port number
+         gcall   can_send_dat16
+
+ecm_pfunc_byte:              ;back here to send each new function ID byte
+         cp0     w2
+         bra     z, ecm_pfunc_dbytes ;done writing all function ID bytes ?
+         mcall   read_prog_byte ;read this byte into W0
+         gcall   can_send_dat ;write it into the CAN frame
+         sub     #1, w2      ;count one less byte left to do
+         jump    ecm_pfunc_byte ;back to do next byte
+ecm_pfunc_dbytes:            ;done writing function ID bytes into CAN frame
+
+         gcall   can_send    ;send the reply frame
+         jump    emcmd_abort ;done processing this received frame
+
+;*******************************************************************************
+;
+;   Command PORTINIT port data
+;
+;   Sets port startup value.
+;
+ecm_portinit:
+         mcall   emcan_checkext ;check for normal extended frame
+         cp0     w0
+         bra     nz, emcmd_abort ;sequence number not 0 ?
+
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #2
+         bra     ltu, emcmd_abort ;too few data bytes ?
+
+         mov     canin_d0, w14 ;get the port number into W14
+         swap    w14
+         mcall   check_port  ;NACK bad port, point W13:W12 to port descriptor
+
+         tblrdl  [w12], w0   ;get TYPE ID into W0
+         btss    w0, #15     ;this port is writable ?
+         jump    send_port_nack ;no
+
+         tblrdh  [w12], w0   ;get port BITS parameter
+         add     #8, w0      ;make number of bytes to hold the data bits in W3
+         lsr     w0, #3, w3
+         add     w3, #2, w2  ;make data bytes this frame should have
+         mov     canin_ndat, w0 ;get actual number of data bytes
+         cp      w0, #2
+         bra     z, prtini_resp ;frame contains only the port number ?
+         cp      w0, w2
+         bra     nz, emcmd_abort ;wrong number of data bytes ?
+
+/if [= emcan_nvol_write ""]
+  /then                      ;no routine to write nvol memory provided
+         jump    send_port_nack ;can't save the value, send NACK
+
+  /else                      ;we can write to non-volatile memory
+         skip_flag emcan_config ;in configuration state ?
+         jump    send_port_nack ;no, send NACK
+
+         add     #16, w12    ;point to nvol address of initial port data
+         addc    #0, w13
+         mov     w13, Tblpag
+         tblrdl  [w12], w1   ;get the nvol memory address into W2:W1
+         tblrdh  [w12], w2
+         lsr     w1, #8, w0  ;make AND of all three address bytes
+         and     w0, w1, w0
+         and     w0, w2, w0
+         and     #0xFF, w0   ;mask in just the result
+         sub     #0xFF, w0   ;compare to all bits 1
+         skip_nz             ;address isn't all 1s ?
+         jump    send_port_nack ;no initial value storage, send NACK
+
+         mov     #canin_d1, w4 ;point W4 to least significant data byte
+         add     w4, w3, w4
+         mov     w3, w5      ;init number of bytes left to do
+prtini_byte:                 ;back here each new byte to write
+         mov.b   [w4--], w0  ;fetch this data byte
+         gcall   [chars emcan_nvol_write] ;write this byte
+         sub     #1, w5      ;count one less byte left to do
+         bra     nz, prtini_byte ;back to do next byte
+         mcall   emcan_wrotenv ;indicate non-volatile memory was written
+  /endif
+;
+;   Send ACK response with the initialization data for this port, if ACK was
+;   requested.  The registers currently contain:
+;
+;     W3  -  Number of bytes to hold data value for this port.
+;
+;     W14  -  Port number.
+;
+prtini_resp:
+         mcall   emcan_release ;release the received CAN frame
+         mov     emcmd_id+0, w0 ;get low word of received frame ID
+         btss    w0, #14     ;ACK requested ?
+         jump    emcmd_abort ;no, nothing more to do
+
+/if [= emcan_nvol_read ""]
+  /then
+         jump    send_port_nack ;can't read the value, send NACK
+
+  /else                      ;we can read from non-volatile memory
+         mov     #16, w0
+         mcall   emcan_point_port ;set up state for reading port definition
+         tblrdl  [w12], w1   ;get the nvol memory address into W2:W1
+         tblrdh  [w12], w2
+         lsr     w1, #8, w0  ;make AND of all three address bytes
+         and     w0, w1, w0
+         and     w0, w2, w0
+         and     #0xFF, w0   ;mask in just the result
+         sub     #0xFF, w0   ;compare to all bits 1
+         skip_nz             ;address isn't all 1s ?
+         jump    send_port_nack ;no initial value storage, send NACK
+
+         mov     w3, w4      ;init number of bytes left to read
+         mov     #portdat, w5 ;init pointer where to save next byte
+prtini_rdnvol:               ;back here to read each new non-volatile byte
+         gcall   [chars emcan_nvol_read] ;read nvol byte into W0
+         mov.b   w0, [w5++]  ;stuff it into the buffer
+         sub     #1, w4      ;count one less byte left to do
+         bra     nz, prtini_rdnvol ;back to read next byte from nvol mem
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+    /call init_extid
+    /set extid_opcode 1019   ;PORTINIT opcode
+    /set extid_ack true      ;this is ACK response
+    /call make_extid         ;build frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mov     w14, w0     ;write the port number
+         gcall   can_send_dat16
+
+prtini_wrfr:                 ;back here to write each data byte into frame
+         mov.b   [--w5], w0  ;get this byte, high to low order
+         gcall   can_send_dat ;write it into the CAN frame
+         sub     #1, w3      ;count one less byte left to do
+         bra     nz, prtini_wrfr ;back to do next byte
+
+         gcall   can_send    ;send the CAN frame
+         jump    emcmd_abort ;done processing this received CAN frame
+  /endif
+
+;*******************************************************************************
+;
+;   Command PORTCFG port config
+;
+;   Sets the non-volatile configuration data for this port.
+;
+ecm_portcfg:
+         mcall   emcan_checkext ;check for normal extended frame
+         cp0     w0
+         bra     nz, emcmd_abort ;sequence number not 0 ?
+
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #2
+         bra     ltu, emcmd_abort ;too few data bytes ?
+
+         mov     canin_d0, w14 ;get the port number into W14
+         swap    w14
+         mcall   check_port  ;NACK bad port, point W13:W12 to port descriptor
+
+         mov     #26, w0
+         mcall   emcan_point_port ;set up state for reading port definition
+         tblrdh  [w12], w3   ;get number of config data bytes into W3
+         add     w3, #2, w2  ;make data bytes this frame should have
+         mov     canin_ndat, w0 ;get actual number of data bytes
+         cp      w0, #2
+         bra     z, prtcfg_resp ;frame contains only the port number ?
+         cp      w0, w2
+         bra     nz, emcmd_abort ;wrong number of data bytes ?
+
+/if [= emcan_nvol_write ""]
+  /then                      ;no routine to write nvol memory provided
+         jump    send_port_nack ;can't save the value, send NACK
+
+  /else                      ;we can write to non-volatile memory
+         skip_flag emcan_config ;in configuration state ?
+         jump    send_port_nack ;no, send NACK
+
+         mov     #18, w0
+         mcall   emcan_point_port ;point to nvol address of config data
+         tblrdl  [w12], w1   ;get the nvol memory address into W2:W1
+         tblrdh  [w12], w2
+         lsr     w1, #8, w0  ;make AND of all three address bytes
+         and     w0, w1, w0
+         and     w0, w2, w0
+         and     #0xFF, w0   ;mask in just the result
+         sub     #0xFF, w0   ;compare to all bits 1
+         skip_nz             ;address isn't all 1s ?
+         jump    send_port_nack ;no storage for the data, send NACK ?
+
+         mov     #canin_d1, w4 ;point W4 to least significant data byte
+         add     w4, w3, w4
+         mov     w3, w5      ;init number of bytes left to do
+prtcfg_byte:                 ;back here each new byte to write
+         mov.b   [w4--], w0  ;fetch this data byte
+         gcall   [chars emcan_nvol_write] ;write this byte
+         sub     #1, w5      ;count one less byte left to do
+         bra     nz, prtcfg_byte ;back to do next byte
+         mcall   emcan_wrotenv ;indicate non-volatile memory was written
+  /endif
+;
+;   Send ACK response with the initialization data for this port, if ACK was
+;   requested.  The registers currently contain:
+;
+;     W3  -  Number of data bytes.
+;
+;     W14  -  Port number.
+;
+prtcfg_resp:
+         mcall   emcan_release ;release the received CAN frame
+         mov     emcmd_id+0, w0 ;get low word of received frame ID
+         btss    w0, #14     ;ACK requested ?
+         jump    emcmd_abort ;no, nothing more to do
+
+/if [= emcan_nvol_read ""]
+  /then
+         jump    send_port_nack ;can't read the value, send NACK
+
+  /else                      ;we can read from non-volatile memory
+         mov     #18, w0
+         mcall   emcan_point_port ;set up state for reading port definition
+         tblrdl  [w12], w1   ;get the nvol memory address into W2:W1
+         tblrdh  [w12], w2
+         lsr     w1, #8, w0  ;make AND of all three address bytes
+         and     w0, w1, w0
+         and     w0, w2, w0
+         and     #0xFF, w0   ;mask in just the result
+         sub     #0xFF, w0   ;compare to all bits 1
+         skip_nz             ;address isn't all 1s ?
+         jump    send_port_nack ;no initial value storage, send NACK
+
+         mov     w3, w4      ;init number of bytes left to read
+         mov     #portdat, w5 ;init pointer where to save next byte
+prtcfg_rdnvol:               ;back here to read each new non-volatile byte
+         gcall   [chars emcan_nvol_read] ;read nvol byte into W0
+         mov.b   w0, [w5++]  ;stuff it into the buffer
+         sub     #1, w4      ;count one less byte left to do
+         bra     nz, prtcfg_rdnvol ;back to read next byte from nvol mem
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+    /call init_extid
+    /set extid_opcode 1020   ;PORTCFG opcode
+    /set extid_ack true      ;this is ACK response
+    /call make_extid         ;build frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mov     w14, w0     ;write the port number
+         gcall   can_send_dat16
+
+prtcfg_wrfr:                 ;back here to write each data byte into frame
+         mov.b   [--w5], w0  ;get this byte, high to low order
+         gcall   can_send_dat ;write it into the CAN frame
+         sub     #1, w3      ;count one less byte left to do
+         bra     nz, prtcfg_wrfr ;back to do next byte
+
+         gcall   can_send    ;send the CAN frame
+         jump    emcmd_abort ;done processing this received CAN frame
+  /endif
+
+;*******************************************************************************
+;
+;   Command PORTROLE port role
+;
+;   Sets the non-volatile app role ID for this port.
+;
+ecm_portrole:
+         mcall   emcan_checkext ;check for normal extended frame
+         cp0     w0
+         bra     nz, emcmd_abort ;sequence number not 0 ?
+
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #2
+         bra     ltu, emcmd_abort ;too few data bytes ?
+
+         mov     canin_d0, w14 ;get the port number into W14
+         swap    w14
+         mcall   check_port  ;NACK bad port, point W13:W12 to port descriptor
+
+         mov     #4, w3      ;get number of bytes to hold the data
+         add     w3, #2, w2  ;make data bytes this frame should have
+         mov     canin_ndat, w0 ;get actual number of data bytes
+         cp      w0, #2
+         bra     z, prtrol_resp ;frame contains only the port number ?
+         cp      w0, w2
+         bra     nz, emcmd_abort ;wrong number of data bytes ?
+
+/if [= emcan_nvol_write ""]
+  /then                      ;no routine to write nvol memory provided
+         jump    send_port_nack ;can't save the value, send NACK
+
+  /else                      ;we can write to non-volatile memory
+         skip_flag emcan_config ;in configuration state ?
+         jump    send_port_nack ;no, send NACK
+
+         mov     #14, w0     ;role pointer offset
+         mcall   emcan_point_port ;point to nvol address of role ID
+         tblrdl  [w12], w1   ;get the nvol memory address into W2:W1
+         tblrdh  [w12], w2
+         lsr     w1, #8, w0  ;make AND of all three address bytes
+         and     w0, w1, w0
+         and     w0, w2, w0
+         and     #0xFF, w0   ;mask in just the result
+         sub     #0xFF, w0   ;compare to all bits 1
+         skip_nz             ;address isn't all 1s ?
+         jump    send_port_nack ;no nvol storage, send NACK ?
+
+         mov     #canin_d1, w4 ;point W4 to least significant data byte
+         add     w4, w3, w4
+         mov     w3, w5      ;init number of bytes left to do
+prtrol_byte:                 ;back here each new byte to write
+         mov.b   [w4--], w0  ;fetch this data byte
+         gcall   [chars emcan_nvol_write] ;write this byte
+         sub     #1, w5      ;count one less byte left to do
+         bra     nz, prtrol_byte ;back to do next byte
+         mcall   emcan_wrotenv ;indicate non-volatile memory was written
+  /endif
+;
+;   Send ACK response with the initialization data for this port, if ACK was
+;   requested.  The registers currently contain:
+;
+;     W3  -  Number of bytes to hold data value for this port.
+;
+;     W14  -  Port number.
+;
+prtrol_resp:
+         mcall   emcan_release ;release the received CAN frame
+         mov     emcmd_id+0, w0 ;get low word of received frame ID
+         btss    w0, #14     ;ACK requested ?
+         jump    emcmd_abort ;no, nothing more to do
+
+/if [= emcan_nvol_read ""]
+  /then
+         jump    send_port_nack ;can't read the value, send NACK
+
+  /else                      ;we can read from non-volatile memory
+         mov     #14, w0     ;role address offset
+         mcall   emcan_point_port ;point to nvol address of role ID
+         tblrdl  [w12], w1   ;get the nvol memory address into W2:W1
+         tblrdh  [w12], w2
+         lsr     w1, #8, w0  ;make AND of all three address bytes
+         and     w0, w1, w0
+         and     w0, w2, w0
+         and     #0xFF, w0   ;mask in just the result
+         sub     #0xFF, w0   ;compare to all bits 1
+         skip_nz             ;address isn't all 1s ?
+         jump    send_port_nack ;no initial value storage, send NACK
+
+         mov     w3, w4      ;init number of bytes left to read
+         mov     #portdat, w5 ;init pointer where to save next byte
+prtrol_rdnvol:               ;back here to read each new non-volatile byte
+         gcall   [chars emcan_nvol_read] ;read nvol byte into W0
+         mov.b   w0, [w5++]  ;stuff it into the buffer
+         sub     #1, w4      ;count one less byte left to do
+         bra     nz, prtrol_rdnvol ;back to read next byte from nvol mem
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending the ACK frame
+
+    /call init_extid
+    /set extid_opcode 1021   ;PORTROLE opcode
+    /set extid_ack true      ;this is ACK response
+    /call make_extid         ;build frame ID in W1:W0
+         gcall   can_send_id ;set the frame ID
+
+         mov     w14, w0     ;write the port number
+         gcall   can_send_dat16
+
+prtrol_wrfr:                 ;back here to write each data byte into frame
+         mov.b   [--w5], w0  ;get this byte, high to low order
+         gcall   can_send_dat ;write it into the CAN frame
+         sub     #1, w3      ;count one less byte left to do
+         bra     nz, prtrol_wrfr ;back to do next byte
+
+         gcall   can_send    ;send the CAN frame
+         jump    emcmd_abort ;done processing this received CAN frame
+  /endif
+
+;*******************************************************************************
+;
+;   Dispatch tables for commands that are reserved for use by EmCan.
+;
+
+;*******************
+;
+;   Bus control commands.  These are standard (11 bit ID) data frames with the
+;   node address set to 0.  The opcode is the high 4 bits of the ID, so can be
+;   0 to 15.
+;
+tbl_bus:
+         cancmd  0, ecm_reset ;reset bus state
+         cancmd  8, ecm_nodeadr ;node address assignment
+         cancmd  12, ecm_sync ;send STRIN sync next opportunity
+         cancmd  13, ecm_adrelease ;some node is releasing its address
+         tbl_end
+;
+;   Remote requests for the above.
+;
+tbl_busrtr:
+         tbl_end
+
+;*******************
+;
+;   Node-specific extended (29 bit ID) data frames.  The last 32 opcodes (992 -
+;   1023) are reserved for EmCan.  These tables are only used for the reserved
+;   EmCan opcodes.
+;
+tbl_ext_e:
+         cancmd  992, ecm_portwr ;write to a port
+         cancmd  993, ecm_portrd ;read from a port
+         cancmd  1009, ecm_approle ;set application type and enable/disable app
+         cancmd  1011, ecm_config ;manage config state
+         cancmd  1013, ecm_portype ;info about one port
+         cancmd  1014, ecm_portscale ;scale factor for port value
+         cancmd  1015, ecm_portofs ;offset for port value
+         cancmd  1017, ecm_portfunc ;sends function ID of a port
+         cancmd  1018, ecm_setrole ;set the role within the application
+         cancmd  1019, ecm_portinit ;port initial value
+         cancmd  1020, ecm_portcfg ;port configuration info
+         cancmd  1021, ecm_portrole ;app-dependent role ID of a port
+         cancmd  1022, ecm_strout ;byte stream from host
+         cancmd  1023, ecm_strin ;byte stream to host
+         tbl_end
+;
+;   Remote request frames for the above.
+;
+tbl_extrtr_e:
+         cancmd  1008, ecm_fwinfo_r ;requests firmware info
+         cancmd  1009, ecm_approle_r ;requests app ID and role information
+         cancmd  1011, ecm_config_r ;requests CONFIG
+         cancmd  1012, ecm_nports_r ;requests number of ports
+         tbl_end

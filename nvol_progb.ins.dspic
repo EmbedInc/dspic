@@ -1,0 +1,1033 @@
+;   ***************************************************************
+;   * Copyright (C) 2013, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Fixed "library" part of the NVOLB module, which presents a byte interface to
+;   a non-volatile memory.  See the comments in QQQ_NVOLB.DSPIC for a definition
+;   of the exported interface.
+;
+;   This version is for processors that don't have EEPROM.  A section of program
+;   memory is used to emulate EEPROM.  The program memory is usually rated for
+;   much fewer lifetime writes than EEPROM, so the application must be careful
+;   not to change values frequently.  Redundant writes to the same value are
+;   detected automatically in this module and do not cause physical writes to
+;   the program memory.
+;
+;   All three bytes of each program memory word are used.  Since program memory
+;   can only be erased in blocks of 512 instructions, whole blocks of 512
+;   instructions are allocated to this module, even if not fully used.
+;   Non-volatile memory is therefore made available in multiples of 512 x 3 =
+;   1536 bytes.
+;
+;   Additional preprocessor constants used to configure this implementation:
+;
+;     NVMCON_ER
+;
+;       Value to write to the NVMCON register to erase one erase block.  The
+;       WR bit must not be set.
+;
+;     NVMCON_WR
+;
+;       Value to write to the NVMCON register to write one write block.  The
+;       WR bit must not be set.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /if [not [exist "mnvbytes"]] then
+    /show "  MNVBYTES not defined.  This constant is required."
+         .error  "MNVBYTES"
+         .end
+    /endif
+
+  /if [> mnvbytes 65536] then
+    /show "  Non-volatile memory of " mnvbytes " is too large, only 65536 supported."
+         .error  "MNVBYTES"
+         .end
+    /endif
+
+  /if [exist "nvbytes"] then
+    /show "  NVBYTES defined.  This constant is derived, not explicitly set."
+         .error  "NVBYTES"
+         .end
+    /endif
+
+  /if [not [exist "progsz"]] then
+    /show "  PROGSZ not defined.  This constant is required."
+         .error  "PROGSZ"
+         .end
+    /endif
+
+  /if [not [exist "erasesz"]] then
+    /const erasesz integer = 512 ;default erase block size, prog mem words
+    /endif
+
+  /if [not [exist "writesz"]] then
+    /const writesz integer = 64 ;default write block size, prog mem words
+    /endif
+
+  /if [not [exist "nvmcon_er"]] then
+    /set ii 2#0100000001000010
+         ;    0--------------- don't start write/erase operation now
+         ;    -1-------------- enable write/erase operation
+         ;    --0------------- clear any previous error condition
+         ;    ---XXXXXX------- unused
+         ;    ---------1------ operation is erase, not write
+         ;    ----------XX---- unused
+         ;    ------------0010 erase one erase block
+    /const nvmcon_er integer = ii
+    /endif
+  /if [not [exist "nvmcon_wr"]] then
+    /set ii 2#0100000000000001
+         ;    0--------------- don't start write/erase operation now
+         ;    -1-------------- enable write/erase operation
+         ;    --0------------- clear any previous error condition
+         ;    ---XXXXXX------- unused
+         ;    ---------0------ operation is write, not erase
+         ;    ----------XX---- unused
+         ;    ------------0001 write one write block
+    /const nvcon_wr integer = ii
+    /endif
+  /if [= name ""]
+    /then
+      /const uname string = ""
+    /else
+      /const uname string = [str "_" name]
+    /endif
+
+  /if [and [not [exist "startadr"]] [not [exist "endfree"]]] then ;default placement ?
+    /const endfree integer = 1
+    /endif
+
+  /const eradr integer = [* erasesz 2] ;erase block size, prog mem adresses
+  /const eraseszb integer = [* erasesz 3] ;bytes in one erase block
+  /const nerblk integer = [div [+ mnvbytes eraseszb -1] eraseszb] ;erase blocks used
+
+  /if [not [exist "startadr"]] then
+    /const startadr integer = [- progsz [* [+ nerblk endfree] eradr]]
+    /endif
+
+  /if [not [exist "endfree"]] then
+    /set ii [div [- progsz startadr] eradr] ;blocks start is from end
+    /const endfree integer = [- ii 1] ;unused blocks at end
+    /endif
+
+  /set ii [div startadr eradr]
+  /if [<> [* eradr ii] startadr] then
+    /show "  STARTADR of " [int startadr "base 16 usin"] "h not erase-block aligned."
+    /show "  Must be multiple of " [int eradr "base 16 usin"] "h."
+         .error  STARTADR
+         .end
+    /stop
+    /endif
+
+  /set ii [- progsz startadr eradr] ;free addresses after nvol mem
+  /if [<> [* endfree eradr] ii] then
+    /show "  STARTADR and ENDFREE are inconsistant."
+    /set s [str "PROGSZ " [int progsz "base 16 usin"] "h"]
+    /set s [str s ", STARTADR " [int startadr "base 16 usin"] "h"]
+    /set s [str s ", ENDFREE " endfree]
+    /show "  " s
+         .error  "STARTADR - ENDFREE"
+         .end
+    /stop
+    /endif
+;
+;   Derived constants.
+;
+  /const nprogw integer = [* nerblk erasesz] ;N prog mem words for nvol data
+  /const nvbytes integer = [* nprogw 3] ;total nvol bytes in erase blocks used
+  /const wrbytes integer = [* writesz 3] ;bytes per write block
+  /set ii [div [+ mnvbytes wrbytes -1] wrbytes] ;min number of write blocks to cache
+  /set ii [* ii wrbytes]     ;RAM bytes for min number of write blocks to cache
+  /const bufszb integer = [min eraseszb ii] ;RAM buffer size, bytes
+  /const bufpgw integer = [div bufszb 3] ;prog mem words in RAM buffer
+  /const bufwrb integer = [div bufszb wrbytes] ;write blocks in RAM buffer
+  /const wrerase integer = [div erasesz writesz] ;write blocks per erase block
+  /const blklog2 integer = [rnd [log2 erasesz]] ;Log2 erase block size
+  /const blkmask integer = [and 16#FFFF [shiftl 16#FFFF blklog2]] ;mask for block number of adr
+  /const ofsmask integer = [and 16#FFFF [~ blkmask]] ;mask of offset within block
+  /if [= nerblk 1]
+    /then                    ;only one erase block used
+      /const nvuser integer = bufszb ;user-visible nv size is RAM buffer size
+    /else
+      /const nvuser integer = nvbytes ;user-visible nv size is all erase blocks
+    /endif
+  /const nvlast integer = [- nvuser 1] ;last valid user-visible nvol address
+
+  /if [<> [exp 2 blklog2] erasesz] then
+    /show "  Erase block size (" erasesz ") is not a power of 2."
+         .error  "ERASESZ"
+         .end
+    /stop
+    /endif
+  /if [<> [* wrerase writesz] erasesz] then
+    /show "  Erase block size (" erasesz ") not a multiple of write block size (" writesz ")"
+         .error  "ERASESZ WRITESZ"
+         .end
+    /stop
+    /endif
+
+  /if false then             ;show configuration constants for debugging
+    /call showval eraseszb "bytes in one erase block"
+    /call showval eradr "erase block size, prog mem adresses"
+    /call showval nerblk "erase blocks used"
+    /call showval nprogw "N prog mem words for nvol data"
+    /call showval nvbytes "total number of non-volatile bytes"
+    /call showhex startadr "prog mem nvol start adr"
+    /call showval wrbytes "bytes per write block"
+    /call showval bufszb "RAM buffer size, bytes"
+    /call showval bufpgw "prog mem words in RAM buffer"
+    /call showval bufwrb "write blocks in RAM buffer"
+    /call showval wrerase "write blocks per erase block"
+    /call showval blklog2 "Log2 erase block size"
+    /call showhex blkmask "mask for block number of adr"
+    /call showhex ofsmask "mask of offset within block"
+    /call showval nvuser "user-visible non-volatile memory size, bytes"
+    /call showhex nvlast "last valid user-visible non-volatile address"
+    /endif
+  /endblock
+
+;*******************************************************************************
+;
+;   Local state.
+;
+.section .ram_nvol, bss
+
+alloc    capofs              ;prog mem adr offset for start of cached data
+alloc    cabofs              ;nvol byte adr offset for start of cached data
+alloc    cache,  [v bufszb], 1 ;cache for up to one erase block of data
+
+.ifdef Nvmsrcadrl
+         alloc   writebuf, [* writesz 3] ;24 bits per prog mem word per write block
+  .endif
+;
+;   Local state in near RAM.
+;
+.section .near_nvol, bss, near
+
+alloc    flags               ;individual flag bits
+;
+;   Constants for the bit numbers of individual flags in the FLAGS word.
+;
+.equiv   flg_cache, 0        ;block of data is cached in RAM
+.equiv   flg_dirty, 1        ;RAM cached data was changed from that in nvol storage
+
+
+.section .code_nvol, code
+;*******************************************************************************
+;
+;   Subroutine NVOL_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  nvol[chars uname]_init, regf1
+
+         clr     flags       ;init all local flags to off
+
+         mov     #0, w1
+         mcall   read_cache  ;init the cache to hold the first block
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine READ_CACHE
+;
+;   Read the block of program memory containing the non-volatile byte with
+;   offset in W1 into the cache.  This is a low level routine that reads the
+;   block and sets CAPOFS, CABOFS, and the flags accordingly.  The caller must
+;   ensure that the requested byte is within the emulated non-volatile memory
+;   and that the cache may be ovewritten.
+;
+         locsub  read_cache, regf0 | regf1 | regf2 | regf3
+
+         mov     w1, w0      ;move address in position to be divided
+         mov     #[v eraseszb], w2 ;get bytes per cache block
+         repeat  #17
+         div.u   w0, w2      ;make 0-N cache block number in W0
+
+         mul.uu  w0, w2, w2  ;make nvol byte offset for start of this cache block
+         mov     w2, cabofs  ;save it to indicate where cached data starts
+
+         mov     #[v eradr], w2 ;get prog mem address size of cache block
+         mul.uu  w0, w2, w2  ;make program memory offset for start of this block
+         mov     w2, capofs  ;save it to indicate where cached data starts
+
+         mov     #[and startadr 16#FFFF], w0 ;make prog mem block start adr in W3:W2
+         add     w2, w0, w2
+         mov     #[shiftr startadr 16], w0
+         addc    w3, w0, w3
+         mov     w3, Tblpag  ;set high bits of program memory address to read from
+;
+;   Read this block of data into the cache.  The high bits of the program memory
+;   addresses to read from have been set in TBLPAG.  The low bits of the address
+;   of the first program memory word to read are in W2.
+;
+;   Register usage this section:
+;
+;     W0  -  Data word or byte.
+;
+;     W1  -  Number of program memory words left to read.
+;
+;     W2  -  Low word of program memory address to read from.
+;
+;     W3  -  RAM address to write the next byte to.
+;
+         mov     #[v bufpgw], w1 ;init number of whole prog mem words left to read
+         mov     #cache, w3  ;init where to write the next byte to
+
+rdc_pgword:                  ;back here each new program memory word
+         tblrdl  [w2], w0    ;get low 16 bits of the program memory word
+         mov.b   w0, [w3++]  ;write prog mem byte 0 into cache buffer
+         swap    w0
+         mov.b   w0, [w3++]  ;write prog mem byte 1 into cache buffer
+         tblrdh  [w2++], w0
+         mov.b   w0, [w3++]  ;write prog mem byte 2 into cache buffer
+         sub     #1, w1      ;count one less prog mem word left to do
+         bra     nz, rdc_pgword ;back to do next word
+
+         bset    flags, #flg_cache ;the cache contains valid data
+         bclr    flags, #flg_dirty ;the data has not been altered
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_FLUSH
+;
+;   Write any cached and changed non-volatile data to the physical non-volatile
+;   memory.  Writes performed with NVOL_WRITE may be cached transparently to
+;   the caller.  The new data will be returned by NVOL_READ whether it is cached
+;   or not.  However, the new data will not survive a power down unless it is
+;   physically written to the non-volatile memory.  The only way to guarantee
+;   that is to call this routine.
+;
+;   No physical write is performed if there is no cached changed data.
+;
+         glbsub  nvol[chars uname]_flush, regf0 | regf1 | regf2 | regf3 | regf4
+
+         btss    flags, #flg_dirty ;there is changed data in the cache ?
+         jump    fl_leave    ;no, nothing to do
+;
+;   Erase the program memory block covered by the cache.
+;
+         mov     #[and startadr 16#FFFF], w0 ;nvol prog mem start adr into W1:W0
+         mov     #[shiftr startadr 16], w1
+         mov     capofs, w2  ;get prog memory address offset of block start
+         add     w0, w2, w0  ;make block start prog mem address in W1:W0
+         addc    #0, w1
+         mov     w1, Tblpag  ;set upper address bits of block
+         ;
+         ;   Register contents:
+         ;
+         ;     W1:W0  -  Program memory address of the start of the erase block
+         ;
+         ;     W2  -  unused
+         ;
+         ;     W3  -  unused
+         ;
+         ;     W4  -  unused
+         ;
+         ;     TBLPAG  -  high part of the erase block address.
+         ;
+         mov     #0xFFFF, w2
+         tblwtl  w2, [w0]    ;write the erase value to one word
+         tblwth  w2, [w0]
+
+.ifdef Nvmadr                ;set nvol mem adr registers, if they exist
+         mov     w0, Nvmadr
+         mov     w1, Nvmadru
+  .endif
+
+         mov     #[v nvmcon_er], w1 ;config for erasing one erase block
+         mov     w1, Nvmcon  ;select flash memory operation to perform
+
+         disi    #7          ;don't allow interrupts during unlock
+         mov     #0x55, w1   ;perform the special erase/write unlock
+         mov     w1, Nvmkey
+         mov     #0xAA, w1
+         mov     w1, Nvmkey
+         bset    Nvmcon, #Wr ;start the erase operation
+         nop                 ;required NOPs after erase or write
+         nop
+
+fl_waiter:                   ;work around flash erase stall bug
+         btsc    Nvmcon, #Wr
+         jump    fl_waiter
+;
+;   The block of program memory has been erased.
+;
+;   TBLPAG is set for this block of program memory.
+;
+;   W0 contains the low 16 bits of the program memory address of the start of
+;   the block.
+;
+;   NVMADRU:NVMADR, if they exist, are set to the starting program memory
+;   address of the erased block.
+;
+;   Write the data from the cache to the erased block.  This is done one write
+;   block at a time.  There are usually smaller than the erase blocks.  There
+;   are WRERASE write blocks per erase block.  Each write block is WRITESZ
+;   program memory words in size.
+;
+;   There are multiple sections of code to perform the write, with exactly one
+;   one being enabled at a time depending on the hardware details of the
+;   particular processor.
+;
+
+;*****************************
+;
+;   This section is for parts that take the write data from RAM.  There are no
+;   write latches to load.  The data is copied into WRITEBUF for this purpose,
+;   then that used as the source for the write.  The registers
+;   NVMSRCADRH:NVMSRCACRL indicate the starting address in RAM of the write
+;   data.
+;
+;   The write buffer format packs the data for two program memory words into 6
+;   bytes:
+;
+;     Byte 0: word0<7:0>
+;     Byte 1: word0<15:8>
+;
+;     Byte 2: word0<23:16>
+;     Byte 3: word1<23:16>
+;
+;     Byte 4: word1<7:0>
+;     Byte 5: word1<15:8>
+;
+;   This format is enabled by setting the RPDF bit in NVMCON.  When this bit is
+;   0, a uncompressed format is used that requires 32 bits of RAM per program
+;   memory word.
+;
+;   NVMADRU:NVMADR is used to indicate the program memory address of each write
+;   block.
+;
+;   Register usage in this section:
+;
+;     W0  -  Data word or byte.
+;
+;     W1  -  Number of write blocks left to do.
+;
+;     W2  -  Data memory address where to write next byte in write buffer.
+;
+;     W3  -  Data memory address to get the next byte from.
+;
+;     W4  -  Number of program memory words left in current write block.
+;
+.ifdef Nvmsrcadrl
+         mov     #writebuf, w0 ;set write block data RAM source address
+         mov     w0, Nvmsrcadrl
+         mov     #0, w0
+         mov     w0, Nvmsrcadrh
+
+         mov     #[v bufwrb], w1 ;init number of write blocks left to do
+         mov     #cache, w3  ;init address to fetch the next byte from
+
+fl_wblock:                   ;back here each new write block
+         mov     #writebuf, w2 ;init where to copy data for next word
+         mov     #[v writesz], w4 ;init prog words left to write in this write block
+
+fl_wword:                    ;back here to write each 2 prog mem words in write block
+         mov.b   [w3++], [w2++] ;copy data for first program memory word
+         mov.b   [w3++], [w2++]
+         mov.b   [w3++], [w2++]
+         mov     w2, w0      ;save address where to put high byte of second word
+         add     #1, w2      ;skip over this byte for now
+         mov.b   [w3++], [w2++] ;copy low 16 bits of second word
+         mov.b   [w3++], [w2++]
+         mov.b   [w3++], [w0] ;copy high byte of second word
+
+         sub     #2, w4      ;count two less words left to write in this block
+         bra     nz, fl_wword ;back for next word in this write block
+         ;
+         ;   The write buffer has been loaded with the data for this write
+         ;   block.  Now perform the actual write.
+         ;
+         mov     #[v nvmcon_wr] | (1 << RPDF), w2 ;configure for writing one write block
+         mov     w2, Nvmcon  ;select flash memory operation to perform
+
+         disi    #7          ;don't allow interrupts during unlock
+         mov     #0x55, w2   ;perform the special erase/write unlock
+         mov     w2, Nvmkey
+         mov     #0xAA, w2
+         mov     w2, Nvmkey
+         bset    Nvmcon, #Wr ;start the write operation
+         nop                 ;required NOPs after erase or write
+         nop
+
+fl_waitwr:                   ;work around flash write stall bug
+         btsc    Nvmcon, #Wr
+         jump    fl_waitwr
+
+         mov     #[* writesz 2], w4 ;get address increment for this write block
+         mov     Nvmadr, w2  ;update start of next write block address
+         add     w2, w4, w2
+         mov     w2, Nvmadr
+
+         sub     #1, w1      ;count one less write block left to do
+         bra     nz, fl_wblock ;back to do next write block
+  .endif
+
+;*****************************
+;
+;   This section loads the data into the special program memory write latches
+;   for that purpose, then causes a write from them.  Both variants are handled
+;   where the write latches are at the fixed address of FA0000h, and where they
+;   appear at the address of the program memory target words.
+;
+;   Register usage in this section:
+;
+;     W0  -  Low 16 bits of the program memory address to write to.
+;
+;     W1  -  Number of write blocks left to do.
+;
+;     W2  -  Data word or byte.
+;
+;     W3  -  Data memory address to get the next byte from.
+;
+;     W4  -  Number of program memory words left in current write block.
+;
+;     NVMADRU:NVMADR  -  If these exist, they must be set to the starting
+;       address of each write block when the write block is written.  In that
+;       case, the data values are written to the fixed write latches at
+;       FA0000h instead of the actual data address.
+;
+.ifndef  Nvmsrcadrl
+         mov     #[v bufwrb], w1 ;init number of write blocks left to do
+         mov     #cache, w3  ;init address to fetch the next byte from
+.ifdef Nvmadr
+         mov     #0xFA, w2   ;set high word of address of fixed write latches
+         mov     w2, Tblpag
+  .endif
+
+fl_wblock:                   ;back here each new write block
+         mov     #[v writesz], w4 ;init prog words left to write in this write block
+.ifdef Nvmadr
+         mov     #0, w0      ;set low word of address of fixed write latches
+  .endif
+
+fl_wword:                    ;back here to write each word in write block
+         mov.b   [w3++], w2  ;fetch the low prog mem word from the cache into W2
+         swap    w2
+         mov.b   [w3++], w2
+         swap    w2
+         tblwtl  w2, [w0]    ;set low 16 bits of write latches for this word
+         mov.b   [w3++], w2
+         tblwth  w2, [w0++]  ;set high 8 bits of write latches for this word
+
+         sub     #1, w4      ;count one less word left to write in this block
+         bra     nz, fl_wword ;back for next word in this write block
+         ;
+         ;   The write latches for this write block have been set.  Now perform
+         ;   the actual write.
+         ;
+         mov     #[v nvmcon_wr], w2 ;configure for writing one write block
+         mov     w2, Nvmcon  ;select flash memory operation to perform
+
+         disi    #7          ;don't allow interrupts during unlock
+         mov     #0x55, w2   ;perform the special erase/write unlock
+         mov     w2, Nvmkey
+         mov     #0xAA, w2
+         mov     w2, Nvmkey
+         bset    Nvmcon, #Wr ;start the write operation
+         nop                 ;required NOPs after erase or write
+         nop
+
+fl_waitwr:                   ;work around flash write stall bug
+         btsc    Nvmcon, #Wr
+         jump    fl_waitwr
+
+.ifdef Nvmadr
+         mov     #[* writesz 2], w4 ;get address increment for this write block
+         mov     Nvmadr, w2  ;update start of next write block address
+         add     w2, w4, w2
+         mov     w2, Nvmadr
+  .endif
+
+         sub     #1, w1      ;count one less write block left to do
+         bra     nz, fl_wblock ;back to do next write block
+.endif
+
+;*****************************
+;
+;   Done writing all the write blocks in this erase block.
+;
+         bclr    flags, #flg_dirty ;no unwritten changed data now in the cache
+
+fl_leave:                    ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_READ
+;
+;   Read the non-volatile byte at the address in W2:W1 into W0.  Results are
+;   undefined when W1 contains a address past the end of the non-volatile words.
+;   W1 is incremented by one.  Successive calls to this routine therefore return
+;   successive non-volatile bytes.
+;
+         glbsub  nvol[chars uname]_read, regf2
+;
+;   Check for the addressed word is in the RAM cache.
+;
+         btss    flags, #flg_cache ;there is data in the cache ?
+         jump    rd_ncache   ;no
+         mov     cabofs, w0  ;get nvol start address of cached data
+         cp      w1, w0
+         bra     ltu, rd_ncache ;addressed byte is before cache ?
+         mov     #[- bufszb 1], w2 ;make nvol adr of last byte in the cache in W2
+         add     w0, w2, w2
+         cp      w1, w2
+         bra     gtu, rd_ncache ;addressed byte is after cache ?
+;
+;   The addressed byte is in the cache.  W0 contains the address of the first
+;   byte in the cache.
+;
+         sub     w1, w0, w0  ;make byte offset into the cache
+         mov     #cache, w2  ;get start address of the cache in memory
+         add     w2, w0, w2  ;make address of the selected byte in memory
+         ze      [w2], w0    ;fetch the byte from the cache, expand it into W0
+         jump    rd_leave
+;
+;   The addressed non-volatile byte is not in the cache.  Read it directly from
+;   program memory.
+;
+rd_ncache:
+         mov     #0, w0      ;value to return for invalid address
+         mov     #[v nvlast], w2 ;get last valid address
+         cp      w1, w2
+         bra     gtu, rd_leave ;address is past end of non-volatile data ?
+         ;
+         ;   The address of the byte to fetch is valid.
+         ;
+         push    w1          ;save additional registers trashed this section
+         push    w3
+
+         mov     w1, w0      ;divide address by 3 to get prog mem word offset
+         mov     #3, w2      ;get value to divide by
+         repeat  #17
+         div.u   w0, w2      ;make instruction word offset into NVOL region
+         ;
+         ;   Register contents:
+         ;
+         ;     W0  -  Program memory word offset for the word containing the
+         ;            byte to read.
+         ;
+         ;     W1  -  Byte offset into the program memory word, 0-2.
+         ;
+         ;     W2  -  unused
+         ;
+         ;     W3  -  unused
+         ;
+         mov     #[and startadr 16#FFFF], w2 ;load NVOL start address into W3:W2
+         mov     #[shiftr startadr 16], w3
+         add     w2, w0, w2  ;make address of word containing target byte in W3:W2
+         addc    #0, w3
+         add     w2, w0, w2
+         addc    #0, w3
+         mov     w3, Tblpag  ;set high bits of program memory word to address
+
+         btss    w1, #1
+         tblrdl  [w2], w0    ;read low part of program memory word
+         btsc    w1, #1
+         tblrdh  [w2], w0    ;read high part of program memory word
+         btsc    w1, #0      ;low byte of 16 bit word ?
+         swap    w0          ;target is high byte, move it into low byte
+         ze      w0, w0      ;return the byte value in full W0
+
+         pop     w3          ;restore registers trashed in this section
+         pop     w1
+
+rd_leave:                    ;common exit point
+         add     #1, w1      ;increment the nvol byte address for next time
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_READW
+;
+;   Read the two bytes starting at the non-volatile address in W2:W1 and return
+;   the result as a 16 bit word in W0.  The bytes are stored in least to most
+;   significant order.  W2:W1 is updated to the address immediately after the
+;   two bytes.
+;
+         glbsub  nvol[chars uname]_readw, regf3
+
+         mcall   nvol_read   ;get the low byte
+         mov     w0, w3      ;temp save it
+         mcall   nvol_read   ;get the high byte
+         sl      w0, #8, w0  ;move it into place
+         ior     w0, w3, w0  ;merge the two bytes together
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_SREAD
+;
+;   Read the non-volatile byte at W1 into W0.  W1 will be incremented by 1.
+;
+         glbsub  nvol[chars uname]_sread, regf2
+
+         mov     #0, w2
+         mcall   nvol[chars uname]_read ;do the read
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_SREADW
+;
+;   Read the non-volatile word at W1 into W0.  W1 will be incremented by 2.
+;
+         glbsub  nvol[chars uname]_sreadw, regf2 | regf3
+
+         mov     #0, w2
+         mcall   nvol[chars uname]_read ;read the low byte into W3
+         mov     w0, w3
+
+         mov     #0, w2
+         mcall   nvol[chars uname]_read ;read the high byte into W0
+
+         sl      w0, #8, w0  ;move the high byte into position
+         ior     w0, w3, w0  ;assemble the word in W0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_WRITE
+;
+;   Write the byte in the low 8 bits of W0 to the non-volatile address in W1.
+;   W1 will be incremented by one.  Successive calls to this routine therefore
+;   write to successive non-volatile bytes.  The write is not performed if W1
+;   indicates a address past the end of the non-volatile memory.
+;
+;   Data written with this routine may be cached.  Cached data is not guaranteed
+;   to be written to the physical non-volatile memory until NVOL_FLUSH is
+;   called.
+;
+         glbsub  nvol[chars uname]_write, regf2 | regf3
+
+         mov     #[v nvlast], w2 ;get last valid address
+         cp      w1, w2
+         bra     gtu, wr_leave ;invalid address, nothing more to do ?
+
+         btss    flags, #flg_cache ;a block of data is in the cache ?
+         jump    wr_rdcache  ;no, go read this block into the cache
+
+         mov     cabofs, w3  ;get address of first cached byte
+         cp      w1, w3
+         bra     ltu, wr_flush ;cached block does not contain this address ?
+         mov     #[- bufszb 1], w2
+         add     w3, w2, w3  ;make address of last cached byte
+         cp      w1, w3
+         bra     leu, wr_cached ;the target byte is already in the cache ?
+;
+;   The cache contains data, but not for the block that contains the target
+;   byte.  The cache must therefore possibly be flushed first.
+;
+wr_flush:                    ;flush cache if needed before reading target block
+         btss    flags, #flg_dirty ;cache data changed after reading ?
+         jump    wr_rdcache  ;no, skip writing cached data back to nvol mem
+
+         mcall   nvol_flush  ;write the modified data back to the non-volatile memory
+;
+;   The cache does not contain the block the target word is in.  Read that block
+;   into the cache.
+;
+wr_rdcache:
+         mcall   read_cache  ;read block containing nvol address in W1 into cache
+;
+;   The cache holds the block containing the target word.
+;
+wr_cached:
+         ;
+         ;   Read the target byte before writing to it.  This allows us to skip
+         ;   the write and avoid setting the dirty flag unless data is actually
+         ;   being changed.
+         ;
+         mov     cabofs, w2  ;get nvol address of first cache byte
+         sub     w1, w2, w2  ;make byte offset into the cache
+         mov     #cache, w3  ;make address of the target cache byte in W2
+         add     w2, w3, w2
+         mov.b   [w2], w3    ;read the existing byte value into W3
+         cp.b    w0, w3      ;compare new value to existing
+         bra     z, wr_leave ;already set as desired, write not needed ?
+         ;
+         ;   The new value is different than the existing byte value.  Do the
+         ;   write.
+         ;
+         mov.b   w0, [w2]    ;write the new value into the cache
+         bset    flags, #flg_dirty ;indicate cache data has been changed
+
+wr_leave:                    ;common exit point
+         add     #1, w1      ;increment the nvol byte address for next time
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_WRITEW
+;
+;   Write the 16 bit word in W0 to non-volatile memory starting at the address
+;   in W2:W1.  The bytes will be stored in least to most significant order.
+;   W2:W1 will be updated to the address immediately after the word.
+;
+         glbsub  nvol[chars uname]_writew
+
+         mcall   nvol_write  ;write the low byte
+         swap    w0
+         mcall   nvol_write  ;write the high byte
+         swap    w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_SWRITE
+;
+;   Write the byte in W0 to the non-volatile memory at W1.  W1 will be
+;   incremented by 1.
+;
+         glbsub  nvol[chars uname]_swrite, regf2
+
+         mov     #0, w2
+         mcall   nvol[chars uname]_write ;do the write
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_SWRITEW
+;
+;   Write the word in W0 to the non-volatile memory at W1.  W1 will be
+;   incremented by 2.
+;
+         glbsub  nvol[chars uname]_swritew, regf2
+
+         mov     #0, w2
+         mcall   nvol[chars uname]_write ;write the low byte
+
+         mov     #0, w2
+         swap    w0
+         mcall   nvol[chars uname]_write ;write the high byte
+         swap    w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Define preprocessor state that will be used by the macros below.
+;
+/var new nextofs integer = 0 ;init nvol address of next nvol byte to define
+/var new nvol_pword integer = 16#FFFFFF ;accumulated program memory word value
+
+;*******************************************************************************
+;
+;   Macro BYTE val
+;
+;   Defines the initial value of the next non-volatile byte to be VAL.  VAL is
+;   optional and defaults to FFh, which is the erased value.
+;
+;   If a label preceeds the macro name, then a assembler constant of that name
+;   will be created, set equal to the non-volatile byte address of this byte,
+;   and declared global so that it can be accessed from other modules.
+;
+/macro byte
+  /var local val integer     ;byte value
+  /var local byten integer   ;0-2 byte number within program memory word
+
+  /if [>= nextofs nvbytes] then
+    /show "  Too many initial values for the non-volatile data."
+         .error  "NVOL overflow"
+         .end
+    /stop
+    /endif
+
+  /if [exist -1 arg] then    ;label provided ?
+.equiv   [arg -1], [v nextofs]
+         .global [arg -1]
+    /endif
+
+  /set val 16#FF             ;init byte value to the default
+  /if [exist 1 arg] then
+    /set val [and [arg 1] 16#FF] ;get the value from the macro parameter
+    /endif
+
+  /set byten [div nextofs 3] ;make 0-2 number of this byte within prog mem word
+  /set byten [- nextofs [* byten 3]]
+
+  /if [= byten 0] then       ;first byte in this program memory word ?
+    /set nvol_pword [or 16#FFFF00 val]
+    /endif
+
+  /if [= byten 1] then       ;second byte in this program memory word ?
+    /set nvol_pword [and nvol_pword 16#FF00FF]
+    /set nvol_pword [or nvol_pword [shiftl val 8]]
+    /endif
+
+  /if [= byten 2] then       ;third (last) byte in this program memory word ?
+    /set nvol_pword [and nvol_pword 16#00FFFF]
+    /set nvol_pword [or nvol_pword [shiftl val 16]]
+         .pword  0x[chars [int nvol_pword "fw 6 lz base 16 usin"]]
+    /set nvol_pword 16#FFFFFF ;reset pending byte values to default
+    /endif
+
+  /set nextofs [+ nextofs 1] ;update nvol address of next word
+  /endmac
+
+;*******************************************************************************
+;
+;   Macro WORD val
+;
+;   Like BYTE, except that it defines a 16 bit word value instead of a byte
+;   value.  Two consecutive bytes are initialized, in low to high byte order
+;   within the word.
+;
+/macro word
+  /var local val integer     ;word value
+
+  /set val 16#FFFF           ;init value to the default
+  /if [exist 1 arg] then
+    /set val [arg 1]         ;get the value from the macro parameter
+    /endif
+
+[arg -1] byte    [v val]
+         byte    [shiftr val 8]
+  /endmac
+
+;*******************************************************************************
+;
+;   Macro FP23F val
+;
+;   Like BYTE, except for a 32 bit floating point value.
+;
+;   Defines the initial value of the next four non-volatile bytes to be the
+;   value VAL in Embed Inc dsPIC 32 bit fast floating point format.  The VAL
+;   argument is optional with the default being 0.0.  The bytes are defined in
+;   least to most significant order within the 32 bit value.
+;
+/macro fp32f
+  /var local val real = 0.0  ;VAL argument value
+  /var local fpi integer     ;integer value of 32 bit floating point word
+  /if [exist 1 arg] then
+    /set val [arg 1]
+    /endif
+  /set fpi [fp32f_int val]   ;make integer value of the floating point word
+
+[arg -1] byte    [shiftr fpi 24]
+         byte    [shiftr fpi 16]
+         byte    [shiftr fpi 8]
+         byte    [v fpi]
+  /endmac
+
+;*******************************************************************************
+;
+;   Macro NSTRING maxsize, "..."
+;
+;   Like BYTE, except for a character string with length byte.
+;
+;   Defines the initial value of a sequence of bytes that form a character
+;   string.  The format of the string is a length byte followed by that many
+;   characters.  MAXSIZE is the amount of storage to reserve for the string.
+;   The second argument must be a preprocessor string expression, and will be
+;   the initial value of the string.  The string is truncated to MAXSIZE
+;   characters if it is larger.  The default is the empty string if no initial
+;   value string is supplied.
+;
+/macro nstring
+  /var local maxsize integer ;MAXSIZE parameter
+  /var local s string = ""   ;string initial value
+  /var local ii integer      ;loop counter
+  /var local jj integer      ;byte value
+
+  /if [not [exist 1 arg]] then
+    /show "  Mandatory argument 1 to NSTRING macro is missing"
+         .error  "NSTRING arg 1"
+         .end
+    /stop
+    /endif
+  /set maxsize [arg 1]       ;set storage size to allocate for the string
+  /if [or [< maxsize 0] [> maxsize 255]] then
+    /show "  First argument to NSTRING out of range, must be 0-255"
+         .error  "NSTRING arg 1"
+         .end
+    /stop
+    /endif
+
+  /if [exist 2 arg] then
+    /set s [arg 2]
+    /endif
+
+[arg -1] byte    [min maxsize [slen s]] ;set length byte
+
+  /set ii 1                  ;init next character to write
+  /block                     ;back here each new string byte
+    /if [> ii maxsize] then  ;done with all string bytes ?
+      /quit
+      /endif
+    /if [<= ii [slen s]]
+      /then                  ;still within initial value string
+        /set jj [ccode [sindx ii s]]
+      /else                  ;past end of initial value string
+        /set jj 16#FF
+      /endif
+         byte    jj
+    /set ii [+ ii 1]         ;advance to next character index
+    /repeat
+    /endblock
+  /endmac
+
+;*******************************************************************************
+;
+;   Macro MNSTRING maxsize, "..."
+;
+;   Like NSTRING except that the max string length is stored in front of the
+;   NSTRING.
+;
+/macro mnstring
+  /var local maxsize integer ;MAXSIZE parameter
+  /var local s string = ""   ;string initial value
+
+  /if [not [exist 1 arg]] then
+    /show "  Mandatory argument 1 to MNSTRING macro is missing"
+         .error  "MNSTRING arg 1"
+         .end
+    /stop
+    /endif
+  /set maxsize [arg 1]       ;set storage size to allocate for the string
+  /if [or [< maxsize 0] [> maxsize 255]] then
+    /show "  First argument to MNSTRING out of range, must be 0-255"
+         .error  "MNSTRING arg 1"
+         .end
+    /stop
+    /endif
+
+  /if [exist 2 arg] then
+    /set s [arg 2]
+    /endif
+
+[arg -1] byte    [v maxsize] ;write the maximum string length byte
+         nstring [v maxsize], [v s] ;write the rest of the string structure
+  /endmac
+
+;*******************************************************************************
+;
+;   Set up for defining initial values immediately after this include file.
+;
+.section .code_nvol_data, code, address([chars "0x" [int startadr "base 16 usin"]])
+nvol:                        ;prog mem address of first non-volatile word

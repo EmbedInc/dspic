@@ -1,0 +1,75 @@
+;   ***************************************************************
+;   * Copyright (C) 2018, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32_fixs_ins"]] then
+  /const fp32_fixs_ins bool = true
+
+  /include "(cog)src/dspic/fp32_fixu.ins.dspic"
+
+.section .code_fp32_fixs, code
+;*******************************************************************************
+;
+;   C function FP32_FIXS (FP, FB)
+;
+;   Convert a floating point value to 32 bit signed fixed point.  FP is the
+;   floating point value with FLOAT data type.  FB is the number of fraction
+;   bits the resulting fixed point number should have.  FB is a signed 16 bit
+;   integer.  Negative values of FB indicate that the binary point is that many
+;   bits to the right of the returned value.
+;
+;   The result is rounded to the nearest representable value.
+;
+;   Assembler interface:
+;
+;     The floating point value is passed in W1:W0, and the number of fraction
+;     bits in W2.  The fixed point result is returned in W1:W0.  All other
+;     registers are preserved, even though XC16 would allow trashing W2-W7.
+;
+         glbsubd fp32_fixs, regf3
+
+         btst.c  w1, #15     ;get sign bit into C
+         rlc     w3, w3      ;save it in LSB of W3
+         bclr    w1, #15     ;make the input value positive
+         gcall   fp32_fixu   ;convert to unsigned fixed point in W1:W0
+
+         btsc    w3, #0      ;original value was positive ?
+         jump    fixs_neg    ;was negative
+;
+;   The original value was zero or positive.
+;
+         btss    w1, #15     ;overflow ?
+         jump    fixs_leave  ;no, all done
+
+         mov     #0x7FFF, w1 ;return largest possible value
+         mov     #0xFFFF, w0
+         jump    fixs_leave
+;
+;   The original value was negative.
+;
+fixs_neg:
+         subr    w0, #0, w0  ;negate the fixed point value
+         subbr   w1, #0, w1
+         bra     z, fixs_leave ;special case of 0 ?
+         btsc    w1, #15     ;underflow ?
+         jump    fixs_leave  ;no, all done
+
+         mov     #0x8000, w1 ;return smallest possible value
+         mov     #0x0000, w0
+
+fixs_leave:                  ;signed fixed point is in W1:W0
+         leaverest
+
+  /endif

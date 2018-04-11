@@ -1,0 +1,210 @@
+;   ***************************************************************
+;   * Copyright (C) 2013, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_div_ins"]] then
+  /const fp32f_div_ins bool = true
+
+.section .code_fp32f_div, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_DIV
+;
+;   W1:W0 <-- W1:W0 / W3:W2
+;
+         glbsub  fp32f_div, regf2 | regf3 | regf4 | regf5 | regf6 | regf7
+;
+;   Return zero if the numerator is zero.
+;
+         ior     w0, w1, [w15]
+         bra     z, div_0    ;numerator zero, go return zero ?
+;
+;   Compute the final sign in the high bit of W1.
+;
+         mov     #0x8000, w4 ;get mask for the sign bit
+         and     w3, w4, w4  ;get just sign of the denominator
+         xor     w4, w0, w0  ;make the final sign in high bit of W0
+;
+;   Check for dividing by 0.  If so, return the maximum magnitude.
+;
+         ior     w2, w3, [w15]
+         bra     z, div_maxsgn ;dividing by zero, return maximum magnitude
+;
+;   Make the initial combined exponent as a 16 bit signed value in W3.
+;
+         mov     #16384, w5  ;get exponent offset
+
+         mov     w1, w4      ;make signed 16 bit numerator exponent in W4
+         bclr    w4, #15
+         sub     w4, w5, w4
+
+         bclr    w3, #15     ;make signed 16 bit denominator exponent in W5
+         sub     w3, w5, w3
+
+         sub     w4, w3, w3  ;make first pass combined 16 bit signed exponent
+;
+;   Do the divide.
+;
+;   The numerator will be kept in W5:W4.  This will be initialized to the full
+;   mantissa value with the implied 1 bit in W5.  To generate each quotient bit,
+;   this value will be compared to the mantissa in W2.  If the numerator is
+;   larger, then the quotient bit is set and the denominator subtracted from it.
+;   If not, then the quotient bit is cleared and no subtraction performed.  In
+;   either case, the numerator is then shifted one bit left.  The quotient is
+;   accumulated in W7:W6, with the number of bits left to do in W0.
+;
+;   Since the denominator remains fixed, it will be left in W2 and there is no
+;   need to use a register to express the implied 1 high word.  The high word of
+;   the numerator can be compared against the fixed 1 without it having to be
+;   stored.
+;
+;   Summary of register usage:
+;
+;     W0  -  Number of quotient bits left to generate.
+;
+;     W1  -  High bit contains resulting sign.  Not used in this section.
+;
+;     W2  -  Low word of denominator.  Upper word is implied 1.
+;
+;     W3  -  First pass combined exponent, 16 bit signed.  Not used in this
+;            section.
+;
+;     W5:W4  -  Numerator.
+;
+;     W7:W6  -  Quotient.  Bits are shifted in from the low end.
+;
+         mov     w0, w4      ;init low word of numerator
+         mov     #1, w5      ;init high word of numerator
+         mov     #0, w6      ;init quotient (high word will be shifted out later)
+         mov     #19, w0     ;init number of quotient bits left to make
+
+div_qbit:                    ;back here to make each new quotient bit
+         bclr    Sr, #C      ;init value of this quotient bit
+         rlc     w6, w6      ;move the new quotient bit into place
+         rlc     w7, w7
+         ;
+         ;   Compare the numerator to the denominator.  If the numerator is
+         ;   less, then there is nothing more to do this quotient bit, so
+         ;   jump to DIV_NEXTQB.
+         ;
+         cp      w5, #1      ;compare high words
+         bra     ltu, div_nextqb ;definitely less than denominator ?
+         bra     gtu, div_qb1 ;definitiely greater than denominator ?
+
+         cp      w4, w2      ;high words equal, compare the low words
+         bra     ltu, div_nextqb ;less than denominator
+         ;
+         ;   This quotient bit is 1.
+         ;
+div_qb1:
+         sub     w4, w2, w4  ;subtract denominator from the numerator
+         subb    #1, w5
+
+         bset    w6, #0      ;set this quotient bit to 1
+         ;
+         ;   Done with this quotient bit, update state and go back for next.
+         ;
+div_nextqb:
+         bclr    Sr, #C      ;shift the numerator left one bit
+         rlc     w4, w4
+         rlc     w5, w5
+
+         sub     #1, w0      ;count one less bit left to do
+         bra     nz, div_qbit ;back to generate the next quotient bit
+;
+;   The quotient is in W7:W6.  The highest bit set in the high word is either
+;   bit 1 or 2.  Enough quotient bits were generated so that at least the second
+;   bit of the high word is set.  This allows for rounding, then shifting the
+;   quotient into place so that the high bit is in the low bit of the high word.
+;
+         ;
+         ;   Make sure the highest quotient bit is in bit 1 of the high word.
+         ;   Either this is already the case or the next higher bit is set.
+         ;   The result exponent must be adjusted as the quotient is shifted.
+         ;
+         btss    w7, #2      ;quotient has 3 bits in high word ?
+         jump    div_nshbr   ;no, skip this section
+
+         bclr    Sr, #C      ;set 0 bit to shift in
+         rrc     w7, w7
+         rrc     w6, w6
+         add     #1, w3      ;update result exponent accordingly
+
+div_nshbr:
+         ;
+         ;   Apply rounding.  This may cause the upper word to exceed 3, in
+         ;   which case is needs to be shifted right.
+         ;
+         add     #1, w6      ;add one to combined word to round
+         addc    #0, w7
+         bclr    Sr, #C      ;shift right to loose the round-in bit
+         rrc     w7, w7
+         rrc     w6, w6
+
+         btss    w7, #1      ;rounding added another high bit ?
+         jump    div_nshar   ;no, skip this section
+
+         bclr    Sr, #C      ;set 0 bit to shift in
+         rrc     w7, w7
+         rrc     w6, w6
+         add     #1, w3      ;update result exponent accordingly
+
+div_nshar:
+         mov     w6, w0      ;set mantissa word to return
+;
+;   Compute the final exponent.
+;
+;   The first pass exponent in 16 bit signed form is in W3.  This is simply
+;   the numerator exponent minus the denominator exponent.  It was adjusted
+;   accordingly so that the quotient fit into 17 bits.  With all the normalizing
+;   and shifting that took place, this needs to be adjusted down by one.
+;
+;   If the exponent overflows, then the maximum magnitude is returned.  If it
+;   underflows, then 0 is returned.
+;
+         sub     #1, w3      ;make final power of 2 exponent
+
+         mov     #-16383, w4 ;get min allowed exponent
+         cp      w3, w4
+         bra     lt, div_0   ;underflow, return zero
+
+         mov     #16384, w4  ;get one past max allowed exponent
+         cp      w3, w4
+         bra     ge, div_maxsgn ;overflow, return largest magnitude
+
+         add     w3, w4, w3  ;make 15 bit exponent in final format
+
+         mov     #0x8000, w4 ;mask off exponent field in returned number
+         and     w1, w4, w1
+         ior     w1, w3, w1  ;merge in the final exponent field value
+
+div_leave:                   ;common exit point
+         leaverest
+;
+;   Return zero.
+;
+div_0:
+         mov     #0, w1
+         mov     #0, w0
+         jump    div_leave
+;
+;   Return the maximum magnitude with the sign indicated in the high bit of W0.
+;
+div_maxsgn:                  ;return signed value with maximum magnitude
+         mov     #0x7FFF, w4 ;set maximum magnitude in high word
+         ior     w1, w4, w1
+         mov     #0xFFFF, w0 ;set maximum magnitude in low word
+         jump    div_leave
+  /endif

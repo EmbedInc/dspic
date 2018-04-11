@@ -1,0 +1,563 @@
+;   ***************************************************************
+;   * Copyright (C) 2016, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Source code "library" file for providing a procedural interface to a IIC
+;   bus using the built-in hardware peripheral.  This file is for including in a
+;   main module.  The QQQ_IIC.DSPIC file is a template for such a main module.
+;   This code can be customized at build time by the values of various
+;   preprocessor constants.  See the comments in QQQ_IIC.DSPIC for the
+;   customization options and a quick description of the procedural interface
+;   that is exported.
+;
+;*******************************************************************************
+;
+;   Make sure all configuration constants exist.  Those that do not exist will
+;   be created and set to their default value.
+;
+/if [not [exist "name"]] then
+  /const name string = ""
+  /endif
+/if [not [exist "un"]] then
+  /const un integer = 1
+  /endif
+/if [not [exist "maxfreq"]] then
+  /const maxfreq real = 400e3
+  /endif
+/if [not [exist "brginst"]] then
+  /const brginst real = 1
+  /endif
+/if [not [exist "brgdelay"]] then
+  /const brgdelay real = 70e-9
+  /endif
+/if [not [exist "ifreg"]] then
+  /const ifreg string = "Ifs1"
+  /endif
+
+.ifndef  Bcl
+         .equiv  Bcl, 10
+.endif
+;
+;   Derived constants.
+;
+/block                       ;compute the IIC baud rate setup
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /const brgclk real = [* freq_inst brginst] ;baudrate generator input, Hz
+  /const minlev real = [/ .5 maxfreq] ;min required high/low level length, s
+  /const brgper real = [- minlev brgdelay] ;desired baud generator period, s
+
+  /set ii [trunc [* brgclk brgper]] ;number of BRG clocks
+  /set ii [if [> ii 0] ii 1] ;clip at minimum value of 1
+  /set r [/ ii brgclk]       ;make level time with this value
+  /set ii [if [< r brgper] [+ ii 1] ii] ;level too short, bump divider ?
+  /const iiclev real = [+ [/ ii brgclk] brgdelay] ;make actual level time, s
+  /const iicfreq real = [/ .5 iiclev] ;actual IIC clock frequency
+  /const iicbrg integer = [- ii 2] ;IIC baud rate generator value
+  /if [> iicbrg 65535] then  ;baud rate divider value too high ?
+    /show "  IIC baud rate generator value too low, MAXFREQ too low to achieve"
+         .error  "MAXFREQ"
+    /stop
+    /endif
+
+  /if [= un 0]               ;make REG, start of hw register names
+    /then
+      /const reg string = "I2c" ;using only IIC module, not numbered
+    /else
+      /const reg string = [str "I2c" un] ;start of hardware register names
+    /endif
+
+  /if [= name ""]
+    /then                    ;no unique name for the subroutines
+      /const uname string = ""
+    /else                    ;subroutine names will be customized
+      /const uname string = [str "_" name]
+    /endif
+
+  /set s ""
+  /set s [str s "IIC freq " [eng iicfreq] "Hz"]
+  /set s [str s ", " [eng iiclev] "s per level"]
+  /set s [str s ", I2CBRG " iicbrg]
+  /show "  " s
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_iic, bss
+
+
+;*******************
+;
+;   Local state.
+;
+
+.section .near_iic, bss, near
+
+alloc    flags               ;local flag bits
+
+.equiv   flg_lock, 0         ;a task has this IIC bus locked
+
+.section .code_iic[chars uname], code
+;*******************************************************************************
+;
+;   Subroutine IIC_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  iic[chars uname]_init, regf0
+
+         clr     flags       ;init all local flag bits to off
+;
+;   The hardare module is always turned off, then on.  This resets it, and
+;   is required to recover from some conditions, like bus collision.
+;
+         bset    sda[chars uname]_tris, #sda[chars uname]_bit ;release both lines
+         bset    scl[chars uname]_tris, #scl[chars uname]_bit
+
+         bclr    sda[chars uname]_lat, #sda[chars uname]_bit ;data values low in case needed
+         bclr    scl[chars uname]_lat, #scl[chars uname]_bit
+
+         clr     [chars reg "con"] ;make sure the hardware module is off
+
+         clr     [chars reg "stat"] ;reset any persistant conditions
+
+         mov     #0b0000001000000000, w0 ;configure the IIC module
+                 ;  0--------------- keep module off while configuring
+                 ;  -X-------------- unused
+                 ;  --0------------- continue operation in idle mode
+                 ;  ---0------------ slave mode, not end clock stretch now
+                 ;  ----0----------- slave mode, don't respond to all adr
+                 ;  -----0---------- using 7 bit addresses, not 10 bit
+                 ;  ------1--------- disable slew rate control
+                 ;  -------0-------- use IIC thresholds, not SMBus
+                 ;  --------0------- slave mode, disable general call adr
+                 ;  ---------0------ slave mode, disable clock stretching
+                 ;  ----------0----- ACK bit value to send, set when needed
+                 ;  -----------0---- do not start ACK sequence now
+                 ;  ------------0--- do not start a byte receive now
+                 ;  -------------0-- do not initiate STOP now
+                 ;  --------------0- do not initiate repeated START now
+                 ;  ---------------0 do not initiate START now
+         mov     w0, [chars reg "con"]
+
+         mov     #[v iicbrg], w0 ;set baud rate generator reload value
+         mov     w0, [chars reg "brg"]
+
+         bset    [chars reg "con"], #I2cen ;turn on the module, release from reset
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine IIC_LOCK
+;
+;   Acquire exclusive lock on this IIC bus.  This routine waits indefinitely for
+;   the IIC bus to be available.  Other tasks are run during the wait.
+;
+         glbsub  iic[chars uname]_lock
+
+lck_loop:                    ;back here to check the lock again
+         btss    flags, #flg_lock ;bus locked ?
+         jump    lck_avail   ;no, go lock it for us
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    lck_loop    ;back to check the lock again
+
+lck_avail:                   ;the lock is available
+         bset    flags, #flg_lock ;indicate the bus is now locked
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine IIC_UNLOCK
+;
+;   Release the lock on this IIC bus.  This must only be called by the task
+;   holding the lock.
+;
+         glbsub  iic[chars uname]_unlock
+
+         bclr    flags, #flg_lock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine IIC_WAIT
+;
+;   Guarantee a wait of at least 1/2 IIC bit time.  This wait is not guaranteed
+;   to be efficient, or to let other tasks run.
+;
+         glbsub  iic[chars uname]_wait
+
+         minwait [v iiclev], 4
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine IIC_RESET
+;
+;   Attempt to reset the IIC hardware and bus state.  Any transaction in
+;   progress will be aborted and must be considered invalid.
+;
+         locsub  iic_reset
+
+         bclr    [chars reg "con"], #I2cen ;reset the hardware module, leave it off for now
+         clr     [chars reg "stat"] ;reset any persistant hardware conditions
+;
+;   Keep doing single clock pulses until the SDA line is high.  Nothing should
+;   be driving either bus line at this point.  If the data line is low,
+;   something is wrong.  This is probably a slave that has gotten out of sync.
+;   We do a single clock pulse to attempt to recover, then check again.
+;
+         mcall   iic_wait    ;wait at least 1/2 bit time
+         gcall   task_yield_save
+
+res_chksda:                  ;back here to check SDA again after a clock pulse
+         btsc    sda[chars uname]_reg, #sda[chars uname]_bit ;data line low ?
+         jump    res_dclock  ;no, done getting SDA high (undriven)
+         ;
+         ;   Do a clock pulse.
+         ;
+         bclr    scl[chars uname]_tris, #scl[chars uname]_bit ;clock low
+         mcall   iic_wait    ;wait at least 1/2 bit time
+         gcall   task_yield_save
+         bset    scl[chars uname]_tris, #scl[chars uname]_bit ;clock high
+         mcall   iic_wait    ;wait at least 1/2 bit time
+         gcall   task_yield_save
+         jump    res_chksda  ;back and check again
+
+res_dclock:                  ;done getting the SDA line high
+;
+;   The SDA line is now high, and has been for at least 1/2 bit time.
+;
+;   Bring the SDA line low then high while leaving the clock line high.  This
+;   signals a bus start followed by a bus stop, which should completely reset
+;   any devices on the bus.
+;
+         bclr    sda[chars uname]_tris, #sda[chars uname]_bit ;SDA low, bus start
+         mcall   iic_wait    ;wait at least 1/2 bit time
+         gcall   task_yield_save
+
+         bset    sda[chars uname]_tris, #sda[chars uname]_bit ;SDA high, bus stop
+         mcall   iic_wait    ;wait at least 1/2 bit time
+         gcall   task_yield_save
+
+         bset    [chars reg "con"], #I2cen ;turn on the module, release from reset
+
+         leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro CLEAR_DONE
+//
+//   Clear the MI2Cn interrupt flag bit.  This bit must be cleared before each
+//   operation for which the code waits for completion by checking the bit.
+//
+/macro clear_done
+         bclr    [chars ifreg], #[chars "Mi2c" un "if"] ;clear operation done condition
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro CHECK_DONE goerr [, godone]
+//
+//   This macro does a busy-wait for the MI2Cn bit to be set.  This indicates
+//   that the current IIC hardware operation has completed.
+//
+//   If a error is detected during the wait, the macro jumps to GOERR.
+//
+//   When the bit is set, this macro jumps to GODONE.  If GODONE is not
+//   provided, then the macro falls thru instead.
+//
+/macro check_done
+  /var local goerr string = [qstr [arg 1]]
+  /var local godone string = [qstr [arg 2]]
+  /var local s string
+
+  /write
+
+  /set s [qstr [lab wait]:]
+  /call startcomm s
+  /set s [str s "wait for operation complete"]
+  /write s
+
+         btsc    [chars ifreg], #[chars "Mi2c" un "if"] ;still busy ?
+
+  /if [= 0 [slen godone]]
+    /then
+         jump    [lab done]  ;no, done waiting
+    /else
+         jump    [chars godone] ;no, done waiting
+    /endif
+
+         btss    [chars reg "stat"], #Bcl ;error ?
+         jump    [lab wait]  ;no, go back and check again
+         jump    [chars goerr] ;error, abort
+
+  /if [= 0 [slen godone]] then
+    /set s [qstr [lab done]:]
+    /call startcomm s
+    /set s [str s "operation completed"]
+    /write s
+    /endif
+
+  /write
+
+  /endmac
+
+;*******************************************************************************
+;
+;   Subroutine IIC_START_PUT
+;
+;   Send a IIC start condition followed by the address byte indicating this will
+;   be a write sequence.  The slave address must be in the low 7 bits of W0.
+;   FLAG_IICACK will be set according to whether the slave acknowledged the
+;   address byte or not.
+;
+         glbsub  iic[chars uname]_start_put
+;
+;   Send the bus start.
+;
+sput_retry:                  ;back here to try again after error and reset
+         clear_done          ;clear operation done condition
+         bset    [chars reg "con"], #Sen ;initiate the bus start sequence
+         check_done sput_err
+         btsc    [chars reg "stat"], #Bcl ;no collision detected ?
+         jump    sput_err
+;
+;   Send the address byte.  This has the address in the high 7 bits and a 0 in
+;   the low bit to specify this is a write sequence.
+;
+         push    w0          ;temp save W0
+         sl      w0, #1, w0  ;move 7 bit address into position, set R/W bit to W
+         clear_done          ;clear operation done condition
+         mov     w0, [chars reg "trn"] ;transmit the address byte
+         pop     w0          ;restore original W0
+
+         clrflag iicack      ;init to ACK not received from slave
+         check_done sput_err ;wait for byte and ACK done
+
+         btss    [chars reg "stat"], #Ackstat ;NACK received ?
+         setflag iicack      ;ACK received, set global flag accordingly
+
+         leaverest
+;
+;   A error was detected while waiting for a operation to complete.  We reset
+;   everything and try again.
+;
+sput_err:
+         mcall   iic_reset   ;reset IIC hardware and the IIC bus
+         jump    sput_retry  ;go back and try everything again
+
+;*******************************************************************************
+;
+;   Subroutine IIC_START_GET
+;
+;   Send a IIC start condition followed by the address byte indicating this will
+;   be a read sequence.  The slave address must be in the low 7 bits of W0.
+;   FLAG_IICACK will be set according to whether the slave acknowledged the
+;   address byte or not.
+;
+         glbsub  iic[chars uname]_start_get
+;
+;   Send the bus start.
+;
+sget_retry:                  ;back here to try again after error and reset
+         clear_done          ;clear operation done condition
+         bset    [chars reg "con"], #Sen ;initiate the bus start sequence
+         check_done sget_err
+         btsc    [chars reg "stat"], #Bcl ;no collision detected ?
+         jump    sput_err
+;
+;   Send the address byte.  This has the address in the high 7 bits and a 1 in
+;   the low bit to specify this is a read sequence.
+;
+         push    w0          ;temp save W0
+         sl      w0, #1, w0  ;move 7 bit address into position
+         bset    w0, #0      ;set R/W bit to indicate read
+         clear_done          ;clear operation done condition
+         mov     w0, [chars reg "trn"] ;transmit the address byte
+         pop     w0          ;restore original W0
+
+         clrflag iicack      ;init to ACK not received from slave
+         check_done sget_err
+
+         btss    [chars reg "stat"], #Ackstat ;NACK received ?
+         setflag iicack      ;ACK received, set global flag accordingly
+
+         leaverest
+;
+;   A error was detected while waiting for a operation to complete.  We reset
+;   everything and try again.
+;
+sget_err:
+         mcall   iic_reset   ;reset IIC hardware and the IIC bus
+         jump    sget_retry  ;go back and try everything again
+
+;*******************************************************************************
+;
+;   Subroutine IIC_PUT
+;
+;   Send the byte in REG0 to the slave.  FLAG_IICACK is set according to whether
+;   the slave ACKed the byte or not.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.  The IICACK flag is always cleared on error.
+;
+         glbsub  iic[chars uname]_put
+
+         clear_done          ;clear operation done condition
+         mov     w0, [chars reg "trn"] ;start sending the byte
+         clrflag iicack      ;init to ACK not received from slave
+         check_done put_err
+
+         btss    [chars reg "stat"], #Ackstat ;NACK received ?
+         setflag iicack      ;ACK received, set global flag accordingly
+         bclr    Sr, #Z      ;indicate success
+
+put_leave:
+         leaverest
+
+put_err:
+         mcall   iic_reset   ;reset IIC hardware and the IIC bus
+         bset    Sr, #Z      ;indicate error
+         jump    put_leave
+
+;*******************************************************************************
+;
+;   Subroutine IIC_GET
+;
+;   Read the next byte from the IIC bus into W0.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.
+;
+         glbsub  iic[chars uname]_get
+
+         clear_done          ;clear operation done condition
+         bset    [chars reg "con"], #Rcen ;start receiving the data byte
+         check_done get_err
+
+         mov     [chars reg "rcv"], w0 ;get the received byte value
+         bclr    Sr, #Z      ;indicate success
+
+get_leave:
+         leaverest
+
+get_err:
+         mcall   iic_reset   ;reset IIC hardware and the IIC bus
+         bset    Sr, #Z      ;indicate error
+         jump    get_leave
+
+;*******************************************************************************
+;
+;   Subroutine IIC_ACK
+;
+;   Sends positive ACK bit.  The ACK bit value will be 0.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.
+;
+         glbsub  iic_ack
+
+         clear_done          ;clear operation done condition
+         bclr    [chars reg "con"], #Ackdt ;set ACK bit polarity to ACK
+         bset    [chars reg "con"], #Acken ;start sending the bit
+         check_done ack_err
+
+         bclr    Sr, #Z      ;indicate success
+
+ack_leave:
+         leaverest
+
+ack_err:
+         mcall   iic_reset   ;reset IIC hardware and the IIC bus
+         bset    Sr, #Z      ;indicate error
+         jump    ack_leave
+
+;*******************************************************************************
+;
+;   Subroutine IIC_NACK
+;
+;   Sends negative ACK bit.  The ACK bit value will be 1.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.
+;
+         glbsub  iic_nack
+
+         clear_done          ;clear operation done condition
+         bset    [chars reg "con"], #Ackdt ;set ACK bit polarity to NACK
+         bset    [chars reg "con"], #Acken ;start sending the bit
+         check_done nack_err
+
+         bclr    Sr, #Z      ;indicate success
+
+nack_leave:
+         leaverest
+
+nack_err:
+         mcall   iic_reset   ;reset IIC hardware and the IIC bus
+         bset    Sr, #Z      ;indicate error
+         jump    nack_leave
+
+;*******************************************************************************
+;
+;   Subroutine IIC_STOP
+;
+;   Write IIC bus stop sequence, then leave both lines floating high.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.
+;
+         glbsub  iic_stop
+
+         clear_done          ;clear operation done condition
+         bset    [chars reg "con"], #Pen ;initiate the stop sequence
+         check_done stp_err
+
+         bclr    Sr, #Z      ;indicate success
+
+stp_leave:
+         leaverest
+
+stp_err:
+         mcall   iic_reset   ;reset IIC hardware and the IIC bus
+         bset    Sr, #Z      ;indicate error
+         jump    stp_leave

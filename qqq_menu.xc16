@@ -1,0 +1,6 @@
+//   This module provides menu facilities layered on the bare display and button
+//   interface.  As much as reasonable, these routines should be used to
+//   implement all menus to provide a consistant look and feel.
+//
+#include "qq2.h"
+#include "menu.ins.xc16"

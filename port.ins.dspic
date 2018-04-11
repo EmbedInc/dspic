@@ -1,0 +1,95 @@
+;   ***************************************************************
+;   * Copyright (C) 2009, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Manage the I/O ports at a low level.
+;
+
+.section .code_port, code
+;*******************************************************************************
+;
+;   Subroutine PORT_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  port_init, regf0
+;
+;   Set all I/O to digital except those explicitly configured as analog.
+;
+.ifdef Adpcfg
+         mov     #((~analogused0) & 0xFFFF), w0 ;select analog AN0-AN15
+         mov     w0, Adpcfg
+  .endif
+.ifdef Adpcfgl
+         mov     #((~analogused0) & 0xFFFF), w0 ;select analog AN0-AN15
+         mov     w0, Adpcfgl
+  .endif
+.ifdef Ad1pcfg
+         mov     #((~analogused0) & 0xFFFF), w0 ;select analog AN0-AN15
+         mov     w0, Ad1pcfg
+  .endif
+.ifdef Ad1pcfgl
+         mov     #((~analogused0) & 0xFFFF), w0 ;select analog AN0-AN15
+         mov     w0, Ad1pcfgl
+  .endif
+
+.ifdef Adpcfgh
+         mov     #((~analogused0) >> 16), w0 ;select analog AN16-AN31
+         mov     w0, Adpcfgh
+  .endif
+.ifdef Ad1pcfgh
+         mov     #((~analogused0) >> 16), w0 ;select analog AN16-AN31
+         mov     w0, Ad1pcfgh
+  .endif
+.ifdef Adpcfg2
+         mov     #((~analogused0) >> 16), w0 ;select analog AN16-AN31
+         mov     w0, Adpcfg2
+  .endif
+//
+//   Set up the per-port registers.
+//
+/loop with ii from 0 to 25   ;once for each possible port A to Z
+  /var local port string     ;A-Z port name
+  /var local lport string    ;a-z port name
+  /set port [char [+ [ccode "A"] ii]]
+  /set lport [lcase port]
+  /write ";"
+  /write ";   Initialize port " port " if it exists."
+  /write ";"
+.ifdef Port[chars lport]
+         mov     #val_port[chars lport], w0
+         mov     w0, Lat[chars lport]
+         mov     #val_tris[chars lport], w0
+         mov     w0, Tris[chars lport]
+  .endif
+.ifdef Ans[chars lport]
+         mov     #val_analog[chars lport], w0
+         mov     w0, Ans[chars lport]
+  .endif
+.ifdef Ansel[chars lport]
+         mov     #val_analog[chars lport], w0
+         mov     w0, Ansel[chars lport]
+  .endif
+.ifdef Cnpu[chars lport]
+  .if val_pullup[chars lport]
+         mov     #val_pullup[chars lport], w0
+         mov     w0, Cnpu[chars lport]
+    .else
+         clr     Cnpu[chars lport]
+    .endif
+  .endif
+  /endloop
+
+         leaverest

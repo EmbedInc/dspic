@@ -1,0 +1,152 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_mul_ins"]] then
+  /const fp32f_mul_ins bool = true
+
+.section .code_fp32f_mul, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_MUL
+;
+;   W1:W0 <-- W1:W0 * W3:W2
+;
+         glbsub  fp32f_mul, regf2 | regf3 | regf4 | regf5 | regf6
+;
+;   Handle special cases of either input number being 0.
+;
+         ior     w1, w0, [w15]
+         bra     z, mul_leave ;multiplying into 0, no change ?
+         ior     w3, w2, [w15]
+         bra     z, mul_0    ;multiplying by 0, return 0
+;
+;   Take magnitude of each input number and save the final resulting sign in the
+;   high bit of W4.
+;
+         xor     w1, w3, w4  ;save final sign bit in W4<15>
+         bclr    w1, #15     ;set both values to their absolute value
+         bclr    w3, #15
+;
+;   Set W5 to the combined exponent field value.  Overflow and underflow are
+;   handled, so this will be in the range of 0 to 32767.
+;
+         mov     #16384, w6  ;excess value added to each exponent
+         add     w1, w3, w5  ;make raw sum of exponent fields
+         sub     w5, w6, w5  ;remove one of the excess values
+         bra     ltu, mul_0  ;exponent too small, return 0 ?
+         btsc    w5, #15     ;exponent didn't overflow ?
+         jump    mul_maxsgn  ;exponent overflowed, return max signed value
+;
+;   Do the multiply.
+;
+;   There are 4 different components that take part in the multiply, the two
+;   16 bit manitssas and the two implied 1 bits.
+;
+;   Mathematically, each part of each number must be multiplied by the two parts
+;   of the other number, then all 4 results summed after being appropriately
+;   scaled.  However, we really only need to perform one real multiply
+;   operation, which is the product of the two mantissa fields.  These are the
+;   fraction fields of the two numbers.  Each mantissa can be thought of as a
+;   fixed point value with the point immediately to the left of the left most
+;   bit (16 fraction bits).  Multiplying the two results in a number with 32
+;   fraction bits.  Multiplying the fraction part by the 1 of the other number
+;   is just adding the fraction part into the result.  Multiplying the two 1s
+;   together just results in 1.
+;
+;   The product components will be assembled in the 3 word value W2:W1:W0, with
+;   W2 being the integer part and W1:W0 the fraction part.
+;
+         mov     w0, w6      ;save the W0 fraction component in W6
+
+         mul.uu  w0, w2, w0  ;multiply the two fractions into W1:W0
+         add     w1, w2, w1  ;add in second value fraction
+         mov     #1, w2      ;init integer part to product of the two 1s
+         addc    w2, #0, w2  ;propagate carry from adding second fraction
+         add     w1, w6, w1  ;add in first value fraction
+         addc    w2, #0, w2
+;
+;   The fixed point product is in W2:W1:W0 with W2 the integer part.  The
+;   integer part is either 1, 2, or 3.  The number therefore either requires a
+;   single right shift by one bit or none at all to mormalize so that its
+;   integer part is 1.  The exponent in W5 must be updated if the number is
+;   shifted.
+;
+         btss    w2, #1      ;needs right shift by one bit ?
+         jump    mul_dshf1   ;no, skip this section
+
+         add     w5, #1, w5  ;update exponent to account for the shift
+         rrc     w2, w2      ;shift right one bit
+         rrc     w1, w1
+         rrc     w0, w0
+mul_dshf1:
+;
+;   The number has been normalized so that the integer part is 1 and the
+;   fraction is in W1:W0.
+;
+;   Now apply rounding.  Only the highest 16 fraction bits can be saved, so 1 is
+;   added to the next lower bit.  Note that this can cause a carry into the
+;   integer part of the number, which then requires another right shift and
+;   corresponding adjustment of the exponent.
+;
+         btss    w0, #15     ;next lower bit is 1 ?
+         jump    mul_dround  ;no, no rounding to perform
+         add     w1, #1, w1  ;round the remaining fraction bits up by 1
+         bra     nc, mul_dround ;no carry into integer part ?
+         ;
+         ;   Rounding has caused a carry from the fraction part to the integer
+         ;   part of the normalized number.  The whole normalized number value
+         ;   is therefore exactly 2 now.  That means the fraction value will be
+         ;   0, which is what W1 is already set to.  We therefore only need to
+         ;   adjust the exponent value to compensate for the right shift by 1,
+         ;   although this shift was never actually performed because W1 is
+         ;   already set to what the resulting value would be.
+         ;
+         add     w5, #1, w5  ;update exponent to account for the shift
+
+mul_dround:                  ;done rounding result
+;
+;   Check for exponent overflow.  The exponent was previously checked for
+;   underflow when the two original exponents were combined.  Since then, a
+;   total of 0, 1, or 2 has been added to the exponent value in W5.  It can
+;   therefore only have overflowed, not underflowed.
+;
+         btsc    w5, #15     ;exponent has not overflowed ?
+         jump    mul_maxsgn  ;did overlow, returned max value with sign
+;
+;   Assemble the final floating point number.  The mantissa field is in W1,
+;   the exponent field in W5, and the sign in the high bit of W4.
+;
+         mov     w1, w0      ;move mantissa field into place
+         mov     w5, w1      ;init high word with exponent fiels and 0 sign
+         btsc    w4, #15     ;sign bit reall is 0 ?
+         bset    w1, #15     ;no, set it to 1
+
+mul_leave:                   ;common exit point
+         leaverest
+
+mul_0:                       ;return zero
+         mov     #0, w1
+         mov     #0, w0
+         jump    mul_leave
+
+mul_maxsgn:                  ;return signed value with maximum magnitude
+         mov     #0x7FFF, w1 ;set to maximum positive magnitude
+         mov     #0xFFFF, w0
+         btsc    w4, #15     ;sign is positive ?
+         bset    w1, #15     ;no, set returned sign to negative
+         jump    mul_leave
+
+  /endif

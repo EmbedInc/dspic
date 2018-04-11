@@ -1,0 +1,2433 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Implements the required basics of a EmCan host controller, as apposed to a
+;   end device.  There must be exactly one host controller on a EmCan bus.
+;   EmCan is Embed Inc's multiple-device protocol layered on CAN.  This module
+;   requires a procedural interface to the CAN bus to be available, such as is
+;   exported by the the standard CAN module.
+;
+;   The following preprocessor state can be set to customize this module:
+;
+;     EMCAN_VBLOCK  -  Preprocessor integer constant that is the 20 bit EmCan
+;       vendor block number of this device.  This is the high 20 bits of the 24
+;       bit vendor block ID.  The default is FFFFFh.
+;
+;     EMCAN_DEVID  -  Preprocessor integer constant that is the 4 bit ID of this
+;       device within its EmCan vendor block.  This is the low 4 bits of the
+;       24 bit vendor block ID.  The default is 15.
+;
+;     EMCAN_APPID  -  Preprocessor integer constant.  This is the 31 bit EmCan
+;       ID of the application for which application-specific actions are
+;       implemented.  For now, this module only implements a single application
+;       and does not support multiple applications or application switching on
+;       the fly.  This constant is therefore required for now.
+;
+;     EMCAN_NNODES  -  Maximum number of end device nodes supported by this bus
+;       master.  The default is 127, which is the maximum possible.  It is best
+;       to leave this value at the default unless it is necessary to conserve
+;       RAM.  If more devices request addresses than can be supported here, then
+;       the additional devices will not be assigned addresses and will
+;       therefore effectively not exist from the application's point of view.
+;
+;     EMCAN_RESET  -  Preprocessor string constant.  Contains the name of the
+;       routine to call immediately after the CAN bus is completely reset.  No
+;       addresses will be assigned and no nodes known when this routine is
+;       called.
+;
+;       No application routine is called if this constant does not exist or is
+;       set to the empty string.
+;
+;     EMCAN_ASSIGN  -  Preprocessor string constant.  Contains the name of the
+;       routine to call when a new node is assigned a CAN bus address.  The
+;       address that was assigned is passed in W0, and W1 will be pointing to
+;       the 7 byte globally unique ID of the node.  All registers W0-W14 may be
+;       trashed.
+;
+;       No application routine is called if this constant does not exist or is
+;       set to the empty string.
+;
+;     EMCAN_UNASSIGN  -  Preprocessor string constant.  Contains the name of
+;       the routine to call when a node address is unassigned.  The address
+;       being unassigned is passed in W0, and W1 will be pointing to the
+;       7 byte globally unique ID of the node that had that address.  All
+;       registers W0-W14 may be trashed.
+;
+;       No application routine is called if this constant does not exist or is
+;       set to the empty string.
+;
+;     EMCAN_APPFRAME  -  Preprocessor string constant.  Contains the name of the
+;       routine to call when a CAN frame is received that needs to be handled by
+;       the application above this module.  The received CAN frame state will be
+;       in the CANIN_xxx variables.  FLAG_CANIN will be set on entry, and the
+;       received CAN state will be held while FLAG_CANIN stays set.  FLAG_CANIN
+;       *MUST* be cleared by this routine when done with the received CAN frame
+;       state.
+;
+;       No application routine is called if this constant does not exist or is
+;       set to the empty string.
+;
+;     EMCAN_MULTIERR  -  Preprocessor string constant.  Contains the name of the
+;       routine to call when a multi-host error is detected.  Flag EMCANMULTI
+;       will be set.  The local bus state will be reset after this routine is
+;       called, which will cause the routine named in EMCAN_RESET to be called
+;       after the reset if a routine name is provided.  All W0-W14 registers may
+;       be trashed.
+;
+;     EMCAN_STRIN_SYNC  -  Preprocessor string constant.  Contains the name of
+;       the routine to call when the received byte stream from a node is
+;       synchronized such that it is known the next byte will be a response
+;       opcode.  This routine is called when the stream is first opened, any
+;       time it is re-opened by the node, or when a sync frame (STRIN with 0
+;       data bytes) is received.  The address of the node is passed in W1.  All
+;       the registers W0-W14 may be trashed.
+;
+;     EMCAN_STRIN_START  -  Preprocessor string constant.  Contains the name of
+;       the routine to call to notify the application of received stream bytes
+;       from a node.  The node address is passed in W1 and the number of data
+;       bytes in W2.  W2 will always be at least 1.  All the registers W0-W14
+;       may be trashed.  One call to the routine named in EMCAN_STRIN_BYTE will
+;       follow for each data byte, then one call to the routine named in
+;       EMCAN_STRIN_END.
+;
+;     EMCAN_STRIN_BYTE  -  Preprocessor string constant.  Contains the name of
+;       the routine to call once for each stream byte received from a bus node.
+;       For each chunk of bytes, the routine named in EMCAN_STRIN_START is
+;       called once, then this routine is called once for each byte.  The byte
+;       is passed in W0.  W1 will contain the node address.  All the registers
+;       W0-W14 may be trashed.
+;
+;     EMCAN_STRIN_END  -  Preprocessor string constant.  Contains the name of
+;       the routine to call after all the calls to to the routine named in
+;       EMCAN_STRIN_BYTE have been made.  W1 will contain the node address.  All
+;       the registers W0-W14 may be trashed.
+;
+;     DEBUG_EMCAN_SENDU  -  Preprocessor bool constant.  Send all unrecognized
+;       CAN frames to the application, not just the ones indicated to passed on
+;       in the end of table word for the particular type of CAN frame.  The
+;       default when this contant does not exist is to do what is indicated in
+;       the table end word.
+;
+;   Global variables defined in this module that require application actions:
+;
+;     EMCAN_VBLOCKID -  This is a 32 bit variable that holds the combined EmCan
+;       vendor block number and the device ID in its low 24 bits.  The upper 8
+;       bits must be 0.
+;
+;       This value is initialized by EMCANh_INIT to either defaults or the
+;       values provided by EMCAN_VBLOCK and EMCAN_DEVID (described above).  If
+;       this static assignment is not sufficient, the application can set this
+;       variable after EMCANH_INIT is called and before EMCANH_START.
+;
+
+;*******************************************************************************
+;
+;   Check the values set before this file was included and set defaults as
+;   needed.
+;
+/if [not [exist "emcan_nnodes"]] then
+  /const emcan_nnodes integer = 127
+  /endif
+/if [< emcan_nnodes 1] then
+  /show "  " emcan_nnodes " defined, must be at least 1"
+         .error  "EMCAN_NNODES"
+         .end
+  /stop
+  /endif
+
+/if [not [exist "emcan_reset"]] then
+  /const emcan_reset = ""
+  /endif
+/if [not [exist "emcan_assign"]] then
+  /const emcan_assign = ""
+  /endif
+/if [not [exist "emcan_unassign"]] then
+  /const emcan_unassign = ""
+  /endif
+/if [not [exist "emcan_appframe"]] then
+  /const emcan_appframe = ""
+  /endif
+/if [not [exist "emcan_multierr"]] then
+  /const emcan_multierr = ""
+  /endif
+/if [not [exist "emcan_strin_sync"]] then
+  /const emcan_strin_sync = ""
+  /endif
+/if [not [exist "emcan_strin_start"]] then
+  /const emcan_strin_start = ""
+  /endif
+/if [not [exist "emcan_strin_byte"]] then
+  /const emcan_strin_byte = ""
+  /endif
+/if [not [exist "emcan_strin_end"]] then
+  /const emcan_strin_end = ""
+  /endif
+/if [not [exist "debug_emcan_sendu"]] then
+  /const debug_emcan_sendu bool = false
+  /endif
+
+/if [not [exist "emcan_appid"]] then
+  /show "  Required preprocessor constant EMCAN_APPID not defined."
+         .error  "EMCAN_APPID"
+         .end
+  /stop
+  /endif
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   tadr    real = 3.0  ;minutes valid lifetime for a node address
+/const   tapp    real = 2.0  ;min seconds between resend app enable frames
+/const   tstopen real = 3.0  ;min seconds to wait between stream re-open tries
+/const   tstdat  real = 2.0  ;first seconds to wait for ACK from stream data send
+/const   tstmax  real = 10.0 ;max seconds need to wait for stream data send ACK
+/const   ticksec real = 0.100 ;clock tick period, seconds
+/const   sendsz  integer = 16 ;stream sending FIFOs size, bytes
+/const   recvsz  integer = 16 ;stream receiving FIFOs size, bytes
+
+.equiv   stacksz, 128        ;EmCan task stack size, bytes
+;
+;   Derived constants.
+;
+/const   emcan_vblock_id integer = [or [shiftl emcan_vblock 4] emcan_devid] ;VBLOCKID
+.equiv   ntklife, [rnd [/ [* tadr 60] ticksec]] ;clock ticks assigned address lifetime
+.equiv   ntkapp, [rnd [/ tapp ticksec]] ;min ticks between send app enable frames
+.equiv   ntkopen, [rnd [/ tstopen ticksec]] ;min ticks between out stream open tries
+.equiv   ntkstdat, [rnd [/ tstdat ticksec]] ;ticks before first stream out data resend
+.equiv   ntkstmax, [rnd [/ tstmax ticksec]] ;max ticks required between stream out data resends
+/const   sendby  integer = [+ sendsz 1] ;allocated byte size of stream sending buffer
+.equiv   sendby, [v sendby]
+/const   recvby  integer = [+ recvsz 1] ;allocated byte size of stream receiving buffer
+.equiv   recvby, [v recvby]
+
+/var new maclabel integer = 0 ;unique number for making labels in macros
+
+;*******************************************************************************
+;
+;   Global state.
+;
+.section .ram_emcan, bss
+
+allocg   emcan_vblockid, 4   ;vendor block ID and device within block ID
+
+;*******************************************************************************
+;
+;   Local state.
+;
+alloc    stack_emcanh, stacksz ;EmCan task stack
+
+alloc    lasttick            ;last 100 ms clock tick updated to
+alloc    nextadr             ;next 1-127 address to assign
+alloc    nodeadr             ;address of node currently interacting with
+alloc    enum                ;next descriptor to enumerate, high bit set = none
+alloc    nextnode            ;0-N number of next node desc to check on
+;
+;   Local state in near memory.
+;
+.section .near_emcanh, bss, near
+
+alloc    emcflags            ;local flag bits, use FLG_xxx bit numbers
+;
+;   Per-node state.  This is a array of descriptors with one entry for each
+;   possible end node this bus master can support.  EMCAN_NNODES is the number
+;   of array entries, which is also the maximum number of end nodes supported.
+;
+.section .ram_emcan_nodes, bss
+
+/call struct_start           ;start definition of per-node structure
+         field   bn_flags    ;flag bits, use BNFLG_xxx bit numbers, must be at offset 0
+         field   bn_wait, 1  ;100 ms ticks before next action, depends on state
+         field   bn_id, 7, 1 ;globally unique data for this node
+         field   bn_adrt     ;remaining life of assigned address, 100 ms ticks
+         field   bn_adr, 1   ;assigned node address, 0 = none
+         field   bn_sendw, 1 ;resend wait ticks after next send
+         field   bn_sendseq, 1 ;stream sending sequence number
+         field   bn_sentn, 1 ;number of bytes sent last STROUT
+         field   bn_sendp, 1 ;stream sending buffer put index
+         field   bn_sendg, 1 ;stream sending buffer get index
+         field   bn_send, [v sendby], 1 ;stream sending circular buffer
+         field   bn_recvseq, 1 ;stream receiving sequence number
+         field   bn_recvp, 1 ;stream receiving buffer put index
+         field   bn_recvg, 1 ;stream receiving buffer get index
+         field   bn_recv, [v recvby], 1 ;stream receiving circular buffer
+
+/const   bnsize  integer = struct_size ;array size of one node descriptor
+/const   nodes_size integer = [* bnsize emcan_nnodes] ;total size of nodes array
+/show "  " emcan_nnodes " nodes supported, " bnsize " bytes/node, " nodes_size " bytes total"
+.equiv   nnodes, [v emcan_nnodes]
+.equiv   bnsize, [v bnsize]
+         ;
+         ;   Bit numbers for the flags in the BN_FLAGS field.
+         ;
+.equiv   bnflg_adr, 0        ;adr assigned, ADR is valid
+.equiv   bnflg_appack, 1     ;app enable ACK received, otherwise WAIT until send
+.equiv   bnflg_appon, 2      ;our app enabled in node, off until APPACK set
+.equiv   bnflg_sendkn, 3     ;sending stream open/close known (ACK or NACK received)
+.equiv   bnflg_send, 4       ;stream to device is open
+.equiv   bnflg_sent, 5       ;sent stream data, waiting ACK, WAIT is retry timer
+.equiv   bnflg_sendlock, 6   ;sending string is locked by a task
+.equiv   bnflg_sendfl, 7     ;flush stored STROUT data to the node
+.equiv   bnflg_recv, 8       ;receiving stream (STRIN commands) open
+.equiv   bnflg_recvack, 9    ;send receive stream ACK when room in buffer for full frame
+.equiv   bnflg_recvsyn, 10   ;receive stream has been reset or synchronized
+;
+;   Symbols for the local flags.  These symbols are bit numbers within EMCFLAGS.
+;
+.equiv   flg_rel, 0          ;received CAN frame has been released
+;
+;   Allocate the actual nodes array.
+;
+alloc    nodes,  0, 2        ;label for start of whole array
+
+alloc    bn0_flags
+alloc    bn0_wait, 1
+alloc    bn0_id, 7, 1
+alloc    bn0_adrt
+alloc    bn0_adr, 1
+alloc    bn0_sendw, 1
+alloc    bn0_sendseq, 1
+alloc    bn0_sentn, 1
+alloc    bn0_sendp, 1
+alloc    bn0_sendg, 1
+alloc    bn0_send, [v sendby], 1
+alloc    bn0_recvseq, 1
+alloc    bn0_recvp, 1
+alloc    bn0_recvg, 1
+alloc    bn0_recv, [v recvby], 1
+
+alloc    bn1_flags           ;first word of second descriptor
+
+alloc    node1,  [- nodes_size [+ bnsize 2]] ;allocate rest of nodes array
+
+
+.section .code_emcanh, code
+;*******************************************************************************
+;
+;   Subroutine EMCANH_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  emcanh_init, regf0 | regf14
+;
+;   Init global state managed by this module.
+;
+         mov     #[and emcan_vblock_id 16#FFFF], w0
+         mov     w0, emcan_vblockid+0
+         mov     #[shiftr emcan_vblock_id 16], w0
+         mov     w0, emcan_vblockid+2
+;
+;   Init local state.
+;
+         mov     #1, w0
+         mov     w0, nextadr ;init next node address to assign
+         mov     #0, w0
+         mov     w0, nodeadr
+         mov     #0xFFFF, w0
+         mov     w0, enum
+         mov     #0, w0
+         mov     w0, nextnode
+         clr     emcflags    ;init all local flags to 0
+;
+;   Init the nodes array to all entries empty.
+;
+         mov     #nodes, w14 ;init pointer to next word to initialize
+         mov     #[div nodes_size 2], w0 ;init number of words left to initialize
+ini_nodes:                   ;back here to init each new array word
+         clr     [w14++]     ;init this array word
+         sub     #1, w0      ;count one less word left to do
+         bra     nz, ini_nodes ;back to init next word
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCANH_START
+;
+;   Start EmCan host processing.
+;
+         glbsub  emcanh_start, regf13 | regf14
+
+         mov     #stacksz, w13 ;pass new task stack size
+         mov     #stack_emcanh, w14 ;pass stack start address
+         call    task_new    ;create CAN input processing task
+         goto    emcanh_task ;go to execution start of the new task
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine POINT_NODE
+;
+;   Point W14 to the start of the node descriptor indicated by W0.  The first
+;   node descriptor is 0 and the last NNODES-1.
+;
+         locsub  point_node, regf0 | regf1
+
+         mov     #bnsize, w1 ;get size of each node
+         mul.uu  w0, w1, w0  ;make address offset into nodes array
+         mov     #nodes, w14 ;init pointer to start of array
+         add     w14, w0, w14 ;add offset to make pointer to this node descriptor
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EMCANH_RELEASE
+;
+;   Release the last received CAN frame if it was not already previously
+;   released.
+;
+         glbsub  emcanh_release
+
+         btss    emcflags, #flg_rel ;previously released ?
+         clrflag canin       ;no, release it now
+         bset    emcflags, #flg_rel ;remember this frame has been released
+
+         leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro NODE_UNASSIGN
+//
+//   Unassign the address of the node with the descriptor where W14 is pointing.
+//   The application is notified if the node has a address to unassign and such
+//   application notification is enabled by EMCAN_UNASSIGN not being the empty
+//   string.  Whether the application is notified or not, the node descriptor is
+//   unconditionally reset to empty.
+//
+//   WARNING: W0-W13 are trashed.
+//
+/macro node_unassign
+
+  /if [<> emcan_unassign ""] then ;need to call app routine to inform of unassign ?
+    /set maclabel [+ maclabel 1] ;make unique number of labels this macro invocation
+         btss    [w14], #bnflg_adr ;descriptor contains a assigned address ?
+         jump    unassign[v maclabel] ;no, skip this section
+
+         mov.b   [w14+bn_adr], w0 ;pass the address in W0
+         ze      w0, w0
+         add     w14, #bn_id, w1 ;pass pointer to node unique ID in W1
+         push    w14         ;save pointer to this descriptor
+         gcall   [chars emcan_unassign] ;notify application of the unassign
+         pop     w14         ;restore pointer to the current descriptor
+unassign[v maclabel]:
+    /endif
+
+         clr     [w14]       ;reset this descriptor to empty
+  /endmac
+
+;*******************************************************************************
+;
+;   Local subroutine CHECK_ADR
+;
+;   Check the node address in W0 for being a valid and available (unassigned)
+;   value.  If so, the Z flag is cleared.  If the node address is invalid or
+;   already assigned, the Z flag is set.
+;
+         locsub  check_adr, regf1 | regf13 | regf14
+
+         cp0     w0
+         bra     z, chk_navail ;zero invalid address ?
+         mov     #127, w13   ;get last valid address
+         cp      w0, w13
+         bra     gtu, chk_navail ;too large invalid address ?
+
+         mov     #nnodes, w13 ;init number of node descriptors left to check
+         mov     #nodes, w14 ;init pointer to first node descriptor
+chk_desc:                    ;back here to check each new descriptor
+         btss    [w14], #bnflg_adr ;descriptor contains a assigned address ?
+         jump    chk_next    ;no, advance to the next descriptor
+         mov.b   [w14+bn_adr], w1 ;get the address from the descriptor
+         cp.b    w0, w1      ;compare candidate to this assigned address
+         bra     z, chk_navail ;address already assigned ?
+chk_next:                    ;advance to next node descriptor
+         add     #bnsize, w14 ;point to next node descritor
+         sub     #1, w13     ;count one less descriptor to do
+         bra     nz, chk_desc ;back to check this new descriptor
+
+         bclr    Sr, #Z      ;indicate the address in W0 is available
+         jump    chk_leave
+
+chk_navail:                  ;the address is not available to assign
+         bset    Sr, #Z
+
+chk_leave:                   ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine MAKE_ADR
+;
+;   Get a node address to assign in W0.  On entry, W0 can contain a candidate
+;   address.  If this address is valid and not in use, then it is returned.
+;   Otherwise, the next available address starting with NEXTADR is returned, and
+;   NEXTADR updated accordingly.  The mechanism of using NEXTADR tries to
+;   minimize re-use of previously assigned addresses.
+;
+         locsub  make_adr
+
+         mcall   check_adr   ;check for address in W0 available
+         bra     nz, madr_leave ;the original address is available, return with it
+;
+;   The original address passed in W0 is not available.  Search for the next
+;   available address starting with the contents of NEXTADR.  We keep testing
+;   addresses until one is found available.  This routine would not be called if
+;   all addresses were in use, so at least one must be available and we
+;   therefore have no terminating condition other than finding a available
+;   address.
+;
+         mov     nextadr, w0 ;get next address to try
+madr_adr:                    ;back here to try each new address
+         mcall   check_adr   ;set Z iff the address in W0 is available
+         bra     nz, madr_found ;found available address ?
+         add     #1, w0      ;make next sequential address
+         btsc    w0, #7      ;just incremented past end of address range ?
+         mov     #1, w0      ;yes, wrap back to first valid address
+         jump    madr_adr    ;back and check this new address
+
+madr_found:                  ;the address in W0 is available
+         push    w0          ;temp save address on stack
+         add     #1, w0      ;make next sequential address
+         btsc    w0, #7      ;deal with wrapping back to first address
+         mov     #1, w0
+         mov     w0, nextadr ;set first address to try next time
+         pop     w0          ;restore the available address into W0
+
+madr_leave:                  ;common exit point, free address is in W0
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine FIND_NODE
+;
+;   Find the node descriptor for the node address in W0.  W14 is returned
+;   pointing to the node descriptor with that assigned address if found, and 0
+;   if the address was not found to be assigned in any node descriptor.
+;
+         locsub  find_node, regf1 | regf13
+
+         mov     #nnodes, w13 ;init number of node descriptors left to check
+         mov     #nodes, w14 ;init pointer to first node descriptor
+fnd_desc:                    ;back here to check each new node descriptor
+         btss    [w14], #bnflg_adr ;this descriptor contains assigned address ?
+         jump    fnd_next    ;no, skip it
+         mov.b   [w14+bn_adr], w1 ;get the address from this descriptor
+         cp.b    w0, w1      ;compare address looking for to descriptor address
+         bra     z, fnd_leave ;found it ?
+fnd_next:                    ;advance to next descriptor
+         add     #bnsize, w14 ;point to next node descritor
+         sub     #1, w13     ;count one less descriptor to do
+         bra     nz, fnd_desc ;back to check this new descriptor
+
+         mov     #0, w14     ;address not found, return with no pointer
+
+fnd_leave:                   ;common exit point, W14 all set
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine BUF_OFS_INC
+;
+;   Increment the buffer offset in W1 to the next buffer entry.  The first
+;   buffer entry is 0, with others following sequentially.  W2 contains the
+;   number of buffer entries.  Valid buffer offsets are therefore from 0 to
+;   W2-1.  When W1 contains W2-1, it will be "incremented" to 0.  In other
+;   words, it is assumed to be a circular buffer.
+;
+         locsub  buf_ofs_inc
+
+         add     #1, w1      ;increment the buffer offset
+         cp      w1, w2      ;compare to first invalid offset
+         bra     ltu, ofi_ok ;still within the buffer
+         mov     #0, w1      ;no, wrap back to 0
+ofi_ok:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine BUF_GET
+;
+;   Read the byte at index W1 from the circular buffer of size W2 and pointed to
+;   by W3.  W2 is the number of bytes in the buffer and W3 points to the first
+;   byte.  The byte at offset W1 is returned in W0, and W1 is updated to be the
+;   index of the next sequential byte in the circular buffer.
+;
+;   Summary of register usage:
+;
+;     W0  -  Returned byte value.
+;
+;     W1  -  Offset into buffer of byte to read.  Updated to next byte.
+;
+;     W2  -  Buffer size in bytes.
+;
+;     W3  -  Pointer to first byte of buffer.
+;
+         locsub  buf_get
+
+         mov.b   [w3+w1], w0 ;fetch the byte
+         ze      w0, w0      ;expand the byte into full W0
+         jump    buf_ofs_inc ;advance buffer index in W1 and return to the caller
+
+;*******************************************************************************
+;
+;   Local subroutine BUF_PUT
+;
+;   Try to write a byte into a circular buffer, such as used for the stream send
+;   and receive buffers in the node descriptors.  The call parameters are:
+;
+;     W0  -  Byte to write in low 8 bits.
+;
+;     W1  -  Pointer to start of buffer structure.  The structure contains three
+;            fields:
+;
+;            PUT (byte) -  0-N index into the buffer of where to write the next
+;              byte.
+;
+;            GET (byte)  -  0-N index into the buffer of where to read the next
+;              byte.
+;
+;            BUF  -  The actual buffer.
+;
+;            The buffer is empty when PUT = GET.  For each sequential byte, PUT
+;            and GET are incremented by 1, except that they wrap back to 0 after
+;            indicating the offset of the last byte in the buffer.  The buffer
+;            is full when incrementing PUT by one (and applying wrapping)
+;            results in GET.  This means there is always at least one empty
+;            byte in the buffer.
+;
+;     W2  -  The allocated size of the buffer in bytes.  PUT and GET can be from
+;            0 to this value minus 1.  This value minus 1 is the maximum number
+;            of bytes the buffer can hold.
+;
+;   This routine clears the Z flag on success and sets it when the byte could
+;   not be written, which can be due to the buffer being full.
+;
+         locsub  buf_put, regf1 | regf3 | regf4
+
+         mov     w1, w3      ;save pointer in W3
+         mov.b   [w3], w1    ;get the PUT index into W1
+         ze      w1, w1
+         mcall   buf_ofs_inc ;make the next sequential PUT index in W1
+         mov.b   [w3+1], w4  ;get the GET index into W4
+         ze      w4, w4
+         cp      w1, w4
+         bra     z, put_leave ;buffer full, return with Z flag set
+;
+;   The buffer is not full.  Write the byte.
+;
+         mov.b   [w3], w1    ;get the PUT index back into W1
+         ze      w1, w1
+         add     w3, #2, w4  ;make buffer start address
+         add     w4, w1, w4  ;make address of where to write the byte
+         mov.b   w0, [w4]    ;write this byte into the buffer
+         mcall   buf_ofs_inc ;make new PUT index in W1
+         mov.b   w1, [w3]    ;update the PUT index in the buffer structure
+         bclr    Sr, #Z      ;indicate success
+
+put_leave:                   ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine BUF_NFULL
+;
+;   Return the number of bytes in a circular buffer into W0.
+;
+;   W1 must be pointing to the buffer structure, and W2 must contain the
+;   allocated size of the buffer.  W1 and W2 are the same as required by
+;   subroutine BUF_PUT.  See the BUF_PUT description for details.
+;
+         locsub  buf_nfull, regf3
+
+         mov.b   [w1], w0    ;PUT index into W0
+         ze      w0, w0
+         mov.b   [w1+1], w3  ;GET index into W3
+         ze      w3, w3
+         sub     w0, w3, w0  ;make PUT - GET into W0
+         skip_ge             ;no buffer wrap from GET to PUT ?
+         add     w0, w2, w0  ;account for buffer wrap
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine BUF_ROOM
+;
+;   Return the amount of unused room in a circular buffer into W0.  This is the
+;   number of bytes that can be written into the buffer without any being
+;   drained.
+;
+;   W1 must be pointing to the buffer structure, and W2 must contain the
+;   allocated size of the buffer.  W1 and W2 are the same as required by
+;   subroutine BUF_PUT.  See the BUF_PUT description for details.
+;
+         locsub  buf_room, regf3
+
+         mov.b   [w1], w0    ;PUT index into W0
+         ze      w0, w0
+         mov.b   [w1+1], w3  ;GET index into W3
+         ze      w3, w3
+         sub     w3, w0, w0  ;make GET - PUT into W0
+         sub     #1, w0      ;make available room if no wrap from PUT to GET
+         skip_ge             ;no buffer wrap from PUT to GET ?
+         add     w0, w2, w0  ;account for buffer wrap
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine STROUT_SEND
+;
+;   Send a STROUT data frame to the node with descriptor at where W14 is
+;   pointing.  W0 contains the maximum number of data bytes to send.  This
+;   number or the number of available data bytes will be sent, whichever is
+;   less.  W0 must never be set to more than 8.
+;
+;   The sequence number in the node state will be used, and will not be changed.
+;   This routine can be called to send new data or to resend a previous frame
+;   when no ACK/NACK was received after the resend timeout.
+;
+;   The wait interval before a resend is allowed is started, and will be set
+;   to the value in SENDW.  SENDW will be updated to the next allowed wait
+;   interval.  See the EmCan spec for the STROUT command for how the wait
+;   interval is increased between subsequent resends.
+;
+         locsub  strout_send, regf0 | regf1 | regf2 | regf3 | regf4 | regf5
+
+         add     w0, #1, w4  ;save number of data bytes allowed to send + 1
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init
+
+         mov.b   [w14+bn_adr], w2 ;get the node address into W2
+         ze      w2, w2
+/call init_extid             ;init state for building extended frame ID
+/set extid_opcode 1022       ;EmCan STROUT opcode
+/set extid_ackreq true       ;request ACK or NACK
+/set extid_first false       ;not first frame of sequence
+/set extid_last false        ;not last frame of sequence
+/set extid_seq 0             ;init sequence number field, will be merged in below
+/call make_extid w2          ;build ID and load into W1:W0
+         mov.b   [w14+bn_sendseq], w2 ;get the sequence number
+         sl      w2, #8, w2  ;move it into position
+         ior     w0, w2, w0  ;merge sequence number into extended frame ID in W1:W0
+         gcall   can_send_id ;set the ID of the CAN frame being built
+;
+;   Send the data bytes.  W4 contains the maximum number of data bytes allowed
+;   to send.  This many or less will be sent, depending on how many bytes are
+;   available in the sending buffer.
+;
+;   Register usage in this section:
+;
+;     W0  -  Data byte.
+;
+;     W1  -  Buffer offset of next byte.
+;
+;     W2  -  Allocated buffer size in bytes.
+;
+;     W3  -  Pointer to first byte of the buffer.
+;
+;     W4  -  Max number of data bytes left allowed to send + 1.
+;
+;     W5  -  Number of data bytes actually sent.
+;
+         mov.b   [w14+bn_sendg], w1 ;init buffer get index
+         ze      w1, w1
+         mov     #sendby, w2 ;indicate allocated size of buffer in bytes
+         mov     #bn_send, w3 ;set pointer to start of buffer
+         add     w14, w3, w3
+         mov     #0, w5      ;init number of data bytes in frame so far
+sts_byte:                    ;back here each possible new data byte
+         sub     #1, w4      ;count one less data byte allowed left to send
+         bra     z, sts_dbyte ;done all alowed data bytes ?
+         mov.b   [w14+bn_sendp], w0 ;get the buffer PUT offset
+         cp.b    w1, w0      ;compare GET offset to the PUT offset
+         bra     z, sts_dbyte ;no more bytes available in the buffer ?
+         mcall   buf_get     ;get next byte from buffer, advance GET index in W1
+         gcall   can_send_dat ;write this data byte into the CAN frame
+         add     #1, w5      ;count one more data byte in this frame
+         jump    sts_byte    ;back to do next data byte
+sts_dbyte:                   ;all data bytes have been written to the CAN frame
+
+         gcall   can_send    ;send the frame, release sending state lock
+;
+;   Update the local node state to the fact that a STROUT data frame has just
+;   been sent.
+;
+         mov.b   w5, [w14+bn_sentn] ;save number of data bytes sent
+
+         mov.b   [w14+bn_sendw], w0 ;get the number ticks to wait
+         ze      w0, w0
+         mov.b   w0, [w14+bn_wait] ;init the resend wait interval
+
+         lsr     w0, #1, w1  ;make half of this wait interval
+         add     w0, w1, w0  ;make 1.5 times this wait interval
+         mov     #100, w1    ;get max necessary wait time
+         cp      w0, w1
+         bra     leu, $+4    ;within the max ?
+         mov     w1, w0      ;no, substitute the max
+         mov.b   w0, [w14+bn_sendw] ;set wait time for after next resend
+
+         bset    [w14], #bnflg_sent ;indicate STROUT data sent, awaiting ACK
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine STREAM_STATUS
+;
+;   Get status information about the byte stream to the node with the address
+;   in W1.  The status information will be returned in W2, which is a collection
+;   of individual bits:
+;
+;     Bit 0  -  Node exists.
+;
+;     Bit 1  -  The status of the output stream has been definatively resolved.
+;
+;     Bit 2  -  The stream is open.
+;
+;   The remaining bits of W2 are reserved and are set to 0 for now.
+;
+         glbsub  stream_status, regf0 | regf14
+
+         mov     #0, w2      ;init status flags
+
+         mov     w1, w0      ;pass the node address in W0
+         mcall   find_node   ;point W14 to the node descriptor, if any
+         cp0     w14
+         bra     z, ststat_leave ;no such node ?
+         bset    w2, #0      ;the node exists
+
+         btss    [w14], #bnflg_sendkn ;stream open/close state has been resolved ?
+         jump    ststat_leave ;no
+         bset    w2, #1      ;the stream state has been resolved
+
+         btss    [w14], #bnflg_send ;the stream is open ?
+         jump    ststat_leave ;no
+         bset    w2, #2      ;the stream is open
+
+ststat_leave:                ;common exit point, W2 all set
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine STREAM_LOCK
+;
+;   Acquire the exclusive lock on the byte stream to a node.  W1 contains the
+;   node address.  If the node exists and the stream to the node is open, then
+;   this routine waits until the lock is available, acquires the lock, and
+;   returns with the Z flag cleared.  When the node does not exist or the stream
+;   to that node is not open, this routine returns with the Z flag set.
+;
+         glbsub  stream_lock, regf0 | regf14
+
+         mov     w1, w0      ;pass the node address
+
+stlck_retry:                 ;back here to try again after waiting a while
+         mcall   find_node   ;point W14 to the node descriptor, if any
+         cp0     w14
+         bra     z, stlck_fail ;no such node ?
+         btss    [w14], #bnflg_send ;stream to the node is open ?
+         jump    stlck_fail  ;no
+         btss    [w14], #bnflg_sendlock ;someone else has the stream locked ?
+         jump    stlck_lock  ;no, go lock it
+
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    stlck_retry ;back to try to get lock again
+
+stlck_lock:                  ;the lock is available
+         bset    [w14], #bnflg_sendlock ;lock the lock
+         bclr    Sr, #Z      ;indicate returning with success
+
+stlck_leave:                 ;common exit point, Z flag all set
+         leaverest
+
+stlck_fail:                  ;could not acquire the lock
+         bset    Sr, #Z      ;indicate failure
+         jump    stlck_leave
+
+;*******************************************************************************
+;
+;   Subroutine STREAM_UNLOCK
+;
+;   Release the lock on the byte stream to a node acquired by STREAM_LOCK.  This
+;   lets other tasks acquire the lock and therefore send bytes to the node via
+;   the stream.  W1 contains the node address.  Nothing is done if the node
+;   indicated by W1 does not exist.
+;
+         glbsub  stream_unlock, regf0 | regf14
+
+         mov     w1, w0      ;pass the node address
+         mcall   find_node   ;point w14 to the node descriptor, if any
+         cp0     w14
+         bra     z, ulck_leave ;no such node ?
+
+         bclr    [w14], #bnflg_sendlock ;make sure the lock is released
+
+ulck_leave:                  ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine STREAM_PUT
+;
+;   Send the byte in the low bits of W0 to the node indicated by W1 via the byte
+;   stream.  The caller must be holding the byte stream sending lock, which is
+;   acquired by calling STREAM_LOCK.
+;
+;   W2 is returned containing a set of flags:
+;
+;     Bit 0  -  Node exists.
+;
+;     Bit 1  -  The status of the output stream has been definatively resolved.
+;
+;     Bit 2  -  The stream is open.
+;
+;     Bit 3  -  The byte was written to the output stream.
+;
+;   This routine returns without waiting for there being room in the output
+;   buffer of the particular byte stream for the new byte.  Instead, bit 3 in
+;   W2 is not set to indicate the byte was not sent.
+;
+         glbsub  stream_put, regf1 | regf14
+         mov     #0, w2      ;init completion flags
+
+         exch    w0, w1      ;byte into W1, node address into W0
+         mcall   find_node   ;point W14 to the node descriptor, if any
+         cp0     w14
+         bra     z, stput_leave ;no such node ?
+         bset    w2, #0      ;the node exists
+
+         btss    [w14], #bnflg_sendkn ;stream open/close state has been resolved ?
+         jump    stput_leave ;no
+         bset    w2, #1      ;the stream state has been resolved
+
+         btss    [w14], #bnflg_send ;the stream is open ?
+         jump    stput_leave ;no
+         bset    w2, #2      ;the stream is open
+;
+;   Try to write the byte.
+;
+         exch    w0, w1      ;restore the data byte into W0
+         mov     #bn_sendp, w1 ;make pointer to FIFO in W1
+         add     w14, w1, w1
+         mov     w2, w14     ;temp save return flags in W14
+         mov     #[v sendby], w2 ;pass allocated size of FIFO buffer
+         mcall   buf_put     ;try to write the byte into the FIFO
+         mov     w14, w2     ;restore return flags into W2
+
+         bra     z, stput_leave ;byte wasn't written ?
+         bset    w2, #3      ;indicate the byte was successfully written
+
+stput_leave:                 ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine STREAM_PUT_WAIT
+;
+;   Send the byte in the low bits of W0 to the node indicated by W1 via the byte
+;   stream.  The caller must be holding the byte stream sending lock, which is
+;   acquired by calling STREAM_LOCK.
+;
+;   The Z flag is set and the routine returns quickly if the node does not exist
+;   or the byte stream to the node is not open.  If the node exists, the byte
+;   stream is open, and there is room in the output buffer, then the byte is
+;   written into the output buffer and the Z flag is cleared.
+;
+;   If the byte stream is open but the output buffer is full, this routine waits
+;   up to the number of milliseconds specified in W2 for the buffer to have
+;   room for the new byte.  If it does, the byte is written and the Z flag is
+;   cleared.  If the buffer is still full after the timeout, then the byte
+;   stream to the node is closed so that it will be re-opened and thereby
+;   reset.  The stream sending lock will be released, and the Z flag set.
+;
+         glbsub  stream_put_wait, regf2 | regf3 | regf4 | regf14
+
+         mov     tick1ms, w4 ;init clock value current with
+         mov     w2, w3      ;init ticks left before timeout
+
+ptwat_retry:                 ;back here each attempt to send the byte again
+         mcall   stream_put  ;try to write the byte to the node stream
+         bclr    Sr, #Z      ;set success status if leave now
+         btsc    w2, #3      ;the byte was not written ?
+         jump    ptwat_leave ;was written, return with success indication
+
+         bset    Sr, #Z      ;set failure status if leave now
+         btss    w2, #2      ;the stream is open ?
+         jump    ptwat_leave ;no, return with failure indication
+
+ptwat_tick:                  ;back here to process each new clock tick
+         cp0     w3
+         bra     z, ptwat_abort ;timeout ended ?
+         push    w5          ;temp save register
+         mov     tick1ms, w5 ;get the current clock value
+         cp      w4, w5
+         pop     w5          ;restore register
+         bra     z, ptwat_dticks ;done processing all immediate clock ticks
+
+         add     #1, w4      ;update clock value now current with
+         sub     #1, w3      ;count one less tick until timeout elapses
+         jump    ptwat_tick  ;back to check for next tick
+
+ptwat_dticks:                ;done processing all immediately available ticks
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    ptwat_retry ;back to try writing the byte again
+;
+;   The stream is open, but unable to write the byte to the output buffer within
+;   the timeout.
+;
+;   Abort the stream connection so that it will be restarted.
+;
+ptwat_abort:
+         exch    w0, w1      ;data byte into W1, node address into W0
+         mcall   find_node   ;point W14 to the node descriptor, if any
+         cp0     w14
+         bra     z, ptwat_leave ;can't find node descriptor ?
+         exch    w0, w1      ;restore data byte into W0, node address into W1
+
+         bclr    [w14], #bnflg_send ;close the stream
+         bclr    [w14], #bnflg_sendkn ;reset stream state to unknown, allows reopen
+         bclr    [w14], #bnflg_sendfl ;cancel any pending flush
+         bset    Sr, #Z      ;indicate failure
+
+ptwat_leave:                 ;common exit point, Z flag all set
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine STREAM_FLUSH
+;
+;   Cause any buffered stream output bytes to be sent shortly.  When this
+;   routine is not called, the system only sends output stream bytes when there
+;   are enough to fill a packet.  The node address is in W0.
+;
+         glbsub  stream_flush, regf0 | regf1 | regf14
+
+         mcall   find_node   ;point W14 to the descriptor for this node
+         cp0     w14
+         bra     z, strfl_leave ;node does not exist ?
+
+         mov.b   [w14+bn_sendg], w0 ;GET index into W0
+         mov.b   [w14+bn_sendp], w1 ;PUT index into W1
+         sub.b   w1, w0, w0  ;compare PUT and GET index
+         bra     z, strfl_leave ;the buffer is empty, nothing to flush ?
+
+         bset    [w14], #bnflg_sendfl ;indicate to send any available data now
+
+strfl_leave:                 ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Macro LOAD_TABLE table
+;
+;   Load the address of TABLE in program memory into W3:W2.  This is used below
+;   to select the particular dispatch table for a received CAN frame.
+;
+.macro load_table table
+         mov     #tbloffset(\table), w2
+         mov     #tblpage(\table), w3
+         and     #0xFF, w3
+  .endm
+
+;*******************************************************************************
+;
+;   EmCan protocol host processing task.
+;
+emcanh_task:                 ;execution start point of this task
+         mov     tick100ms, w0
+         mov     w0, lasttick ;init last clock tick updated to
+
+emcanh_reset:                ;back here for complete reset of the bus
+;
+;   Send a few RESET frames each after a 100 ms wait.
+;
+         mov     #5, w3      ;init number of RESET frames left to send
+res_loop:                    ;back here to wait for each 100 ms tick
+         clrflag canin       ;discard any received frames while sending resets
+         gcall   task_yield  ;give other tasks a chance to run
+         mov     lasttick, w0 ;get last tick updated to
+         mov     tick100ms, w1 ;get current tick value
+         cp      w0, w1
+         bra     z, res_loop ;no new tick ?
+         add     #1, w0      ;update latest tick value current with
+         mov     w0, lasttick
+         ;
+         ;   New 100 ms tick.
+         ;
+         mov     #0b00, w0   ;indicate standard data frame
+         gcall   can_send_init ;init for sending this CAN frame
+         mov     #0, w0      ;set the frame ID
+         gcall   can_send_id
+         gcall   can_send    ;send the CAN frame, release sending lock
+         sub     #1, w3      ;count one less reset left to send
+         bra     nz, res_loop
+
+         clrflag emcanres    ;clear any pending bus reset request
+;
+;   Reset the nodes array to all entries unused.  This only requires flagging
+;   the state of each descriptor as empty.  It is actually useful to NOT reset
+;   the ID and address fields.  This will cause a node to be assigned the same
+;   address it had before the reset, if that address has not meanwhile been
+;   assigned to another node.
+;
+         clrflag emcanenum   ;clear any pending enumeration request
+         clrflag emcanmulti  ;clear any multi-host error
+         mov     #0xFFFF, w0
+         mov     w0, enum    ;init to no enumeration in progress
+
+         mov     #nodes, w14 ;init pointer to first node descriptor
+         mov     #nnodes, w13 ;init number of descriptors left to do
+         mov     #0, w0      ;value to set FLAGS fields to
+res_nodes:                   ;back here each new descriptor
+         clr     [w14]       ;set this descriptor to unused
+         add     #bnsize, w14 ;point to next node descriptor
+         sub     #1, w13     ;count one less descriptor left to do
+         bra     nz, res_nodes ;back to do next descriptor
+;
+;   Tell the app of the reset if a routine for that purpose is supplied.
+;
+/if [<> emcan_reset ""] then
+         gcall   [chars emcan_reset] ;call app routine to notify of bus reset
+  /endif
+
+;*****************************
+;
+;   EmCan host task main operating loop.
+;
+emh_loop:                    ;back here after handling each event
+         disi    #1
+         mov     #stack_emcanh, w15 ;reset our stack to empty
+         gcall   task_yield  ;give all other tasks a chance to run
+;
+;   Handle any pending reset request.
+;
+         skip_nflag emcanres ;no pending reset request ?
+         jump    emcanh_reset ;reset requested, go reset the bus
+;
+;   Handle any received CAN frame.
+;
+         skip_nflag canin    ;no new received CAN frame ?
+         jump    emh_recv    ;go processed the received CAN frame
+;
+;   Handle any new enumeration request.
+;
+         skip_flag emcanenum ;new enumeration request ?
+         jump    n_enum      ;no, skip this section
+
+         clrflag emcanenum   ;clear the pending request
+         mov     #0, w0      ;init enumeration state to first descriptor
+         mov     w0, enum
+
+n_enum:                      ;done handling any new enumeration request
+;
+;   Check for a new 100 ms clock tick.
+;
+         mov     lasttick, w0 ;get last tick updated to
+         mov     tick100ms, w1 ;get current tick value
+         cp      w0, w1
+         bra     z, emh_ntick ;no new tick ?
+         add     #1, w0      ;update latest tick value current with
+         mov     w0, lasttick
+;
+;   A new 100 ms clock tick has occurred.  Loop thru all the node descriptors
+;   and update their state accordingy.
+;
+         mov     #nodes, w14 ;init pointer to first node descriptor
+         mov     #nnodes, w13 ;init number of descriptors left to do
+ndtick_loop:                 ;back here each new descriptor
+         btss    [w14], #bnflg_adr ;assigned address ?
+         jump    ndtick_next ;no, this descriptor is empty
+         ;
+         ;   Decrement the lifetime of the address.
+         ;
+         mov     [w14+bn_adrt], w0 ;get remaining lifetime
+         sub     #1, w0      ;count one less tick
+         mov     w0, [W14+bn_adrt] ;update the remaining lifetime
+         cp0     w0
+         bra     nz, ndtick_adr ;the address is still valid ?
+         ;
+         ;   The address lifetime just expired.
+         ;
+         node_unassign       ;unassign the address, reset node descriptor
+         jump    ndtick_next ;nothing more to do here, on to next descriptor
+
+ndtick_adr:                  ;the address lifetime did not just expire
+         ;
+         ;   Decrement the WAIT field unless it is already 0.
+         ;
+         mov.b   [w14+bn_wait], w0 ;get the WAIT field
+         cp0.b   w0
+         skip_z
+         sub     #1, w0
+         mov.b   w0, [w14+bn_wait] ;update WAIT field
+
+ndtick_next:                 ;done with current node descriptor, advance to next
+         add     #bnsize, w14 ;point to next node descriptor
+         sub     #1, w13     ;count one less descriptor left to do
+         bra     nz, ndtick_loop ;back to do next descriptor
+
+         jump    emh_loop    ;done handling the 100 ms tick event
+
+emh_ntick:                   ;skip to here on no new clock tick
+;
+;   Perform any processing that may be required on one node.  NEXTNODE is the
+;   0-N number of the node descriptor to handle this time.  Only one node is
+;   processed each time thru there.  This allows other parts of the system and
+;   this task to continue between actions on multiple nodes.  If nothing else is
+;   going on, then all nodes will be scanned quickly anyway.
+;
+         mov     nextnode, w0 ;get number of node to process this time
+         mcall   point_node  ;point W14 to start of this node descriptor
+         add     #1, w0      ;init number of descriptor for next time
+         mov     #nnodes, w1 ;get first invalid descriptor number
+         cp      w0, w1
+         bra     ltu, dnext  ;still within range ?
+         mov     #0, w0      ;no, wrap back to first descriptor
+dnext:                       ;W0 contains number of descriptor for next time
+         mov     w0, nextnode ;save final number of node to process next time
+         ;
+         ;   Process the node pointed to by W14.
+         ;
+         btss    [w14], #bnflg_adr ;address is assigned ?
+         jump    emh_dproc   ;no, nothing to process
+         ;
+         ;   Send frame to enable our application in this node, if appropriate.
+         ;
+         btsc    [w14], #bnflg_appack ;never got ACK to app enable attempt ?
+         jump    emh_nappen  ;did, skip this section
+         mov.b   [w14+bn_wait], w1 ;get ticks until allowed to send app enable
+         cp0.b   w1
+         bra     nz, emh_nappen ;not allowed to send app enable yet ?
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init
+         mov.b   [w14+bn_adr], w2 ;get the node address into W2
+         ze      w2, w2
+/call init_extid             ;init state for building extended frame ID
+/set extid_opcode 1009       ;set opcode
+/set extid_ackreq true       ;request confirmation
+/call make_extid w2          ;build ID and load into W1:W0
+         gcall   can_send_id ;set the ID of the CAN frame being built
+
+         mov     #[or 16#8000 [shiftr emcan_appid 16]], w0 ;turn on app, high app ID word
+         gcall   can_send_dat16
+         mov     #[and emcan_appid 16#FFFF], w0 ;low app ID word
+         gcall   can_send_dat16
+
+         gcall   can_send    ;send the frame, release sending state lock
+
+         mov     #ntkapp, w0 ;reset ticks until next allowed app enable frame
+         mov.b   w0, [w14+bn_wait]
+         jump    emh_loop    ;back to start of event loop
+
+emh_nappen:                  ;don't send app enable request now
+         ;
+         ;   Send output stream open request, if appropriate.
+         ;
+         btss    [w14], #bnflg_appack ;app ON/OFF already resolved ?
+         jump    emh_nopen   ;no, skip this section
+         btsc    [w14], #bnflg_sendkn ;output stream open/close not resolved yet ?
+         jump    emh_nopen   ;already resolved, skip this section
+         mov.b   [w14+bn_wait], w1 ;get ticks until allowed send open request
+         cp0.b   w1
+         bra     nz, emh_nopen ;not allowed to send request yet ?
+
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init
+         mov.b   [w14+bn_adr], w2 ;get the node address into W2
+         ze      w2, w2
+/call init_extid             ;init state for building extended frame ID
+/set extid_opcode 1022       ;set opcode
+/set extid_ackreq true       ;request ACK or NACK
+/set extid_first true        ;first frame of sequence
+/set extid_last false        ;other frames will follow
+/set extid_seq 0             ;initial sequence number
+/call make_extid w2          ;build ID and load into W1:W0
+         gcall   can_send_id ;set the ID of the CAN frame being built
+         gcall   can_send    ;send the frame, release sending state lock
+
+         mov     #0, w0      ;indicate sequence number of ACK expected
+         mov.b   w0, [w14+bn_sendseq]
+         mov     #ntkopen, w0 ;reset ticks until retry allowed
+         mov.b   w0, [w14+bn_wait]
+         jump    emh_loop    ;back to start of event loop
+
+emh_nopen:                   ;don't send output stream open request now
+         ;
+         ;   Resend last output stream data frame, if appropriate.
+         ;
+         btss    [w14], #bnflg_sent ;data frame was sent, awaiting ACK ?
+         jump    emh_nresend ;no, nothing to resend ?
+         mov.b   [w14+bn_wait], w1 ;get ticks until allowed until resend
+         cp0.b   w1
+         bra     nz, emh_nresend ;not allowed to resend yet ?
+
+         mov.b   [w14+bn_sentn], w0 ;pass number of data bytes to send
+         ze      w0, w0
+         mcall   strout_send ;resend the last STROUT data frame
+         jump    emh_loop    ;back to start of event loop
+
+emh_nresend:                 ;don't resend output stream data now
+         ;
+         ;   Send new STROUT data to this node if appropriate.  If the stream
+         ;   is established and the node is ready for more data, this is only
+         ;   done if there are at least 8 bytes to send immediately, or there is
+         ;   at least 1 byte and the SENDFL flag is set.
+         ;
+         btss    [w14], #bnflg_send ;STROUT stream is established ?
+         jump    emh_dsend
+         btsc    [w14], #bnflg_sent ;not waiting on ACK to last packet ?
+         jump    emh_dsend
+         mov.b   [w14+bn_sendg], w1 ;get buffer GET index into W1
+         ze      w1, w1
+
+         mov.b   [w14+bn_sendp], w2 ;get buffer PUT index into W2
+         ze      w2, w2
+         cp      w1, w2
+         skip_ne             ;at least one byte available to send ?
+         bclr    [w14], #bnflg_sendfl ;nothing to send, clear the flush flag
+         bra     z, emh_dsend ;there is nothing to send, skip this section ?
+
+         btsc    [w14], #bnflg_sendfl ;send only if full frame of data available ?
+         jump    emh_strosend ;no, send whatever is available now
+
+         sub     w2, w1, w2  ;make PUT - GET in W2
+         skip_ge             ;buffer wrap not between GET and PUT ?
+         add     #sendby, w2 ;account for buffer wrap
+         cp      w2, #8      ;compare to data bytes in a full frame
+         bra     ltu, emh_dsend ;not enough bytes to send a frame now ?
+
+emh_strosend:                ;send whatever is available now, at least one byte is
+         mov     #ntkstdat, w0 ;set initial wait time for resend after this frame
+         mov.b   w0, [w14+bn_sendw]
+         mov     #8, w0      ;pass number of data bytes to try to send
+         mcall   strout_send ;send the STROUT data frame
+         bset    [w14], #bnflg_sent ;indicate sent packet is awaiting ACK
+         jump    emh_loop    ;back to start of event loop
+
+emh_dsend:                   ;don't send new STROUT data now
+         ;
+         ;   Notify the application if the receive stream from this node was
+         ;   reset or synchronized.
+         ;
+         btss    [w14], #bnflg_recvsyn ;receive stream was reset or synchronized ?
+         jump    emh_nrecvsyn ;no, skip this section
+
+         bclr    [w14], #bnflg_recvsyn ;clear the event condition
+
+/if [<> emcan_strin_sync ""] then ;app routine exists to notify about reset ?
+         mov.b   [w14+bn_adr], w1 ;pass node address in W1
+         ze      w1, w1
+         push    w14
+         gcall   [chars emcan_strin_sync] ;call the app routine
+         pop     w14
+         jump    emh_loop    ;back to start of event loop
+  /endif
+
+emh_nrecvsyn:                ;app routine not called about receive stream sync
+         ;
+         ;   Send stream data received from this node to the application if any
+         ;   is available.
+         ;
+         mov     #bn_recvp, w1 ;pass pointer to buffer structure
+         add     w1, w14, w1
+         mov     #recvby, w2 ;pass allocated size of the buffer
+         mcall   buf_nfull   ;get the number of bytes in the buffer into W0
+         cp0     w0
+         bra     z, emh_nrecv ;no received bytes, skip this section ?
+
+/if [<> emcan_strin_start ""] then ;call app routine to notify of the bytes ?
+         mov.b   [w14+bn_adr], w1 ;pass node address in W1
+         ze      w1, w1
+         mov     w0, w2      ;pass number of received data bytes
+         push    w2          ;save registers we want preserved accross call
+         push    w14
+         gcall   [chars emcan_strin_start] ;tell app about chunk of received bytes
+         pop     w14
+         pop     w2
+  /endif
+
+         mov.b   [w14+bn_recvg], w3 ;get the GET index into W3
+         ze      w3, w3
+emh_recvb:                   ;back here each new received stream byte
+/if [<> emcan_strin_byte ""] then ;app routine exists to call for each byte ?
+         mov     #bn_recv, w4 ;make address of this byte in buffer in W4
+         add     w4, w14, w4
+         add     w4, w3, w4
+         mov.b   [w4], w0    ;get this byte into W0
+         ze      w0, w0
+         mov.b   [w14+bn_adr], w1 ;pass node address in W1
+         ze      w1, w1
+         push    w2          ;save registers to preserve accross app call
+         push    w3
+         push    w14
+         gcall   [chars emcan_strin_byte] ;call app routine for this byte
+         pop     w14
+         pop     w3
+         pop     w2
+  /endif
+         add     #1, w3      ;increment the GET index
+         mov     #recvby, w4
+         cp      w3, w4      ;compare to first invalid value
+         skip_ltu            ;within range ?
+         mov     #0, w3      ;no, wrap back to start of buffer
+         sub     #1, w2      ;count one less byte left to get
+         bra     nz, emh_recvb ;back to do the next byte
+         mov.b   w3, [w14+bn_recvg] ;update the GET index in the descriptor
+
+/if [<> emcan_strin_end ""] then ;app routine exists to call after all bytes ?
+         mov.b   [w14+bn_adr], w1 ;pass node address in W1
+         ze      w1, w1
+         push    w14
+         gcall   [chars emcan_strin_end] ;call app for end of stream bytes
+         pop     w14
+  /endif
+         ;
+         ;   The stream receiving buffer should now be empty.  Send the ACK for
+         ;   the last received frame of stream bytes if this was deferred
+         ;   when the frame was processed.  The ACK allows the node to send
+         ;   another packet, so should only be sent when there is enough room in
+         ;   the receive buffer to hold a full packet of data, which is 8 bytes.
+         ;   If there was less than 8 bytes of room in the receive buffer when
+         ;   the last data frame was received, then the ACK was not sent and the
+         ;   RECVACK flag was set instead.  This indicates the ACK should be
+         ;   sent when the buffer is drained enough to hold at least 8 bytes.
+         ;   Note that the sequence number was already advanced after the last
+         ;   frame was received.  The ACK must therefore contain the previous
+         ;   sequence number.
+         ;
+         btss    [w14], #bnflg_recvack ;ACK is pending ?
+         jump    emh_loop    ;no, done handling
+
+         bclr    [w14], #bnflg_recvack ;clear the pending ACK condition
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init
+
+         mov.b   [w14+bn_adr], w2 ;get node address into W2
+         ze      w2, w2
+/call init_extid             ;build the extended frame ID
+/set extid_opcode 1023       ;STRIN opcode
+/set extid_ack true
+/set extid_first false
+/set extid_last false
+/set extid_seq 0
+/set extid_bcast false
+/call make_extid w2          ;init extended id in W1:W0 from above settings
+         btss    [w14], #bnflg_recv ;receive stream is still open ?
+         bclr    w0, #12     ;set LAST indicator
+         mov.b   [w14+bn_recvseq], w2 ;get next expected sequence number into W2
+         sub     #1, w2      ;make sequence number this ACK is for
+         and     #15, w2
+         sl      w2, #8, w2  ;move it into position in the frame ID
+         ior     w0, w2, w0  ;merge sequence number into frame ID
+         gcall   can_send_id ;set the ID of this CAN frame
+         gcall   can_send    ;send the CAN frame
+         jump    emh_loop    ;back to start of event loop
+
+emh_nrecv:                   ;no received stream bytes to handle
+
+emh_dproc:                   ;done processing one node
+;
+;   Call the app about the next node with assigned address if enumeration is in
+;   progress.  ENUM is the enumeration state, which contains the 0-N descriptor
+;   number of the next descriptor to send information about if it is in use.
+;   The high bit set indicates no enumeration is in progress.
+;
+;   Only one descriptor is processed each time thru here.  Calling the app for
+;   each assigned node can take a while.  By calling it with at most one node at
+;   a time allows handling of received frames and other events during
+;   enumeration.  If nothing else is going on, then the app will be called
+;   rapidly about each assigned address anyway.
+;
+/if [<> emcan_assign ""] then ;there is app routine to report assignments to ?
+
+         mov     enum, w0    ;get number of node to list this time
+         btsc    w0, #15     ;enumeration in progress
+         jump    emh_denum   ;no, skip this section
+         mcall   point_node  ;point W14 to start of this node descriptor
+         add     #1, w0      ;init number of descriptor for next time
+         mov     #nnodes, w1 ;get first invalid descriptor number
+         cp      w0, w1
+         bra     ltu, dnenum ;still within range ?
+         mov     #0xFFFF, w0 ;no, all done with enumeration
+dnenum:                      ;W0 contains number of descriptor for next time
+         mov     w0, enum    ;save final number of node to process next time
+
+         btss    [w14], #bnflg_appack ;node has ACKed app enable request ?
+         jump    emh_denum   ;no, nothing to report from this descriptor
+
+         mov.b   [w14+bn_adr], w0 ;pass the node address in W0
+         ze      w0, w0
+         add     w14, #bn_id, w1 ;pass pointer to node unique ID in W1
+         gcall   [chars emcan_assign] ;notify app about the new assignment
+
+emh_denum:                   ;done handling enumeration this event loop
+  /endif                     ;end of app routine exists to enumerate to
+
+         jump    emh_loop    ;back to start of event loop
+
+;***************************************
+;
+;   A new CAN frame has been received.
+;
+emh_recv:
+         bclr    emcflags, #flg_rel ;init to received frame not released yet
+;
+;   Extract the opcode into W0 and the node address into W1.
+;
+         mov     canin_id+0, w2 ;get the full frame ID into W3:W2
+         mov     canin_id+2, w3
+
+         mov     #0x7F, w1   ;get mask for node address
+         and     w2, w1, w1  ;extract just the node address into W1
+         skip_nflag canin_ext ;this is a standard frame ?
+         jump    gid_ext     ;extended frame
+         ;
+         ;   Standard frame (11 bit ID).
+         ;
+         lsr     w2, #7, w0  ;extract 4 bit opcode into W0
+         and     #15, w0
+         jump    gid_done
+         ;
+         ;   Extended frame (29 bit ID).
+         ;
+gid_ext:
+         lsr     w3, #3, w0  ;extract 10 bit opcode into W0
+         and     #1023, w0
+
+gid_done:                    ;done getting opcode into W0, node address into W1
+         mov     w1, nodeadr ;save node address
+;
+;   Determine which dispatch table applies to this frame.  The node address from
+;   the frame is in W1 and the opcode in W0.  The start address of the dispatch
+;   table in program memory will be loaded into W3:W2.  Once a dispatch table
+;   has been determined, jump to DSPATCH.
+;
+         cp0     w1
+         bra     z, adr0     ;node address 0, this is a broadcast frame ?
+
+         skip_nflag canin_ext ;standard frame ?
+         jump    adruext     ;extended frame
+         skip_nflag canin_rtr ;data frame ?
+         jump    adrurtr     ;remote request
+         ;
+         ;   Unicast, standard data frame.
+         ;
+         load_table tbl_std
+         jump    dspatch
+         ;
+         ;   Unicast, standard remote request frame.
+         ;
+adrurtr:
+         load_table tbl_stdrtr
+         jump    dspatch
+
+adruext:                     ;unicast, extended
+         mov     #1008, w4   ;get first EmCan opcode
+         cp      w0, w4
+         bra     geu, adruextem ;unicast, extended, in EmCan opcode range ?
+         skip_nflag canin_rtr ;data frame ?
+         jump    adruextrtr  ;unicast, extended, app opcod, remote request
+         ;
+         ;   Unicast, extended, app opcode range, data frame.
+         ;
+         load_table tbl_ext
+         jump    dspatch
+         ;
+         ;   Unicast, extended, app opcode range, remote request.
+         ;
+adruextrtr:
+         load_table tbl_extrtr
+         jump    dspatch
+
+adruextem:                   ;unicast, extended, EmCan opcode range
+         skip_nflag canin_rtr ;data frame ?
+         jump    adruextrem  ;remote request
+         ;
+         ;   Unicast, extended, EmCan opcode range, data frame.
+         ;
+         load_table tbl_ext_e
+         jump    dspatch
+         ;
+         ;   Unicast, extended, EmCan opcode range, remote request.
+         ;
+adruextrem:
+         load_table tbl_extrtr_e
+         jump    dspatch
+
+adr0:                        ;broadcast frame (node addres is 0)
+         skip_nflag canin_ext ;standard frame ?
+         jump    adr0ext     ;extended frame
+         skip_nflag canin_rtr ;data frame ?
+         jump    adr0rtr     ;remote request
+         ;
+         ;   Broadcast, standard, data frame.
+         ;
+         load_table tbl_bus
+         jump    dspatch
+         ;
+         ;   Broadcast, standard, remote request.
+         ;
+adr0rtr:
+         load_table tbl_busrtr
+         jump    dspatch
+
+adr0ext:                     ;broadcast, extended
+         skip_nflag canin_rtr ;data frame ?
+         jump    adr0extrtr  ;remote request
+         ;
+         ;   Broadcast, extended, data frame.
+         ;
+         load_table tbl_extb
+         jump    dspatch
+         ;
+         ;   Broadcast, extended, remote request.
+         ;
+adr0extrtr:
+         load_table tbl_extbrtr
+;
+;   Dispatch to the specific routine for this opcode.  The registers currently
+;   contain:
+;
+;     W0  -  Opcode
+;
+;     W1  -  Node address
+;
+;     W3:W2  -  Start address of the dispatch table.
+;
+;   All dispatch tables have the same format, which is described in the header
+;   comments of the CANCMD macro, below.
+;
+dspatch:
+
+dsp_loop:                    ;back here each new table entry
+         mov     w3, Tblpag  ;set high bits of word to read
+         tblrdl  [w2], w4    ;fetch opcode word from table entry into W4
+         cp      w4, w0
+         bra     z, dsp_found ;found table entry for this opcode
+         btsc    w4, #15     ;not end of table ?
+         jump    dsp_end     ;is end of table
+
+         add     #4, w2      ;advance to next table entry
+         addc    #0, w3
+         jump    dsp_loop    ;back to try next table entry
+         ;
+         ;   The end of table was encountered without finding a entry for this
+         ;   opcode.  W4 contains the table end word.
+         ;
+dsp_end:
+/if debug then
+         nop                 ;for debugger breakpoint
+         nop
+  /endif
+/if debug_emcan_sendu
+  /then                      ;send all unrecognized frames to the app
+         jump    emh_app
+  /else                      ;send frame to app as specified in table end word
+         btsc    w4, #0
+         jump    emh_app     ;pass this frame to the application layer
+         jump    emcanh_dframe ;completely done with this frame
+  /endif
+         ;
+         ;   The table entry for this opcode has been found.  W3:W2 contains the
+         ;   address of the first word of the table entry.
+         ;
+         ;   W0 contains the opcode and W1 the node address.  These will be
+         ;   passed to the target routine intact.
+         ;
+dsp_found:
+         mov     #tbloffset(emcanh_dframe), w4 ;seed stack with normal command end return point
+         push    w4
+         mov     #tblpage(emcanh_dframe), w4
+         and     #0xFF, w4
+         push    w4
+
+         add     #2, w2      ;make address of table entry second prog mem word
+         addc    #0, w3
+         mov     w3, Tblpag  ;set high bits of address to read from
+         tblrdl  [w2], w4    ;get low word of command routine address
+         push    w4
+         tblrdh  [w2], w4    ;get high word of command routine address
+         and     #0x7F, w4   ;mask off any high control bits
+         push    w4
+         return              ;jump to the command routine
+
+emh_app:
+/if [<> emcan_appframe ""] then ;routine exists to handle app frames ?
+         gcall   [chars emcan_appframe] ;call app routine to handle this frame
+  /endif
+;
+;   Global entry point where the application routine that processes a received
+;   frame returns to.  It can also jump here with the stack in any state.
+;
+         glbent  emcanh_dframe ;app routine is done handling the received frame
+
+         disi    #1
+         mov     #stack_emcanh, w15 ;reset stack to empty
+
+         mcall   emcanh_release ;make sure the received CAN frame is released
+         jump    emh_loop
+
+;*******************************************************************************
+;
+;   Local subroutines SEND_ACK, SEND_NACK
+;
+;   Send ACK or NACK response to the current CAN frame.  The received CAN frame
+;   must be held (not yet released).
+;
+         locsub  send_nack, regf0 | regf1 | regf2
+         bclr    w2, #1      ;indicate to send NACK, not ACK
+         jump    send_acknack ;to common routine
+
+         locsub  send_ack, regf0 | regf1 | regf2
+         bset    w2, #1      ;indicate to send ACK, not NACK
+
+send_acknack:                ;common code, ACK flag is in low bit of W2
+         skip_flag canin_ext ;extended frame ?
+         jump    sndack_leave ;no, can only ACK extended frames
+         mov     canin_id+2, w1 ;get high word of received frame ID
+         btss    w1, #0      ;not a ACK frame ?
+         jump    sndack_leave ;never send ACKs in response to ACKs
+         mov     canin_id+0, w0 ;get low word of received frame ID
+         btss    w0, #14     ;ACK was requested ?
+         jump    sndack_leave ;no, don't send unsolicited ACK
+;
+;   A ACK frame should be sent.  The high word of the received ID is in W1 and
+;   the ACK/nack flag is in the low bit of W2.
+;
+         mov     #0b01, w0   ;init for sending extended data frame
+         gcall   can_send_init
+
+         mov     canin_id+0, w0 ;get full received frame ID into W1:W0
+         bclr    w1, #0      ;this is a ACK frame
+         bclr    w0, #14     ;init to ACK, not NACK
+         btss    w2, #0      ;really is ACK ?
+         bset    w0, #14     ;no, indicate NACK
+         gcall   can_send_id ;set the frame ID
+         gcall   can_send    ;send the ACK/NACK frame
+
+sndack_leave:                ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   ECMD_MULTIERR
+;
+;   Handler for received frames that should only be sent by the bus host.  Since
+;   we are the host and EmCan allows for only a single host, something is wrong
+;   if we receive one of these frames.  Probably another device intended to act
+;   as host was connected to the bus.  This is a impossible situation and bus
+;   operation can not proceed normally.
+;
+;   We reset our bus state and notify the application of the multi-host error if
+;   a routine was provided for that purpose.
+;
+ecmd_multierr:
+         disi    #1
+         mov     #stack_emcanh, w15 ;reset stack to empty
+         setflag emcanmulti  ;indicate multi-host error condition
+
+/if [<> emcan_multierr ""] then
+         gcall   [chars emcan_multierr] ;call app routine to notify of the error
+  /endif
+
+         mcall   emcanh_release ;make sure the received CAN frame is released
+         jump    emcanh_reset ;completely reset the bus
+
+;*******************************************************************************
+;
+;   Frame ADR REQUEST vblockid serial
+;
+;   Broadcast standard data frame.  A device is requesting address assignment.
+;   VBLOCKID and SERIAL together are 7 bytes that are globally unique to every
+;   instance of every EmCan device.
+;
+ecmd_adrreq:
+         mov     w0, w4      ;save opcode, either ADRREQ or ADRREQRES
+
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #7      ;compare to the correct value
+         bra     nz, emcanh_dframe ;invalid number of bytes, discard frame
+;
+;   Scan the node descriptors looking for one that already has this unique ID.
+;   In case no such descriptor is found, we also look for the first empty
+;   descriptor.  Register usage:
+;
+;     W0  -  Scratch data.
+;
+;     W1  -  Pointer to ID data byte in received frame.
+;
+;     W2  -  Pointer to ID data byte in node descriptor.
+;
+;     W3  -  Number of bytes left to check.
+;
+;     W4  -  Saved opcode.
+;
+;     W12  -  Pointer to first empty descriptor found.  0 means none.
+;
+;     W13  -  Number of descriptors left to check.
+;
+;     W14  -  Pointer to current descriptor.
+;
+         mov     #0, w12     ;init to no empty descriptor found
+         mov     #nnodes, w13 ;init number of descriptors left to check
+         mov     #nodes, w14 ;init pointer to first descriptor
+areq_node:                   ;back here to check next node descriptor
+         cp0     w12
+         bra     nz, areq_hemt ;already have empty descriptor ?
+         cp0.b   [w14]       ;check flags byte
+         bra     nz, areq_hemt ;this descriptor is not empty ?
+         mov     w14, w12    ;save pointer to first empty descriptor
+areq_hemt:                   ;done checking for empty descriptor
+
+         mov     #canin_dat, w1 ;init pointer to data byte in frame
+         add     w14, #bn_id, w2 ;init pointer to data byte in descriptor
+         mov     #7, w3      ;init number of bytes left to check
+areq_idbyte:                 ;back here to check each new ID byte
+         mov.b   [w1++], w0  ;get ID byte from received frame
+         cp.b    w0, [w2++]  ;compare to ID byte in descriptor
+         bra     nz, areq_nodenext ;ID doesn't match this node ?
+         sub     #1, w3      ;count one less byte left to check
+         bra     nz, areq_idbyte ;back to check next ID byte
+         jump    areq_desc   ;found descriptor
+areq_nodenext:               ;advance to next node descriptor
+         add     #bnsize, w14 ;advance pointer to next desriptor
+         sub     #1, w13     ;count one less descriptor left
+         bra     nz, areq_node ;back to check this new descriptor
+
+         mov     w12, w14    ;unique ID not found, use first empty descriptor
+;
+;   The node descriptor to use has been determined and W14 is pointing to it.
+;   If the unique ID of this node was already in the list, then this is the
+;   descriptor containing that ID.  If not, then this is the first empty
+;   descriptor.  Otherwise, W14 is 0 to indicate no descriptor is available.
+;
+areq_desc:                   ;W14 is pointing to descriptor for this node
+         cp0     w14
+         bra     z, emcanh_dframe ;no available descriptor, discard frame
+
+         btsc    [w14], #bnflg_adr ;address not currently assigned
+         jump    areq_haveadr ;have address assignment
+         ;
+         ;   This descriptor does not contain a assigned address so we need
+         ;   to pick one.  We first try to get the address in the ADR field,
+         ;   since that might result in re-assigning the same address this
+         ;   node had before if it timed out since the last assignment.  If
+         ;   that fails, then we just get the next sequential unused address.
+         ;
+         mov.b   [w14+bn_adr], w0 ;get address from descriptor into W0
+         and     #127, w0
+         mcall   make_adr    ;get unused address into W0, W0 is suggestion on entry
+         mov.b   w0, [w14+bn_adr] ;save the assigned address
+         ;
+         ;   Copy the unique ID bytes from the frame into the descriptor.
+         ;
+         mov     #canin_dat, w1 ;init pointer to data byte in frame
+         add     w14, #bn_id, w2 ;init pointer to data byte in descriptor
+         mov     #7, w3      ;init number of bytes left to copy
+areq_copyb:                  ;back here to copy each new unique ID byte
+         mov.b   [w1++], [w2++] ;copy this ID byte
+         sub     #1, w3      ;count one less byte left to copy
+         bra     nz, areq_copyb ;back to copy next byte
+
+areq_haveadr:                ;ID bytes and assigned address stored in descriptor
+         mcall   emcanh_release ;all done with the received frame
+;
+;   Reset the state for this node if the node indicates it has been reset.  This
+;   is the case if the opcode is ADRREQRES (15), and not if it is ADRREQ (14).
+;   We get to this routine for either of these opcodes.  The original opcode is
+;   in W4.
+;
+         cp      w4, #15     ;compare to ADRREQRES opcode
+         skip_ne             ;node is not indicating reset ?
+         clr     [w14]       ;is indicating reset, clear state as if virgin descriptor
+;
+;   Send the address assignment to the node.
+;
+         mov     #0b00, w0   ;indicate standard data frame
+         gcall   can_send_init ;init for sending CAN frame
+
+         mov     #8 << 7, w0 ;set the frame ID
+         gcall   can_send_id
+
+         add     w14, #bn_id, w2 ;init pointer to first ID byte in descriptor
+         mov     #7, w3      ;init number of bytes left to copy
+areq_sendb:                  ;back here to write each new ID byte into frame
+         mov.b   [w2++], w0  ;fetch this ID byte
+         gcall   can_send_dat ;write it to the CAN frame being built
+         sub     #1, w3      ;count one less ID byte left to write
+         bra     nz, areq_sendb ;back to write next ID byte
+
+         mov.b   [w14+bn_adr], w0 ;get the assigned address
+         gcall   can_send_dat ;write it as the last data byte
+         gcall   can_send    ;send the CAN frame, release the sending state
+;
+;   Update the descriptor to the address assignment.
+;
+         mov     #ntklife+1, w0 ;reset to full address assignment lifetime
+         mov     w0, [w14+bn_adrt]
+
+         btsc    [w14], #bnflg_adr ;this is a new assignement, not a refresh ?
+         jump    areq_ddesc  ;previously assigned, done filling descriptor
+         ;
+         ;   This is a new address assignment, not just a refresh of a previous
+         ;   assignment that was still valid.
+         ;
+         clr     [w14]       ;init all the flag bits to off
+         bset    [w14], #bnflg_adr ;indicate address is assigned
+         mov     #0, w0
+         mov.b   w0, [w14+bn_wait] ;allow to send app enable immediately
+
+areq_ddesc:                  ;descriptor all filled in
+         return              ;all done handling the received frame
+
+;*******************************************************************************
+;
+;   Frame ADRELEASE adr
+;
+;   Broadcast standard data frame.  A device is specifically releasing its
+;   assigned address.
+;
+ecmd_adrelease:
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #1
+         bra     nz, emcanh_dframe ;invalid number of bytes, discard frame
+
+         mov     #canin_dat, w1 ;point to first data byte
+         ze      [w1], w0    ;get the address being released into W0
+         bra     z, emcanh_dframe ;abort on invalid address of 0
+         mov     #127, w1    ;get last valid address
+         cp      w0, w1
+         bra     gtu, emcanh_dframe ;abort on invalid address over 127
+         mcall   emcanh_release ;release the received CAN frame
+
+         mcall   find_node   ;point W14 to descriptor for this node
+         cp0     w14
+         bra     z, emcanh_dframe ;abort if this address is not assigned
+
+         node_unassign       ;unassign address, possibly notify application
+         jump    emcanh_dframe ;done processing this received CAN frame
+
+;*******************************************************************************
+;
+;   Frame APPROLE appid role
+;
+;   Node is reporting its app ID, role within the app, and whether its app is
+;   currently enabled.
+;
+ecmd_approle:
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp      w0, #8
+         skip_z              ;frame contains the correct number of data bytes ?
+         return              ;no, ignore it
+
+         mov     w1, w0      ;pass node address in W0
+         mcall   find_node   ;find node descriptor, W14 will point to it
+         cp0     w14
+         bra     z, emcanh_dframe ;node not found, ignore this frame
+
+         mov     canin_d0, w3 ;get APPID into W3:W2
+         swap    w3
+         mov     canin_d2, w2
+         swap    w2
+         mov     w3, w4      ;save app enabled flag in high bit of W4
+         bclr    w3, #15     ;make just the app ID in W3:W2
+
+         mov     [w14], w5   ;save descriptor flags before modifications
+
+         mov     #[shiftr emcan_appid 16], w0 ;compare app ID in frame to our app
+         cp      w3, w0
+         bra     nz, arrp_notus ;not our app ?
+         mov     #[and emcan_appid 16#FFFF], w0
+         cp      w2, w0
+         bra     nz, arrp_notus ;not our app ?
+;
+;   The app ID is for our app.  The high bit of W4 contains the app enabled bit.
+;
+         btss    w4, #15     ;the app is enabled ?
+         jump    appr_usoff  ;no, app is disabled
+         ;
+         ;   Our application is enabled in the device.
+         ;
+         bset    [w14], #bnflg_appack ;we got app info, no need to ask again
+         bset    [w14], #bnflg_appon ;our app is on
+         mov     #0, w0
+         mov.b   w0, [w14+bn_wait] ;done, clear any remaining wait time
+         jump    appr_dmod
+         ;
+         ;   The device implements our application, but it is not turned on.
+         ;   This shouldn't happen because we tell the device to turn on the app
+         ;   right after assigning its address.  Since that is the app it is
+         ;   reporting, it should enable it.
+         ;
+         ;   If we get here, then something went wrong.  We will try again to
+         ;   to enable our app in the device.  This will be done periodically
+         ;   when the APPACK flag is not set.
+         ;
+appr_usoff:
+         bclr    [w14], #bnflg_appack ;indicate no app ACK from device yet
+         bclr    [w14], #bnflg_appon
+         jump    appr_dmod
+;
+;   The app ID is not for our app.  The high bit of W4 contains the app enabled
+;   bit.
+;
+arrp_notus:
+         btss    w4, #15     ;the app is enabled ?
+         jump    appr_otoff  ;no, app is disabled
+         ;
+         ;   The device indicates its application is turned on but that the
+         ;   application is not ours.  This *really* shouldn't happen, and
+         ;   probably indicates a device on the bus that does not implement the
+         ;   EmCan protocol.  There is no good recovery for this, but we will
+         ;   continue to send app enable requests for our app, which should at
+         ;   the least disable any other application.
+         ;
+         bclr    [w14], #bnflg_appack ;indicate no app ACK from device
+         bclr    [w14], #bnflg_appon
+         jump    appr_dmod
+         ;
+         ;   The device does not implement our application, and its application
+         ;   is turned off.  This is the normal result of a EmCan device on the
+         ;   bus, but not for our application.  This is perfectly legal and
+         ;   causes no problem as long as the device keeps its app off.
+         ;
+         ;   This section makes sure this is really the definative answer from
+         ;   the device as a result of us deliberately trying to enable our
+         ;   application.  If the device supports multiple apps including ours
+         ;   and happens to be reporting one of the other applications, then
+         ;   we could still use this device by enabling our application.  We
+         ;   supposedly do this shortly after assigning its node address.  But
+         ;   just in case someone else did a APPROLE inquire and this is the
+         ;   answer before it received our enable frame, we don't want to mark
+         ;   this device as unusable just yet.  We only mark it definitely
+         ;   unusable if this frame is a deliberate ACK, which is what the
+         ;   response to our APPROLE command enabling our application would be.
+         ;
+appr_otoff:
+         mov     canin_id+2, w0 ;get high word of frame ID
+         btsc    w0, #0      ;this frame is ACK response ?
+         jump    appr_offnack ;not ACK to deliberate request
+         ;
+         ;   Is ACK, this device definitely not usable.
+         ;
+         bset    [w14], #bnflg_appack ;we got app info, no need to ask again
+         bclr    [w14], #bnflg_appon ;our app is not on
+         mov     #0, w0
+         mov.b   w0, [w14+bn_wait] ;done, clear any remaining wait time
+         jump    appr_dmod
+         ;
+         ;   Is not ACK, ignore this for now.
+         ;
+appr_offnack:
+         bclr    [w14], #bnflg_appack ;keep trying to enable our app
+         bclr    [w14], #bnflg_appon
+;
+;   Done modifying the descriptor state according to this received frame.  If
+;   the APPACK flag in the descriptor just became set, then we officially notify
+;   the application of this new node.  The snapshot of the flag bits before
+;   modification as a result of this frame is in W5.
+;
+appr_dmod:
+/if [<> emcan_assign ""] then ;app routine exists to notify of new node ?
+         btsc    w5, #bnflg_appack ;didn't have definative app answer before ?
+         jump    appr_dnot
+         btss    [w14], #bnflg_appack ;have definative answer now ?
+         jump    appr_dnot
+
+         mov.b   [w14+bn_adr], w0 ;pass the node address in W0
+         ze      w0, w0
+         add     w14, #bn_id, w1 ;pass W1 pointing to node's 7 bit unique ID
+         gcall   [chars emcan_assign] ;notify app of the new bus node
+  /endif
+appr_dnot:                   ;done notifying app about new bus node
+
+         jump    emh_app     ;pass the frame on to the app
+
+;*******************************************************************************
+;
+;   Frame STROUT
+;
+;   The STROUT command implements a byte stream from the host to the device.
+;   Since we are the host, we are initiating the stream connection and sending
+;   the data.  All we should receive are ACK or NACK responses.
+;
+;   The node address is in W1.
+;
+ecmd_strout:
+         mov     canin_id+2, w0 ;get high word of ID
+         btsc    w0, #0      ;this is ACK or NACK ?
+         return              ;no, ignore it
+
+         mov     canin_ndat, w0 ;get number of data bytes
+         cp0     w0
+         skip_z              ;no data bytes ?
+         return              ;frame has data bytes, is invalid
+
+         mov     w1, w0      ;pass node address
+         mcall   find_node   ;point W14 to the descriptor for this node
+         cp0     w14
+         skip_nz             ;found descriptor for this node ?
+         return              ;no, ignore this frame
+         btss    [w14], #bnflg_appack ;app enable/disable has been resolved ?
+         return              ;no, not ready for STROUT issues yet
+
+         mov     canin_id+0, w0 ;get low word of frame ID
+         lsr     w0, #8, w1  ;get sequence number in low 4 bits
+         mov.b   [w14+bn_sendseq], w2 ;get the expected sequence number
+         xor     w1, w2, w1  ;compare the two sequence numbers
+         and     #15, w1     ;mask in only the sequence number bits
+         skip_eq             ;this frame has the expected sequence number ?
+         return              ;no, ignore it
+
+         btsc    [w14], #bnflg_sendkn ;stream open/closed not resolved yet ?
+         jump    stro_ocl    ;has been resolved
+;
+;   This node is still in the phase where we are trying to establish the stream
+;   connection.  We don't send data bytes with the stream open request, so the
+;   only responses of interest here is whether the device supports the stream
+;   or not.  This frame is therefore either a ACK or NACK and must have sequence
+;   number 0.
+;
+         btsc    w0, #13     ;first frame of sequence ?
+         return              ;no, ignore this frame
+
+         bset    [w14], #bnflg_sendkn ;output stream open/close is now known
+         mov     #0, w1
+         mov.b   w1, [w14+bn_wait] ;clear any partial wait time left
+         bclr    [w14], #bnflg_sent ;there is no pending sent data frame
+
+         btss    w0, #14     ;NACK ?
+         jump    stro_ack    ;ACK
+         ;
+         ;   Delibrate NACK received.  This means the node does not implement
+         ;   this byte stream.
+         ;
+         bclr    [w14], #bnflg_send ;output stream is not open
+         return
+         ;
+         ;   ACK received.  The node implements this byte stream.  W0 contains
+         ;   the low word of the frame ID.
+         ;
+stro_ack:
+         bset    [w14], #bnflg_send ;init to output stream is open
+         bclr    [w14], #bnflg_sendlock ;init to output stream not locked
+         mov     #1, w1      ;init sequence number for first data frame
+         mov.b   w1, [w14+bn_sendseq]
+         mov     #0, w1
+         mov.b   w1, [w14+bn_sendp] ;reset the STROUT FIFO to empty
+         mov.b   w1, [w14+bn_sendg]
+
+         btsc    w0, #12     ;last frame of sequence ?
+         return              ;not last frame, done processing this frame
+         ;
+         ;   The not-last bit is cleared, meaning the node is indicating this is
+         ;   the last frame of the sequence.  This means that although it has
+         ;   ACKed the stream open request, which means it implements the STROUT
+         ;   stream, it is also closing the stream now.  This doesn't make much
+         ;   sense and really shouldn't happen, but we go back into the mode of
+         ;   trying to open the stream.
+         ;
+stro_close:                  ;jump here when the stream was closed by the node
+         bclr    [w14], #bnflg_sendkn ;indicate stream open not resolved yet
+         bclr    [w14], #bnflg_send ;indicate the stream is not open now
+         bclr    [w14], #bnflg_sendlock ;clear any lock on the stream
+         mov     #ntkopen, w1 ;reset to max time before next open attempt
+         mov.b   w1, [w14+bn_wait]
+         return
+;
+;   The open/close state of the stream was previously resolved and the SEND flag
+;   indicates the result.  That means the only valid STROUT frames we can
+;   receive are ACKs or NACKs for data frames we sent.
+;
+stro_ocl:
+         btss    [w14], #bnflg_send ;the STROUT stream is open ?
+         return              ;no, this frame has no meaning
+         btss    [w14], #bnflg_sent ;we sent data frame, waiting on ACK ?
+         return              ;no, ignore this frame
+         btsc    [w14], #14  ;normal ACK to our data frame ?
+         jump    stro_dnack  ;NACK to our data frame
+         ;
+         ;   This is a normal ACK to the last data frame we sent.
+         ;
+         bclr    [w14], #bnflg_sent ;indicate last data frame no longer pending
+
+         mov     #0, w1      ;reset timeout, may send next frame immediately
+         mov.b   w1, [w14+bn_wait]
+
+         mov.b   [w14+bn_sendseq], w1 ;advance to the next sequence number
+         add     #1, w1
+         and     #15, w1
+         mov.b   w1, [w14+bn_sendseq]
+         ;
+         ;   The last chunk of data we sent was properly ACKed by the node.
+         ;   Remove it from the FIFO.  SENTN indicates the number of bytes that
+         ;   were sent in the data frame, and that now must be removed drained
+         ;   from the FIFO.
+         ;
+         mov.b   [w14+bn_sendg], w1 ;get the circular buffer GET index
+         ze      w1, w1
+         mov.b   [w14+bn_sentn], w2 ;get number of bytes that were ACKed
+         ze      w2, w2
+         add     w1, w2, w1  ;make raw new GET index
+         mov     #sendby, w2 ;get allocated size of the buffer
+         cp      w1, w2      ;compare new index to first invalid
+         skip_ltu            ;still within the buffer ?
+         sub     w1, w2, w1  ;no, wrap back one buffer length
+         mov.b   w1, [w14+bn_sendg] ;update GET index to skip over the sent bytes
+
+         mov     canin_id+0, w0 ;get low bits of received frame ID
+         btss    w0, #12     ;node is leaving the connection open ?
+         jump    stro_close  ;node is closing the connection
+         return              ;done processing this frame
+         ;
+         ;   Received deliberate NACK to a data frame.  This is a flow control
+         ;   mechanism.  The node is acknowledging that it received the data,
+         ;   but indicating it can't take more right now.  It could have simply
+         ;   not sent anything, which would cause us to resend the packet with
+         ;   increasing wait times between.  When a node sends a deliberate
+         ;   NACK, it is supposed to follow with a ACK when it is ready to
+         ;   accept more data.  We therefore set our resend timeout to the
+         ;   maximum.  The stream will be restarted immediately when the ACK is
+         ;   received.
+         ;
+stro_dnack:
+         mov     #ntkstmax, w1 ;get max ticks for data resend
+         mov.b   w1, [w14+bn_wait] ;set wait time before next retry
+         mov.b   w1, [w14+bn_sendw] ;set wait time for subsequent retries
+         return              ;done processing this frame
+
+;*******************************************************************************
+;
+;   Frame STRIN
+;
+;   These frames implement a byte stream from the node to the host.  See the
+;   EmCan spec for details.
+;
+;   The node address is in W1.
+;
+ecmd_strin:
+         mov     canin_id+2, w0 ;get high word of frame ID
+         btss    w0, #0      ;not ACK ?
+         return              ;ACK doesn't make sense here, ignore it
+         mov     w1, w0      ;pass the node address
+         mcall   find_node   ;point W14 to the descriptor of the addressed node
+         cp0     w14
+         skip_nz             ;found descriptor for this node ?
+         return              ;no, nothing more can be done
+;
+;   Open or re-open the input stream if this is the first frame of the sequence.
+;   The sequence number in the received frame must be 0 in this case.
+;
+         mov     canin_id+0, w0 ;get low word of received frame ID
+         btsc    w0, #13     ;first frame of sequence ?
+         jump    strin_nopen ;no, skip this section
+
+         mov     canin_id+0, w0 ;get the received sequence number into W0
+         lsr     w0, #8, w0
+         and     #15, w0
+         bra     nz, emcanh_dframe ;sequence number not 0, ignore this frame ?
+
+         mov     #0, w1
+         mov.b   w1, [w14+bn_recvseq] ;init the expected sequence number
+         mov.b   w1, [w14+bn_recvp] ;reset the receive stream buffer to empty
+         mov.b   w1, [w14+bn_recvg]
+         bclr    [w14], #bnflg_recvack ;cancel any pending ACK on buffer available
+         bset    [w14], #bnflg_recvsyn ;next byte will definitely be response opcode
+         bset    [w14], #bnflg_recv ;indicate the receive stream is now open
+         jump    strin_seqok ;skip ahead to sequence number is OK, already checked
+
+strin_nopen:                 ;this frame does not open or re-open the stream
+         btss    [w14], #bnflg_recv ;the receive stream is open ?
+         return              ;no, this frame is meaningless
+;
+;   Check the sequence number.  If it is the expected value, then continue to
+;   process the frame normally.  If it is one before the expected value, then
+;   reply with ACK but otherwise ignore the frame.  The frame is completely
+;   ignored on any other sequence number.
+;
+         mov     canin_id+0, w0 ;get the received sequence number into W0
+         lsr     w0, #8, w0
+         and     #15, w0
+         mov.b   [w14+bn_recvseq], w1 ;get the expected sequence number into W1
+         ze      w1, w1
+         cp      w0, w1
+         bra     z, strin_seqok ;sequence is the expected value, continue ?
+
+         sub     #1, w1      ;make previous sequence number in W1
+         and     #15, w1
+         cp      w0, w1
+         bra     nz, emcanh_dframe ;totally invalid sequence number, ignore frame
+         ;
+         ;   Previous sequence number.
+         ;
+         jump    send_ack    ;send ACK and end processing this frame
+
+strin_seqok:                 ;the sequence number is the expected value
+;
+;   Save any data bytes in this frame.  Set the RECVSYN flag if this is a sync
+;   frame, which is indicated by having 0 data bytes.
+;
+         mov     canin_ndat, w3 ;get number of data bytes
+         cp0     w3
+         bra     nz, strin_nzbytes ;this frame has data bytes ?
+/if debug then
+         nop                 ;for debugger breakpoint
+         nop
+  /endif
+         bset    [w14], #bnflg_recvsyn ;is a sync frame, next byte is opcode
+         jump    strin_ddata ;done handling data bytes
+strin_nzbytes:               ;number of data bytes in W3, which is at least 1
+/if debug then
+         nop                 ;for debugger breakpoint
+         nop
+  /endif
+
+         mov     #bn_recvp, w1 ;point W1 to start of buffer structure
+         add     w1, w14, w1
+         mov     #recvby, w2 ;pass the allocated size of the buffer
+         mov     #canin_dat, w4 ;init pointer to where to get next byte
+strin_byte:                  ;back here to do each new data byte
+         mov.b   [w4++], w0  ;get this data byte from the CAN frame
+         mcall   buf_put     ;write the byte into the buffer
+         sub     #1, w3      ;count one less byte left to do
+         bra     nz, strin_byte ;back to do next byte
+
+strin_ddata:                 ;done handling data bytes, if any
+;
+;   Close the stream if this is the last frame of the sequence.
+;
+         mov     canin_id+0, w0 ;get low word of received frame ID
+         btsc    w0, #12     ;this is last frame in the sequence ?
+         jump    strin_dclose ;no, skip this section
+
+         bclr    [w14], #bnflg_recv ;indicate the receive stream is closed
+         bclr    [w14], #bnflg_recvack ;no point sending ACK when buffer empties
+
+strin_dclose:                ;done closing the stream if requested
+;
+;   Update our state to the next sequence number.
+;
+         mov.b   [w14+bn_recvseq], w0 ;get the current sequence number
+         add     #1, w0      ;make the next one
+         and     #15, w0
+         mov.b   w0, [w14+bn_recvseq] ;write new sequence number into descriptor
+;
+;   Check the room in the receive buffer.  Send ACK now if there is room for
+;   another full frame (8 bytes).  Otherwise, set the RECVACK flag so that the
+;   ACK will get sent later when the buffer drains so that a minimum of 8 bytes
+;   are free.
+;
+         bclr    [w14], #bnflg_recvack ;init to not send ACK later
+
+         mov     #bn_recvp, w1 ;point W1 to start of receive buffer structure
+         add     w1, w14, w1
+         mov     #recvby, w2 ;pass allocated size of the buffer
+         mcall   buf_room    ;get remaining room in buffer into W0
+         cp      w0, #8      ;compare to min required room to send ACK
+         bra     geu, send_ack ;enough room, send ACK now ?
+
+         bset    [w14], #bnflg_recvack ;flag to send ACK when buffer drains
+         return
+
+;*******************************************************************************
+;
+;   Macro CANCMD opc, adr
+;
+;   Creates one entry in a command dispatch table.  OPC is the opcode for this
+;   entry and ADR is the address of the routine to run to process a frame with
+;   that opcode.
+;
+;   Each table entry is 2 instruction words (4 addresses) long.  The low 16 bits
+;   of the first instruction word contains the opcode the table entry matches.
+;   The high 8 bits of the first instruction word are unused and should be set
+;   to 0 for now.  The second instruction word contains the address of the
+;   routine to run to process a CAN frame of the indicated opcode and the
+;   conditions defined for that table.  The end of table is indicated by the
+;   bit 15 of the opcode word being 1.
+;
+;   If the end of the table is encountered, then no specific entry exists for
+;   that opcode.  In that case, the frame is discarded if the low bit of the
+;   opcode word is 0, and passed to the application when it is 1.
+;
+.macro cancmd, opc, adr
+         .pword  \opc
+         .pword  \adr
+  .endm
+
+;*******************************************************************************
+;
+;   Macro TBL_END
+;
+;   Indicates the end of a opcodes dispatch table.  The received CAN frame will
+;   be discarded if no specific entry exists for the opcode.
+;
+.macro tbl_end
+         .pword  0x8000
+  .endm
+
+;*******************************************************************************
+;
+;   Macro TBL_END_APP
+;
+;   Indicates the end of a opcodes dispatch table.  The received CAN frame will
+;   be passed to the application if no specific entry exists for the opcode.
+;
+.macro tbl_end_app
+         .pword  0x8001
+  .endm
+
+;*******************************************************************************
+;
+;   Dispatch tables for commands that are reserved for use by EmCan.
+;
+
+;*******************
+;
+;   Bus control commands.  These are standard (11 bit ID) data frames with the
+;   node address set to 0.  The opcode is the high 4 bits of the ID, so can be
+;   0 to 15.
+;
+tbl_bus:
+         cancmd  0, ecmd_multierr ;global bus reset, multi-host error
+         cancmd  8, ecmd_multierr ;address assignment, multi-host error
+         cancmd  13, ecmd_adrelease ;node is releasing its assigned address
+         cancmd  14, ecmd_adrreq ;node is requesting address renewal
+         cancmd  15, ecmd_adrreq ;node is requesting address assignement from reset
+         tbl_end
+;
+;   Remote requests for the above.
+;
+tbl_busrtr:
+         tbl_end
+
+;*******************
+;
+;   Node-specific extended (29 bit ID) data frames.  The last 32 opcodes (992 -
+;   1023) are reserved for EmCan.  These tables are only used for the reserved
+;   EmCan opcodes.
+;
+tbl_ext_e:
+         cancmd  1009, ecmd_approle ;node is reporting its app ID and role
+         cancmd  1022, ecmd_strout ;STROUT, byte stream from host to device
+         cancmd  1023, ecmd_strin ;STRIN, byte stream from device to host
+         tbl_end_app
+;
+;   Remote request frames for the above.
+;
+tbl_extrtr_e:
+         tbl_end_app

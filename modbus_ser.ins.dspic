@@ -1,0 +1,644 @@
+;   ***************************************************************
+;   * Copyright (C) 2015, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   ModBus packet sending and receiving code when the underlying transport is
+;   via UART.  This library file is intended to be included from the MODBUS
+;   module, which sets various preprocessor constants selecting configuration
+;   choices.  The UART interface as presented by UART_MODBUS.INS.DSPIC is
+;   assumed.  The normal UART driver, UART.INS.DSPIC, is not compatible with
+;   this module.
+;
+;*******************************************************************************
+;
+;   Constants.
+;
+/const   maxbytes integer = 256 ;maximum possible bytes in complete modbus packet
+/const   stacksz integer = 128 ;internal task stack size, bytes
+;
+;   Derived constants.
+;
+/if [= name ""]
+  /then                      ;no unique name for the subroutines
+    /const uname string = ""
+  /else                      ;subroutine names will be customized
+    /const uname string = [str "_" name]
+  /endif
+
+/if [not [exist "master"]] then
+  /const master bool = false
+  /endif
+/const   slave   bool = [not master]
+
+/if [not [exist "callback_recv"]] then
+  /const callback_recv string = ""
+  /endif
+
+/if [not [exist "callback_recvus"]] then
+  /const callback_recvus string = ""
+  /endif
+
+/if [not [exist "callback_send"]] then
+  /const callback_send string = ""
+  /endif
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_modbus[chars uname], bss
+
+;*******************
+;
+;   Local state.
+;
+/if slave then
+alloc    slaveadr            ;1-247 slave address, 0 for not assigned
+  /endif
+
+alloc    stack_modbus, [v stacksz], 2 ;Modbus reception task stack
+alloc    buf1,   [v maxbytes], 1 ;packet reception double buffers
+alloc    buf2,   [v maxbytes], 1
+alloc    len1                ;number of bytes in BUF1
+alloc    len2                ;number of bytes in BUF2
+         ;
+         ;   Statistic counters.
+         ;
+         ;   These must be 32 bits each, consecutive in memory, and in the order
+         ;   documented for MODBUS_STATS.
+         ;
+stats:
+alloc    recv_total, 4       ;total received packets
+alloc    recv_broadcast, 4   ;broadcast packets received (slave only)
+alloc    recv_mine, 4        ;packets received for this address (slave only)
+alloc    err_crc, 4          ;packets rejected due to CRC error
+alloc    err_parity, 4       ;number of bytes received with parity error
+alloc    err_short, 4        ;too few bytes in packet to be valid
+alloc    err_long, 4         ;too many bytes in packet
+alloc    err_other, 4        ;framing errors, overruns, etc
+alloc    send_total, 4       ;number of packets sent
+after_stats:
+;
+;   Local variables in near memory.
+;
+.section .near_modbus[chars uname], bss, near
+
+alloc    activity            ;mask of events that ocurred, use MODBUS_EV_xxx constants
+
+alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_fill2, 0        ;filling BUF2, not BUF1
+.equiv   flg_pack1, 1        ;BUF1 contains a validated packet
+.equiv   flg_pack2, 2        ;BUF2 contains a validated packet
+.equiv   flg_app2, 3         ;BUF2 is next buffer with packet for app
+
+
+.section .code_modbus[chars uname], code
+;*******************************************************************************
+;
+;   Subroutine MODBUS_INIT
+;
+;   Initialize the state managed by this module.
+;
+         glbsub  modbus[chars uname]_init, regf0
+
+/if slave then
+         mov     #0, w0
+         mov     w0, slaveadr ;init to slave address not assigned yet
+  /endif
+
+         clr     flags       ;init all flags to off
+         clr     activity    ;init to no activity detected
+         mcall   modbus[chars uname]_stats_clear ;init stat counters to 0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_STATS_CLEAR
+;
+;   Reset all the statistics counters to 0.
+;
+         glbsub  modbus[chars uname]_stats_clear, regf0 | regf1
+
+         mov     #after_stats - stats, w0 ;init number of bytes left to clear
+         mov     #stats, w1  ;init pointer to first byte to clear
+clr_byte:                    ;back here to clear each new byte
+         clr.b   [w1++]      ;clear this byte, advance pointer to next
+         sub     #1, w0      ;count one less byte left to clear
+         bra     nz, clr_byte ;back to clear next byte
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_ADR_SET
+;
+;   Set our Modbus slave address.  The slave address is passed in W0.  Valid
+;   slave addresses are 1-247.  The special value of 0 indicates that the slave
+;   address is not assigned.  In that case only broadcast packets will be
+;   received, and application requests to send packets will be ignored.
+;
+/if slave then
+         glbsub  modbus[chars uname]_adr_set, regf0 | regf1
+
+         mov     #247, w1    ;get max allowed Modbus slave address
+         cp      w0, w1      ;compare address from caller to the limit
+         skip_leu            ;within range ?
+         mov     #0, w0      ;no, set to 0 instead
+         mov     w0, slaveadr ;set out slave address
+
+         leaverest
+  /endif
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro INC_STAT name
+//
+//   Increment the named statistic counter by 1.  The 32 bit variable at NAME
+//   will be incremented by 1 while preserving all registers.
+//
+/macro inc_stat
+         push    w0          ;temp save register that will be trashed
+         mov     [arg 1]+0, w0
+         add     #1, w0      ;increment low word
+         mov     w0, [arg 1]+0
+         mov     [arg 1]+2, w0
+         addc    #0, w0      ;propagate carry to high word
+         mov     w0, [arg 1]+2
+         pop     w0          ;restore trashed register
+  /endmac
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_START
+;
+;   Start the modbus packet reception task.
+;
+         glbsub  modbus[chars uname]_start, regf13 | regf14
+
+         mov     #[v stacksz], w13 ;pass size of data stack
+         mov     #stack_modbus, w14 ;pass start address of data stack
+         call    task_new    ;create Modbus packet reception task
+         goto    modbus_task ;start point of the new task
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local routine MODBUS_TASK
+;
+;   This routine is run in its own task.  It reads bytes from the Modbus, then
+;   determines and validates whole packets.
+;
+modbus_task:                 ;task start point
+;
+;   Wait for a packet break in the received byte stream.
+;
+tsk_watbrk:
+         gcall   uart[chars uname]_get ;get byte and flags into W0
+         btss    w0, #[v umodbus_rx_pack] ;packet gap detected ?
+         jump    tsk_watbrk  ;no, go back and try again
+;
+;   Back here after reading a complete packet.
+;
+tsk_nextpack:
+;
+;   Wait for the buffer we are supposed to fill to be available.
+;
+tsk_watbuf:
+         btsc    flags, #flg_fill2 ;fill buffer 1 next ?
+         jump    tsk_fill2   ;no, go fill buffer 2
+         ;
+         ;   Fill buffer 1.
+         ;
+tsk_fill1:
+         gcall   task_yield  ;give other tasks a chance to run
+         btsc    flags, #flg_pack1 ;the buffer is empty ?
+         jump    tsk_fill1   ;no, go back and check again
+         mov     #buf1, w1   ;set pointer to start of buffer
+         mov     #len1, w5   ;set pointer to LEN variable for this buffer
+         jump    tsk_havebuf
+         ;
+         ;   Fill buffer 2.
+         ;
+tsk_fill2:
+         gcall   task_yield  ;give other tasks a chance to run
+         btsc    flags, #flg_pack2 ;the buffer is empty ?
+         jump    tsk_fill2   ;no, go back and check again
+         mov     #buf2, w1   ;set pointer to start of buffer
+         mov     #len2, w5   ;set pointer to LEN variable for this buffer
+
+tsk_havebuf:                 ;W1 is pointing to the buffer to read into
+;
+;   Read bytes into the buffer.  Register usage in this section:
+;
+;     W0  -  Data byte and flags.
+;
+;     W1  -  Pointer to start of buffer.
+;
+;     W2  -  Number of bytes in buffer.
+;
+;     W3  -  Pointer to current byte in buffer.
+;
+;     W4  -  Scratch.
+;
+;     W5  -  Pointer to LEN variable for the selected buffer.
+;
+         mov     #0, w2      ;init to no bytes in the buffer
+         mov     w1, w3      ;init pointer to where to write next byte
+
+tsk_fill:                    ;back here to read each new byte into buffer
+         gcall   uart[chars uname]_get ;get next byte and flags
+         ;
+         ;   Check for end of packet.
+         ;
+         btsc    w0, #[v umodbus_rx_pack]
+         jump    tsk_dfill   ;encountered end of packet gap
+         ;
+         ;   Check for hard error.
+         ;
+         btss    w0, #[v umodbus_rx_err] ;hard error ?
+         jump    tsk_nherr   ;no
+         inc_stat err_other  ;count one more error
+         jump    tsk_watbrk  ;back to wait for next packet
+tsk_nherr:
+         ;
+         ;   Check for parity error.
+         ;
+         btss    w0, #[v umodbus_rx_perr] ;parity error ?
+         jump    tsk_nperr   ;no
+         inc_stat err_parity ;count one more error
+         jump    tsk_watbrk  ;back to wait for next packet
+tsk_nperr:
+         ;
+         ;   Check for buffer overflow.
+         ;
+         mov     #[v maxbytes], w4 ;get max bytes the buffer can hold
+         cp      w2, w4      ;compare bytes in buffer to max
+         bra     ltu, tsk_novfl ;not buffer overflow ?
+         inc_stat err_long   ;count one more error
+         jump    tsk_watbrk  ;back to wait for next packet
+tsk_novfl:
+         ;
+         ;   No errors.  Save this byte in the buffer.
+         ;
+         bset    activity, #modbus_ev_rbyte ;packet byte received event
+
+         mov.b   w0, [w3++]  ;write byte into buffer, advance pointer
+         add     #1, w2      ;count one more byte in buffer
+         jump    tsk_fill    ;back to get next byte
+
+tsk_dfill:                   ;end of packet gap encountered, done reading packet
+;
+;   Check that the packet is long enough to be valid.
+;
+         cp      w2, #4      ;compare length to min required
+         bra     geu, tsk_nshort ;this is not a short packet ?
+         inc_stat err_short  ;count one more error
+         jump    tsk_nextpack ;back to read next packet
+
+tsk_nshort:
+;
+;   Check the checksum.  Register usage in this section is:
+;
+;     W0  -  CRC checksum.
+;
+;     W1  -  Pointer to start of buffer.
+;
+;     W2  -  Number of bytes in buffer.
+;
+;     W3  -  Pointer to current byte in buffer.
+;
+;     W4  -  CRC from packet.
+;
+;     W5  -  Pointer to LEN variable for the selected buffer.
+;
+;     W6  -  Scratch.
+;
+         sub     w2, #2, w2  ;make number of bytes to compute CRC over
+         gcall   modbus_crc_init ;init CRC accumulator in W0
+         gcall   modbus_crc_buf ;compute CRC on buffer at W1, W2 number of bytes
+
+         add     w1, w2, w3  ;point W3 to first CRC byte
+         ze      [w3++], w4  ;init packet CRC low byte
+         mov.b   [w3], w6    ;get packet CRC high byte
+         sl      w6, #8, w6  ;move it into place
+         ior     w4, w6, w4  ;assemble the packet CRC in W4
+
+         cp      w4, w0      ;compare received and computed checksums
+         bra     z, tsk_crcok ;the checksums match ?
+         inc_stat err_crc    ;count one more error
+         jump    tsk_nextpack ;back to read next packet
+
+tsk_crcok:                   ;CRC checksum is valid
+         mov     w2, [w5]    ;save number of bytes in this buffer
+         inc_stat recv_total ;count one more valid packet received
+;
+;   A valid packet has been received.  Current register contents:
+;
+;     W0  -
+;
+;     W1  -  Pointer to start of buffer.
+;
+;     W2  -  Number of packet bytes, CRC not included.
+;
+         bset    activity, #modbus_ev_rpack ;packet received event
+;
+;   Call app routine to notify of valid packet received.
+;
+/if [<> callback_recv ""] then
+         push    w1          ;save registers before trashed by app routine
+         push    w2
+         gcall   [chars callback_recv] ;call app routine to notify of packet
+         pop     w2          ;restore registers trashed by app routine
+         pop     w1
+  /endif
+;
+;   Discard this packet if we are a slave and the packet is not addressed to us
+;   or not a broadcast packet (addressed to 0).
+;
+/if slave then
+         ze      [w1], w0    ;get packet address into W0
+
+         cp0     w0          ;compare to special broadcast address
+         bra     nz, tsk_nbcast ;not a broadcast packet
+         inc_stat recv_broadcast ;count one more broadcast packet received
+         jump    tsk_forus   ;this packet is for us
+tsk_nbcast:
+
+         mov     slaveadr, w3
+         cp      w0, w3      ;compare packet address to our slave address
+         bra     nz, tsk_nextpack ;not for us, ignore this packet
+         inc_stat recv_mine  ;count one more unicast packet for us
+
+tsk_forus:                   ;this packet is for us
+  /endif
+
+         bset    activity, #modbus_ev_rpackus ;packet for us event
+;
+;   Call app routine to notify of valid packet received that is addressed to us.
+;
+/if [<> callback_recvus ""] then
+         gcall   [chars callback_recvus] ;call app routine to notify of packet
+  /endif
+;
+;   Set up the state for this fully received packet so that app routines can
+;   receive it.
+;
+         btss    flags, #flg_fill2
+         bset    flags, #flg_pack1 ;we just filled buffer 1
+         btsc    flags, #flg_fill2
+         bset    flags, #flg_pack2 ;we just filled buffer 2
+
+         btg     flags, #flg_fill2 ;flip to fill other buffer next time
+         jump    tsk_nextpack ;back to get next packet
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_PACK_GET
+;
+;   Get the next packet received from the Modbus.  If we are the bus master,
+;   then all packets will be returned.  If we are a slave, then only broadcast
+;   packets or packets to our address will be returned.  When our slave address
+;   is set to the special value of 0, only broadcast packets will be returned.
+;
+;   W1 will be returned pointing to the start of the packet, and W2 the number
+;   of bytes in the packet.  This packet will be a Modbus PDU, which is
+;   independent of the physical transport.
+;
+;   The code in this module is specific to Modbus over serial.  Modbus serial
+;   packets add a address byte and a 16 bit CRC checksum to the basic Modbus
+;   PDU.  The address is returned in W3, and packets with invalid checksums are
+;   silently discarded and not returned by this routine.
+;
+;   This routine will wait for a packet to be available or for the number of
+;   millisecond ticks in W0 to occur.  When the timeout is reached before a
+;   packet is available, both W1 and W2 are returned 0.
+;
+;   Subroutine MODBUS_PACK_RELEASE must be called when done with the new
+;   received packet.  Results are undefined if MODBUS_PACK_GET is called before
+;   the packet received from a previous call to MODBUS_PACK_GET is released.
+;
+         glbsub  modbus[chars uname]_pack_get, regf0
+
+         mov     tick1ms, w1 ;init clock value up to date with
+;
+;   Return with packet if one is available.
+;
+pget_check:                  ;back here to check for packet again
+         btsc    flags, #flg_app2 ;packet will be in buffer 1 ?
+         jump    pget_buf2   ;no, will be in buffer 2
+         ;
+         ;   The packet will be in buffer 1.
+         ;
+         btss    flags, #flg_pack1 ;a packet is available ?
+         jump    pget_nopack ;no
+         mov     #buf1, w1   ;return pointer to start of packet
+         mov     len1, w2    ;return number of bytes in the packet
+         jump    pget_pack
+         ;
+         ;   The packet will be in buffer 2.
+         ;
+pget_buf2:
+         btss    flags, #flg_pack2 ;a packet is available ?
+         jump    pget_nopack ;no
+         mov     #buf2, w1   ;return pointer to start of packet
+         mov     len2, w2    ;return number of bytes in the packet
+
+pget_pack:                   ;packet is available, W1 and W2 set
+         ze      [w1++], w3  ;get adr in W3, advance pointer to first data byte
+         sub     #1, w2      ;address byte doesn't count as packet data byte
+         jump    pget_leave
+
+pget_nopack:                 ;a packet is not immediately available
+;
+;   Update the timeout state and return with timeout if elapsed.
+;
+pget_tick:                   ;back here each new clock tick
+         cp0     w0
+         bra     nz, pget_ntout ;max wait time not elapsed yet ?
+         mov     #0, w1      ;indicate timed out, not returning with packet
+         mov     #0, w2
+         jump    pget_leave
+pget_ntout:                  ;not timed out yet
+
+         mov     tick1ms, w2 ;get current clock tick counter
+         cp      w1, w2      ;compare to clock value up to date with
+         bra     z, pget_wait ;no new tick, wait a little while
+         add     #1, w1      ;update clock value now current with
+         sub     #1, w0      ;count one less tick until timeout
+         jump    pget_tick   ;no, go back to check for another tick
+;
+;   Wait a little while and check everything again.
+;
+pget_wait:                   ;wait a little while
+         gcall   task_yield_save ;let all other tasks run
+         jump    pget_check  ;go back and check state again
+
+pget_leave:                  ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_PACK_RELEASE
+;
+;   This routine just be called when done with a packet received via
+;   MODBUS_PACK_GET.  This releases internal state that can be re-used for
+;   receiving another Modbus packet.
+;
+;   This routine must be called once for each call to MODBUS_PACK_GET.  Results
+;   are undefined when this routine is called without a packet outstanding, or
+;   when MODBUS_PACK_GET is called without the previous packet having been
+;   released.
+;
+         glbsub  modbus[chars uname]_pack_release
+
+         btsc    flags, #flg_app2 ;packet is in buffer 1 ?
+         jump    prel_buf2   ;is in buffer 2
+;
+;   The packet is in buffer 1.
+;
+         bclr    flags, #flg_pack1 ;buffer is no longer in use
+         bset    flags, #flg_app2 ;flip which buffer next app packet will be in
+         jump    prel_leave
+;
+;   The packet is in buffer 2.
+;
+prel_buf2:
+         bclr    flags, #flg_pack2 ;buffer is no longer in use
+         bclr    flags, #flg_app2 ;flip which buffer next app packet will be in
+
+prel_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_PACK_PUT
+;
+;   Send a packet onto the Modbus.  The packet data bytes start at where W1 is
+;   pointing, and W2 contains the number of bytes.  These bytes do not include
+;   the address or the checksum.  W2 must be 1-253.  The request to send the
+;   packet is ignored if W2 is outside this range.
+;
+;   The checksum is computed by this routine and automatically added to the end
+;   of the packet.
+;
+;   If this device is a Modbus slave, then the slave address is automatically
+;   used as the packet address.  The slave address must be set (not 0 to
+;   indicate not set) or the request to send this packet will be ignored.
+;
+;   If this device is a Modbus master, then the packet address is passed in W0.
+;
+         glbsub  modbus[chars uname]_pack_put, regf0 | regf1 | regf2 | regf3 | regf4
+;
+;   Range check the number of bytes.  W2 must be 1 to 253 else this is not a
+;   valid Modbus packet, and the request to send it will be ignored.
+;
+         cp0     w2
+         bra     z, pput_leave ;0 data bytes ?
+         mov     #253, w3    ;get max allowed value
+         cp      w2, w3
+         bra     gtu, pput_leave ;too many data bytes ?
+;
+;   Get the packet address into W3.
+;
+/if master then
+         mov     w0, w3      ;save packet address in W3
+  /endif
+
+/if slave then
+         mov     slaveadr, w3 ;get our slave address
+         cp0     w3
+         bra     z, pput_leave ;slave address not assigned, don't send packet
+  /endif
+;
+;   Call the callback routine to notify of this packet being sent.
+;
+/if [<> callback_send ""] then
+         gcall   [chars callback_send] ;W1 buf pointer, W2 num of bytes, W3 adr
+  /endif
+;
+;   Register usage:
+;
+;     W0  -  Scratch.
+;
+;     W1  -  Pointer to first packet payload byte.
+;
+;     W2  -  1-253 number of packet payload bytes.
+;
+;     W3  -  Modbus address to send in packet.
+;
+;     W4  -  Will contain CRC checksum.
+;
+;   Compute the CRC checksum and save it in W4.
+;
+         gcall   modbus_crc_init ;init CRC accumulator in W0
+
+         push    w1          ;temp save W1
+         mov     w3, w1      ;get the packet address into W1
+         gcall   modbus_crc_byte ;add packet address byte into CRC checksum
+         pop     w1          ;restore W1
+
+         gcall   modbus_crc_buf ;add bytes in buffer to the CRC checksum
+         mov     w0, w4      ;save the checksum in W4
+;
+;   Send the packet.
+;
+         gcall   task_yield_save ;give other tasks a chance to run
+         gcall   uart[chars uname]_wait_send ;ensure gap before first packet byte
+         mov     w3, w0      ;send the address byte
+         gcall   uart[chars uname]_put
+         bset    activity, #modbus_ev_sbyte ;packet byte sent event
+
+pput_byte:                   ;back here each new data byte
+         mov.b   [w1++], w0  ;get this data byte from the caller's buffer
+         gcall   uart[chars uname]_put ;send it
+         bset    activity, #modbus_ev_sbyte ;packet byte sent event
+         sub     #1, w2      ;count one less byte left to do
+         bra     nz, pput_byte ;back to send next packet payload byte
+
+         mov     w4, w0      ;send CRC low byte
+         gcall   uart[chars uname]_put
+         bset    activity, #modbus_ev_sbyte ;packet byte sent event
+         lsr     w4, #8, w0  ;send CRC high byte
+         gcall   uart[chars uname]_put
+         bset    activity, #modbus_ev_sbyte ;packet byte sent event
+         bset    activity, #modbus_ev_spack ;whole packet sent event
+
+pput_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_ACTIVITY
+;
+;   Returns a mask of bits in W0 indicating the activity that was detected since
+;   the previous call to this routine.  Use the constants MODBUS_EV_xxx for the
+;   0-N bit numbers for individual events.
+;
+         glbsub  modbus[chars uname]_activity
+
+         com     activity, wreg ;get mask of bits to clear into W0
+         and     activity    ;clear all the events returning as ocurred
+         com     w0, w0      ;make mask of events that ocurred since last time
+
+         leaverest

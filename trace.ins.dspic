@@ -1,0 +1,435 @@
+;   ***************************************************************
+;   * Copyright (C) 2015, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   This file contains the canned part of the generic TRACE module.  See the
+;   header comments in the QQQ_TRACE.DSPIC file for a description of the trace
+;   facility.
+;
+
+;*******************************************************************************
+;
+;   Derived constants.
+;
+/var new ii integer          ;scratch integer
+/if [< bufwords words_samp] then ;can't even fit one max size sample ?
+  /show "  ERROR: Trace buffer too small for one max size sample"
+         .error  "Trace buffer size"
+  /stop
+  /endif
+
+;*******************************************************************************
+;
+;   Variables.
+;
+.section .ram_trace, bss
+
+alloc    src_pnt_list, 0     ;start address of pointers to source words
+/set ii 0
+/block                       ;make individually named source pointers
+  /if [>= ii words_samp] then
+    /quit
+    /endif
+alloc    src_pnt[v ii]
+  /set ii [+ ii 1]
+  /repeat
+  /endblock
+alloc    nsrc                ;number of words per sample
+alloc    nsamp               ;number of whole samples that fit in trace buffer
+alloc    trigpos             ;trigger position in samples from start
+alloc    nleft               ;number of samples left to take after trigger
+alloc    putadr              ;index into trace buffer where to write next word
+
+.section .ram_trace_buf, bss ;trace buffer in its own section for max flexibility
+
+alloc    tracebuf, [* bufwords 2], 2 ;the trace buffer
+alloc    afterbuf, 0         ;first address past the end of the buffer
+
+/if debug then
+  /set ii 0
+  /block                     ;declare individual pointers global
+    /if [>= ii words_samp] then
+      /quit
+      /endif
+         .global src_pnt[v ii]
+    /set ii [+ ii 1]
+    /repeat
+    /endblock
+         .global nsrc, nsamp, trigpos, nleft, putadr
+         .global tracebuf, afterbuf
+  /endif
+
+
+.section .code_trace, code
+;*******************************************************************************
+;
+;   Subroutine TRACE_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  trace_init, regf0 | regf1
+
+         mov     #0, w0
+         mov     w0, nsrc    ;init to not configured for any data words in sample
+;
+;   Init the trace buffer to all zeros.
+;
+         mov     #tracebuf, w0 ;init pointer to next trace buffer word to clear
+         mov     #afterbuf, w1 ;get address of first word past buffer
+tin_loop:                    ;back here to clear each new word
+         cp      w0, w1      ;compare word adr to first word after buffer
+         bra     geu, tin_done ;all done ?
+         clr     [w0++]      ;clear this word, advance pointer to next
+         jump    tin_loop    ;back to do next word
+tin_done:                    ;done clearing trace buffer
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TRACE_NWORDS
+;
+;   Set the number of 16 bit words per sample.  The number is passed in W0.
+;
+;   This routine resets the trace state.  Any triggered condition is reset, the
+;   pointers to the words to sample are reset to invalid, and the trigger
+;   position is reset to its default value.
+;
+         glbsub  trace_nwords, regf0 | regf1 | regf2
+;
+;   Clip the number of words/sample to the valid range and save it in NSRC.  If
+;   the number of words is 0, there is nothing further to do since no data will
+;   be logged.
+;
+         mov     #[v words_samp], w1 ;get max allowed words/sample
+         cp      w0, w1      ;compare requested number to the limit
+         bra     leu, tnw_lim ;within limit ?
+         mov     w1, w0      ;no, set to the limit
+tnw_lim:                     ;W0 contains clipped number of words/sample
+         mov     w0, nsrc    ;save number of words per sample
+         cp0     w0          ;check for zero words/sample
+         bra     z, twn_leave ;0 words/sample, nothing more to do
+;
+;   Init the pointer to the data word source locations to 0.  That is used as a
+;   flag to indicate no data is available from that source, in which case 0 will
+;   be logged instead.  0 is actually the address of the W0 register mapped into
+;   the data address space.  It is invalid since W0 and other W registers are
+;   used by the sample logging routine and therefore don't contain any valid
+;   system data at the time the sample is taken.
+;
+;   W0 contains the number of words per sample, which is guaranteed to be in the
+;   range of 1 to WORDS_SAMP.
+;
+         mov     #src_pnt_list, w1 ;point to start of source pointers list
+twn_clrpnt:                  ;back here to clear each new data word source pointer
+         clr     [w1++]      ;clear this pointer, advance to next
+         sub     #1, w0      ;count one less word left to clear
+         bra     nz, twn_clrpnt ;back to clear next word
+;
+;   Compute the number of whole samples that fit into the trace buffer.  Build
+;   time logic has already guaranteed that this is at least 1.
+;
+         mov     #[v bufwords], w0 ;get number of words in trace buffer
+         mov     nsrc, w2    ;get number of words per sample
+         repeat  #17
+         div.u   w0, w2      ;compute whole samples/buffer in W0
+         mov     w0, nsamp   ;save it
+
+         mov     #tracebuf, w0
+         mov     w0, putadr  ;init pointer to where to write next data word
+
+         mov     #[trunc [* trig_frac 65535]], w0 ;pass trigger position fraction
+         mcall   trace_trigpos ;init the trigger position to default
+
+twn_leave:                   ;common exit point for TRACE_NWORDS
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TRACE_WORDCFG
+;
+;   Configure one word of subsequent samples.  This routine must be called at
+;   least once after TRACE_NWORDS, because that routine resets all words in a
+;   sample to unused.
+;
+;   W0 contains the 0-N word number within a sample.  This must be less than the
+;   value passed to TRACE_NWORDS or this call will be ignored.
+;
+;   W1 contains the data space address to read each sample to get the data value
+;   for the word.  The special value of 0 indicates this word is unused, which
+;   causes word values of 0 to be written to the saved samples.  Since only
+;   words are sampled, addresses are on whole word boundaries.  The saved source
+;   address for the word will have the low bit 0 regardless of its value in W1.
+;   The low bit of W1 is ignored by this routine, but should be set to zero for
+;   clarity and possible future capability to log bytes.
+;
+         glbsub  trace_wordcfg, regf2
+
+         mov     nsrc, w2    ;get number of words in a sample
+         cp      w0, w2      ;compare word number to first invalid value
+         bra     geu, twc_leave ;0-N word number out of range ?
+
+         mov     #src_pnt_list, w2 ;get address of first word source pointer
+         add     w0, w2, w2  ;point W2 to the source pointer for this word
+         add     w0, w2, w2
+         mov     w1, [w2]    ;set the source address for this word
+         bclr    [w2], #0    ;make sure it is a word address
+
+twc_leave:                   ;common exit point for routine TRACE_WORDCFG
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TRACE_TRIGPOS
+;
+;   Sets the trigger position within the trace buffer.  W0 contains the relative
+;   position of the trigger within the saved data.  0 indicates the trigger will
+;   be at the start of the saved data, and 65535 at the end.  Other values
+;   position the trigger linearly in between.
+;
+;   Any triggered condition is reset by this call.  The number of words per
+;   sample must have been previously set, since setting that resets the trigger
+;   position to the default.  The default is set by the TRIG_FRAC constant at
+;   the top of this module.
+;
+         glbsub  trace_trigpos, regf0 | regf1
+
+         mov     nsamp, w1   ;get number of samples the buffer can hold
+         mul.uu  w0, w1, w0  ;make trigger offset into buffer in W1
+         mov     w1, trigpos ;save the new trigger position
+
+         popsaved            ;restore registers saved on entry
+
+         jump    trace_trigreset ;reset trigger state and return to caller
+
+;*******************************************************************************
+;
+;   Subroutine TRACE_TRIGRESET
+;
+;   Reset the trigger state to awaiting the trigger condition.
+;
+         glbsub  trace_trigreset, regf0 | regf1
+
+         mov     nsamp, w0   ;get number of samples buffer can hold
+         mov     trigpos, w1 ;get sample offset into buffer for trigger
+         sub     w0, w1, w0  ;make number of samples after the trigger
+         sub     #1, w0
+
+         disi    #1000       ;temp disable interrupts
+         mov     w0, nleft   ;init number of samples left to save after trigger
+         clrflag tracetrig   ;reset any triggered condition
+         clrflag tracefull   ;last sample after trace definitely not taken
+         clrflag tracesent   ;full trace not sent to host yet
+         clr     Disicnt     ;re-enable interrupts
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TRACE_TRIGGER
+;
+;   Indicates that the last sample saved corresponds to the trigger event.  This
+;   call is ignored if there was a previous trigger event since the last trigger
+;   reset.  In other words, only the first trigger after a reset is meaningful.
+;
+;   The TRACETRIG flag will be set to indicate the trigger condition has
+;   occurred.  Data collection will continue for the appropriate number of
+;   samples in the buffer after the trigger, which depends on the buffer size
+;   and the relative position of where the trigger was set within the buffer.
+;   Data collection may be stopped by this call (trigger position is at the last
+;   saved sample) or by a future TRACE_SAMPLE call.  In either case, the
+;   flag TRACEFULL is set when all the data has been sampled after the trigger
+;   and collection is therefore stopped.
+;
+         glbsub  trace_trigger, regf0
+
+         skip_flag tracearm  ;armed to detect trigger ?
+         jump    trg_leave   ;no, nothing to do
+         skip_nflag tracetrig ;not already triggered previously ?
+         jump    trg_leave   ;already triggered, multiple triggers are ignored
+         skip_nflag traceoff ;tracing not tempoarily disabled ?
+         jump    trg_leave
+         setflag tracetrig   ;indicate now triggered
+
+         clrflag tracearm    ;ignore further triggers until explicitly re-armed
+         mov     nleft, w0   ;get number of samples after the trigger
+         cp0     w0
+         bra     nz, trg_leave ;there is at least one more sample to take ?
+         setflag tracefull   ;no, all done taking samples after the trigger
+
+trg_leave:                   ;common exit point of TRACE_TRIGGER routine
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TRACE_SAMPLE
+;
+;   Collect and save one data point.  This call is ignored if the trigger has
+;   occurred and all the samples after the trigger have already been stored.
+;   This condition is indicated by flag TRACEFULL set.  If the trigger has
+;   previously occurred (flag TRACETRIG set) but data is still being collected
+;   after the trigger (flag TRACEFULL not set), then this call could fill the
+;   buffer and set flag TRACEFULL.
+;
+         glbsub  trace_sample, regf0 | regf1 | regf2 | regf3
+
+         skip_nflag tracefull ;not already done after trigger ?
+         jump    sam_leave   ;done taking samples this trigger
+         skip_nflag traceoff ;tracing not temporarily disabled ?
+         jump    sam_leave
+;
+;   Grab the words of this sample and write them into the buffer.  NSRC is the
+;   number of words to grab, and their source addresses are in the array
+;   starting at SRC_PNT_LIST.  PUTADR is the address of where to write the next
+;   word in the buffer.
+;
+;   Register usage:
+;
+;     W0  -  Data word.
+;
+;     W1  -  Number of words left to do.
+;
+;     W2  -  Address of source pointer for the next word.
+;
+;     W3  -  Pointer to where to write next word.
+;
+         mov     nsrc, w1    ;get number of words to fetch and write
+         cp0     w1
+         bra     z, sam_leave ;not configured for any words, nothing do to ?
+         mov     #src_pnt_list, w2 ;init pointer to first word source address
+         mov     putadr, w3  ;init pointer to where to write next word
+sam_word:                    ;back here to get and store each new word
+         mov     [w2++], w0  ;get source address of this word, 0 if unused
+         mov     [w0], [w3++] ;grab data word into buffer, update write pointer
+         mov     #afterbuf, w0 ;get first address after buffer
+         cp      w3, w0
+         bra     ltu, sam_dwrap ;didn't just advance past end of buffer ?
+         mov     #tracebuf, w3 ;did, wrap back to start of buffer for next time
+sam_dwrap:                   ;done wrapping write pointer for next time
+         sub     #1, w1      ;count one less word left to do
+         bra     nz, sam_word ;back to do next word
+
+         mov     w3, putadr  ;udpate buffer write pointer for next call
+;
+;   Update state if after trigger.
+;
+         skip_flag tracetrig ;collecting data after trigger ?
+         jump    sam_leave   ;no, nothing more to do
+
+         mov     nleft, w0   ;get number of samples left after trigger
+         sub     #1, w0      ;update to the sample just taken
+         mov     w0, nleft
+         bra     nz, sam_leave ;this wasn't the last sample ?
+         ;
+         ;   This was the last sample after the trigger.
+         ;
+         setflag tracefull   ;indicate trace buffer full for this trigger
+
+sam_leave:                   ;common exit point for routine TRACE_SAMPLE
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TRACE_SEND
+;
+;   Sends the captured data trace to the host.  The format of the TRACE response
+;   is:
+;
+;     TRACE nsamp wordsps trigofs word ... word
+;
+;   All parameters are 16 bit words except WORDSPS, which is a byte.  NSAMP is
+;   the unsigned number of samples that will be sent.  WORDSPS is the unsigned
+;   number of words per sample.  The total number of data words is therefore
+;   NSAMP*WORDSPS.  TRIGOFS is the unsigned offset of the trigger from the start
+;   of samples.  TRIGOFS of 0 means the trigger occurred on the first sample.
+;   When data is sent without a trigger having occurred (flag TRACETRIG is not
+;   set when this routine is called), TRIGOFS is equal to NSAMP, which indicates
+;   the trigger is after the last sample.
+;
+;   Exactly NSAMP*WORDSPS data words follow after the fixed fields.  These are
+;   the individual data words of all samples.  Samples are in oldest to newest
+;   order, and the data words are in 0 to WORDSPS-1 word numbers within each
+;   sample.
+;
+         glbsub  trace_send, regf0 | regf1 | regf2
+
+         gcall   cmd_lock_out ;acquire exclusive lock on sending to the host
+
+         setflag traceoff
+         skip_nflag tracefull
+         setflag tracesent   ;indicate this trace has been sent
+
+         mov     #rsp_trace, w0 ;send response opcode
+         gcall   cmd_put8
+
+         mov     nsamp, w0   ;send number of samples
+         gcall   cmd_put16
+
+         mov     nsrc, w0    ;send words per sample
+         gcall   cmd_put8
+
+         mov     nsamp, w0   ;init trigger offset to after last sample
+         skip_flag tracetrig ;trigger has occurred ?
+         jump    snd_dtrig   ;no, trigger offset all set in W0
+         mov     trigpos, w0 ;get trigger offset into samples
+         mov     nleft, w1   ;get samples left to take after trigger
+         add     w0, w1, w0  ;make actual trigger offset at current state
+snd_dtrig:                   ;trigger offset to send is in W0
+         gcall   cmd_put16   ;send the trigger offset
+;
+;   Send the data words.  Register usage:
+;
+;     W0  -  Data word.
+;
+;     W1  -  Address of next data word to send.
+;
+;     W2  -  Number of words left to send.
+;
+         mov     nsamp, w0   ;get number of samples
+         mov     nsrc, w1    ;get words per sample
+         mul.uu  w0, w1, w0  ;make total number of words to send
+         cp0     w0
+         bra     z, snd_done ;no data words to send, done sending response ?
+         mov     w0, w2      ;init number of words left to send
+
+         mov     #[v bufwords], w0 ;get total number of words in the buffer
+         sub     w0, w2, w0  ;make number of unused words in buffer
+         mov     putadr, w1  ;get address of oldest buffer word
+         add     w1, w0, w1  ;advance over the unused words
+         add     w1, w0, w1
+         mov     #afterbuf, w0 ;get first address past end of buffer
+         cp      w1, w0      ;compare new address to first invalid
+         bra     leu, snd_nw1 ;still within buffer, no wrap required ?
+         mov     #[v bufwords], w0 ;get buffer size
+         sub     w1, w0, w1  ;wrap address back into buffer
+snd_nw1:                     ;first word address all set in W1
+
+snd_word:                    ;back here to send each new data word
+         mov     [w1++], w0  ;fetch this word, update source pointer
+         gcall   cmd_put16   ;send the word to the host
+         sub     #1, w2      ;count one less word left to do
+         bra     z, snd_done ;done sending all words ?
+         mov     #afterbuf, w0 ;get first address past end of buffer
+         cp      w1, w0      ;compare read pointer to first invalid address
+         bra     ltu, snd_word ;still within buffer ?
+         mov     #tracebuf, w1 ;no, wrap back to start of buffer
+         jump    snd_word    ;back to do next word
+snd_done:                    ;done sending all response data
+
+         clrflag traceoff
+         gcall   cmd_unlock_out ;release lock on host response stream
+         leaverest
+
+         .end

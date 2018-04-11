@@ -1,0 +1,19 @@
+;   Define global symbols and possibly additional build-time setup required by
+;   the MODBUS subsystem.  This file is intended to be included from the main
+;   include file of a project with a UART module using the MODBUS include file.
+;
+
+;   Bits within the word returned by MODBUS_ACTIVITY.  Each bit represents one
+;   event that ocurred at least once since the previous call to MODBUS_ACTIVITY.
+;
+/const   modbus_ev_rbyte integer = 0 ;received valid packet byte
+/const   modbus_ev_rpack integer = 1 ;received valid packet
+/const   modbus_ev_rpackus integer = 2 ;received valid packet for us
+/const   modbus_ev_sbyte integer = 3 ;sent packet byte
+/const   modbus_ev_spack integer = 4 ;sent whole packet
+
+.equiv   modbus_ev_rbyte, [v modbus_ev_rbyte]
+.equiv   modbus_ev_rpack, [v modbus_ev_rpack]
+.equiv   modbus_ev_rpackus, [v modbus_ev_rpackus]
+.equiv   modbus_ev_sbyte, [v modbus_ev_sbyte]
+.equiv   modbus_ev_spack, [v modbus_ev_spack]

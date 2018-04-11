@@ -1,0 +1,355 @@
+;   ***************************************************************
+;   * Copyright (C) 2010, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Clock generator.  This module receives the periodic clock tick interrupt
+;   and updates the various global TICKxxx counters accordingly.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   tickt   real = 0.001 ;desired clock tick time, seconds
+/const   timern  integer = 1 ;1-N number of the system timer to use
+/const   ifsn    integer = 0 ;number of IFS and IEC registers for flag and enab bits
+.equiv   ipc_reg, Ipc0       ;register containing interrupt priority field
+.equiv   ipc_bit, 12         ;LSB of priority field within priority register
+;
+;   Derived constants.
+;
+/call timer_sec tickt        ;compute timer setup for desired tick period
+.equiv   ifs_reg, Ifs[v ifsn] ;interrupt flag bit register
+.equiv   ifs_bit, T[v timern]if ;interrupt flag bit within register
+.equiv   iec_reg, Iec[v ifsn] ;interrupt enable bit register
+.equiv   iec_bit, T[v timern]ie ;interrupt enable bit within register
+         ;
+         ;   Determine the timer type.  The string constant TTYPE is set to
+         ;   either "A", "B", or "C" to indicate the timer type.
+         ;
+/if [= timern 1]
+  /then                      ;timer 1, type A
+    /const ttype = "A"
+  /else
+    /if [= [and timern 1] 0]
+      /then                  ;even numbered timer, type B
+        /const ttype = "B"
+      /else                  ;odd numbered timer but not timer 1, type C
+        /const ttype = "C"
+      /endif
+  /endif
+
+/block
+  /var local s string
+  /var local r real
+  /var local ii integer
+
+  /set s ""
+  /set s [str s "Clock tick period " [eng timer_per oscdig] "s"]
+  /set s [str s ", " [* timer_cnt timer_pre] " instr"]
+  /set s [str s ", using type " ttype " timer " timern]
+  /show "  " s
+  /set s ""
+  /set s [str s "prescaler " timer_pre ", period " timer_cnt]
+  /show "  " s
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state in near memory.
+;
+.section .near_clock, bss, near
+;
+;   Free-running clock tick counters that can be read at any time.
+;
+allocg   tick1ms             ;incremented every 1 ms
+allocg   tick10ms            ;incremented every 10 ms
+allocg   tick100ms           ;incremented every 100 ms
+allocg   seconds, 4          ;32 bit seconds since system startup
+;
+;   Clock tick event counters intended for handling by the main event loop.
+;   Each of these is incremented here when the associated clock tick occurs,
+;   just like the global counters above.  However, these event counters are
+;   intended to be decremented when a tick event is handled.  This mechanism is
+;   used instead of one-bit flags for the events so that no timing is lost, even
+;   if the event routine misses multiple events in a row.  Timing is not lost as
+;   long as the event-handling routine is able to eventually catch up.
+;
+allocg   ev_1ms              ;number of pending 1 ms events
+allocg   ev_10ms             ;number of pending 10 ms events
+allocg   ev_100ms            ;number of pending 100 ms events
+allocg   ev_1s               ;number of pending 1 second events
+
+;*******************
+;
+;   Local state in near memory.
+;
+alloc    cnt10               ;1 ms ticks until next 10 ms tick
+alloc    cnt100              ;10 ms ticks until next 100 ms tick
+alloc    cnt1s               ;100 ms ticks until next 1 s tick
+
+;*******************
+;
+;   Local state in normal far memory.
+;
+.section .ram_clock, bss
+
+alloc    clockw0             ;temp saved registers during interrupt
+
+
+.section .code_clock, code
+;*******************************************************************************
+;
+;   Subroutine CLOCK_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  clock_init, regf0 | regf1
+;
+;   Init local state.
+;
+         mov     #10, w0
+         mov     w0, cnt10
+         mov     w0, cnt100
+         mov     w0, cnt1s
+;
+;   Init global state.
+;
+         mov     #0, w0
+         mov     w0, tick1ms
+         mov     w0, tick10ms
+         mov     w0, tick100ms
+         mov     w0, seconds+0
+         mov     w0, seconds+2
+         mov     w0, ev_1ms
+         mov     w0, ev_10ms
+         mov     w0, ev_100ms
+         mov     w0, ev_1s
+;
+;   Set up the timer to produce the periodic interrupt.
+;
+         clr     T[v timern]con ;make sure the timer is off for now
+         clr     Tmr[v timern] ;reset the timer value to 0
+         mov     #[v timer_cnt]-1, w0
+         mov     w0, Pr[v timern] ;set timer period
+         ;
+         ;   Configure the timer and start it running.
+         ;
+/if [= ttype "A"] then       ;type A timer ?
+         mov     #0b1000000000000000 | [v timer_tckps], w0
+                 ;  1--------------- enable the timer
+                 ;  -X-------------- unused
+                 ;  --0------------- continue in idle mode, not used
+                 ;  ---XXXXXX------- unused
+                 ;  ---------0------ not gated input mode
+                 ;  ----------XX---- prescaler, filled in from TIMER_TCKPS
+                 ;  ------------X--- unused
+                 ;  -------------0-- do not sync to clock, not used with internal clock
+                 ;  --------------0- clock source is instruction clock
+                 ;  ---------------X unused
+         mov     w0, T[v timern]con ;configure and enable the timer
+  /endif
+/if [= ttype "B"] then       ;type B timer ?
+         mov     #0b1000000000000000 | [v timer_tckps], w0
+                 ;  1--------------- enable the timer
+                 ;  -X-------------- unused
+                 ;  --0------------- continue in idle mode, not used
+                 ;  ---XXXXXX------- unused
+                 ;  ---------0------ not gated input mode
+                 ;  ----------XX---- prescaler, filled in from TIMER_TCKPS
+                 ;  ------------0--- not make 32 bit timer with timer 3
+                 ;  -------------X-- unused
+                 ;  --------------0- clock source is instruction clock
+                 ;  ---------------X unused
+         mov     w0, T[v timern]con ;configure and enable the timer
+  /endif
+/if [= ttype "C"] then       ;type C timer ?
+         mov     #0b1000000000000000 | [v timer_tckps], w0
+                 ;  1--------------- enable the timer
+                 ;  -X-------------- unused
+                 ;  --0------------- continue in idle mode, not used
+                 ;  ---XXXXXX------- unused
+                 ;  ---------0------ not gated input mode
+                 ;  ----------XX---- prescaler, filled in from TIMER_TCKPS
+                 ;  ------------XX-- unused
+                 ;  --------------0- clock source is instruction clock
+                 ;  ---------------X unused
+         mov     w0, T[v timern]con ;configure and enable the timer
+  /endif
+;
+;   Enable the timer interrupts.
+;
+         bclr    ifs_reg, #ifs_bit ;clear any pending interrupt condition
+         intr_priority ipc_reg, ipc_bit, ipr_clock ;set priority of this interrupt
+         bset    iec_reg, #iec_bit ;enable the timer interrupt
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine WAITMS
+;
+;   Wait the number of 1 ms ticks indicated in W0.  W0 is interpreted as a
+;   unsigned integer.  Other tasks are allowed to run during the wait.  A wait
+;   length of 0 does not wait for any clock ticks, but does let all tasks run
+;   once.
+;
+         glbsubd waitms, regf0 | regf1
+
+         mov     tick1ms, w1 ;init last tick updated to
+
+         cp0     w0
+         bra     nz, wat_loop ;waiting for at least one tick ?
+         call    task_yield_save ;let other tasks run once
+         jump    wat_leave   ;done with the wait
+
+wat_loop:                    ;back here to wait for next tick
+         gcall   task_yield_save ;give other tasks a chance to run
+wat_tick:                    ;back here after processing a tick
+         push    w2          ;temp save W2 on stack
+         mov     tick1ms, w2 ;get current tick counter
+         cp      w1, w2      ;compare to last value acted upon
+         pop     w2          ;restore W2
+         bra     z, wat_loop ;not a new tick this time ?
+         ;
+         ;   New 1 ms tick detected.
+         ;
+         add     #1, w1      ;update last tick value acted upon
+         sub     #1, w0      ;count one less tick left to wait
+         bra     nz, wat_tick ;wait time not elapsed yet ?
+
+wat_leave:                   ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   C interface functions to get the live clock tick counters.  The global
+;   counters are not surfaced to C code so that it can be more easily ported to
+;   systems that don't have such counters updated live.
+;
+/if using_xc16 then
+
+         glbsubc clock_1ms
+         mov     tick1ms, w0
+         leaverest
+
+         glbsubc clock_10ms
+         mov     tick10ms, w0
+         leaverest
+
+         glbsubc clock_100ms
+         mov     tick100ms, w0
+         leaverest
+
+         glbsubc clock_seconds16
+         mov     seconds+0, w0
+         leaverest
+
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine CLOCK_SECONDS
+;
+;   Returns the seconds since system startup in W1:W0.
+;
+         glbsubd clock_seconds, regf2
+
+sec_retry:
+         mov     seconds+0, w0 ;get seconds low word
+         mov     seconds+2, w1 ;get seconds high word
+         mov     seconds+0, w2 ;get the low word again
+         cp      w0, w2
+         bra     nz, sec_retry ;low word changed, try again ?
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Timer interrupt.
+;
+;   This is the base clock tick interrupt.  It is used to derive the various
+;   global TICKxxx counters.  This interrupt occurs every 1 millisecond.
+;
+         glbsub  __T[v timern]Interrupt
+         bclr    ifs_reg, #ifs_bit ;clear the interrupt condition
+         mov     w0, clockw0 ;save registers
+
+;*****************************
+;
+;   1 ms clock tick.
+;
+         inc     tick1ms     ;update clock tick counter
+         inc     ev_1ms      ;one more pending event for this tick
+;
+;   Check for 10 ms clock tick.
+;
+         dec     cnt10       ;count one less tick to go
+         bra     nz, done_ticks ;no new tick now ?
+         mov     #10, w0
+         mov     w0, cnt10   ;reset counts until next tick
+
+;*****************************
+;
+;   10 ms clock tick.
+;
+         inc     tick10ms    ;update clock tick counter
+         inc     ev_10ms     ;one more pending event for this tick
+;
+;   Check for 100 ms clock tick.
+;
+         dec     cnt100      ;count one less tick to go
+         bra     nz, done_ticks ;no new tick now ?
+         mov     #10, w0
+         mov     w0, cnt100  ;reset counts until next tick
+
+;*****************************
+;
+;   100 ms clock tick.
+;
+         inc     tick100ms   ;update clock tick counter
+         inc     ev_100ms    ;one more pending event for this tick
+;
+;   Check for 1 second clock tick.
+;
+         dec     cnt1s       ;count one less tick to go
+         bra     nz, done_ticks ;no new tick now ?
+         mov     #10, w0
+         mov     w0, cnt1s   ;reset counts until next tick
+
+;*****************************
+;
+;   1 second tick.
+;
+         mov     #0, w0      ;set WREG to 0
+         inc     seconds+0   ;update counter low word
+         addc    seconds+2   ;update counter high word
+         inc     ev_1s       ;one more pending event for this tick
+
+;*****************************
+;
+;   Done processing this clock tick.
+;
+done_ticks:
+         mov     clockw0, w0 ;restore registers
+         disi    #2
+         retfie              ;return from the interrupt
+
+.end

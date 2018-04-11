@@ -1,0 +1,440 @@
+;   ***************************************************************
+;   * Copyright (C) 2016, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Source code "library" file for providing a procedural interface to a IIC
+;   bus by explicitly driving ordinary I/O pins from firmware only.
+;
+;   This file is for including in a main module.  The QQQ_IIC.DSPIC file is a
+;   template for such a main module.  This code can be customized at build time
+;   by the values of various preprocessor constants.  See the comments in
+;   QQQ_IIC.DSPIC for the customization options and a quick description of the
+;   procedural interface that is exported.
+;
+;*******************************************************************************
+;
+;   Make sure all configuration constants exist.  Those that do not exist will
+;   be created and set to their default value.
+;
+/if [not [exist "name"]] then
+  /const name string = ""
+  /endif
+/if [not [exist "maxfreq"]] then
+  /const maxfreq real = 400e3
+  /endif
+/if [not [exist "scl_drive_high"]] then
+  /const scl_drive_high bool = false
+  /endif
+;
+;   Derived constants.
+;
+/block                       ;compute the IIC baud rate setup
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /set r [/ .5 maxfreq]      ;min required high/low level length, s
+  /set ii [trunc [* r freq_inst]] ;instruction cycles per level
+  /if [< [/ ii freq_inst] r] then
+    /set ii [+ ii 1]
+    /endif
+  /const mincy integer = ii  ;min instruction cycles per level
+  /const minlev real = [/ ii freq_inst] ;min time per level
+
+  /if [= name ""]
+    /then                    ;no unique name for the subroutines
+      /const uname string = ""
+    /else                    ;subroutine names will be customized
+      /const uname string = [str "_" name]
+    /endif
+
+  /show "  Firmware-implemented IIC"
+  /set s ""
+  /set s [str s "Unique IIC bus name """ [ucase uname] """"]
+  /set s [str s ", Min level " [eng minlev] "s = " mincy " inst"]
+  /set s [str s ", max freq " [eng [/ .5 minlev]] "Hz"]
+  /show "  " s
+  /endblock
+
+
+.section .iic[chars uname]_code, code
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macros SCL_LOW, SCL_HIGH, SDA_LOW, SDA_HIGH
+//
+//   The xxx_LOW macros cause the indicate line to be actively driven low.  The
+//   xxx_HIGH macros cause the indicated line to be released to float high if
+//   nothing else is driving it low.
+//
+//   When SCL_DRIVE_HIGH is set, the the SCL output is always driven.  It is
+//   then switched between active low and active high, instead of active low and
+//   floating.  In that case, the TRIS bit is initialized to 0 and kept that
+//   way.
+//
+/macro scl_low
+  /if scl_drive_high
+    /then
+         bclr    scl_lat, #scl_bit
+    /else
+         bclr    scl_tris, #scl_bit
+    /endif
+  /endmac
+
+/macro scl_high
+  /if scl_drive_high
+    /then
+         bset    scl_lat, #scl_bit
+    /else
+         bset    scl_tris, #scl_bit
+    /endif
+  /endmac
+
+/macro sda_low
+         bclr    sda_tris, #sda_bit
+  /endmac
+
+/macro sda_high
+         bset    sda_tris, #sda_bit
+  /endmac
+
+;*******************************************************************************
+;
+;   Subroutine IIC_WAIT
+;
+;   Guarantee a wait of at least 1/2 IIC bit time.  This wait is not guaranteed
+;   to be efficient, or to let other tasks run.
+;
+         glbsub  iic[chars uname]_wait
+
+         busywait minlev, 4  ;wait 1/2 bit time, account for subroutine entry/exit
+
+         leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro WAIT
+//
+//   Guarantee that the next instruction after this macro will be executed at
+//   least 1/2 IIC bit time after the previous.
+//
+/macro wait
+         mcall   iic_wait    ;wait 1/2 bit time
+  /endmac
+
+;*******************************************************************************
+;
+;   Local subroutine SDA_RELEASE
+;
+;   Make sure the SDA line is released.  It must be released for some
+;   operations, like a bus start.
+;
+;   This routine does nothing if the SDA line is already released (high).
+;   Otherwise, it keeps doing clock pulses until whatever is holding the SDA
+;   line low releases is.
+;
+         locsub  sda_release
+
+srel_retry:                  ;back here after each new clock pulse
+         btsc    sda_reg, #sda_bit ;SDA is being held low ?
+         jump    srel_leave  ;no, all done
+
+         scl_low             ;do a clock pulse
+         sda_high            ;make sure we aren't holding SDA low
+         wait
+         scl_high
+         wait
+         jump    srel_retry  ;go back and check SDA again
+
+srel_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine IIC_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  iic[chars uname]_init, regf0
+;
+;   Configure the I/O lines.  The /INBIT or /OUTPUT configuration will be
+;   overridden.
+;
+         ;
+         ;   Configure SCL.
+         ;
+/if scl_drive_high
+  /then                      ;always explicitly drive SCL
+         bset    scl_lat, #scl_bit ;init line state to high
+         bclr    scl_tris, #scl_bit ;line will be actively driven
+  /else                      ;drive low but float high (standard IIC bus)
+         bset    scl_tris, #scl_bit ;set the line to high impedance
+         bclr    scl_lat, #scl_bit ;will be low when driven
+  /endif
+         ;
+         ;   Configure SDA.
+         ;
+         bset    sda_tris, #sda_bit ;set the line to high impedance
+         bclr    sda_lat, #sda_bit ;will be low when driven
+;
+;   Do a bus start and stop to make sure everything is reset and in sync.
+;
+         wait
+         sda_low
+         wait
+         scl_low
+         wait
+         scl_high
+         wait
+         sda_high
+         wait
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine SEND_BIT
+;
+;   Write the high bit of W0 to the IIC bus.  SCL is assumed to be high on
+;   entry, and will be left high.  SDA may be left in either state.
+;
+         locsub  send_bit
+
+         scl_low             ;start bit time, allow SDA to change
+         btss    w0, #15
+         sda_low             ;this is a 0 bit
+         btsc    w0, #15
+         sda_high            ;this is a 1 bit
+         wait
+
+         scl_high
+         wait
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine SEND_BYTE
+;
+;   Send the byte in the low 8 bits of W0.
+;
+         locsub  send_byte, regf0 | regf1
+
+         sl      w0, #8, w0  ;move the byte into position for SEND_BIT
+         mov     #8, w1      ;init number of bits left to write
+sby_bit:                     ;back here to send each new bit of the byte
+         mcall   send_bit    ;send high bit of W0
+         sub     #1, w1      ;count one less bit left to send
+         bra     z, sby_leave ;all done ?
+         sl      w0, #1, w0  ;no, move next bit into position
+         jump    sby_bit     ;back to send next bit
+
+sby_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine GET_BIT
+;
+;   Read a bit from the bus into the low bit of W0.  The remaining bits of W0
+;   are preserved.  SCL is assumed to be high on entry, and will be left high.
+;   SDA may be left in either state.
+;
+         locsub  get_bit
+
+         scl_low             ;start bit time, allow SDA to change
+         sda_high            ;make sure we aren't driving the SDA line
+         bclr    w0, #0      ;init the returned bit to 0
+         wait                ;wait for new SDA to stabalize
+         scl_high
+         wait
+
+         btsc    sda_reg, #sda_bit ;data line really is low ?
+         bset    w0, #0      ;no, set returned bit to 1
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine GET_BYTE
+;
+;   Read a byte from the bus and return it in W0.  The unused high bits of W0
+;   are returned 0.
+;
+         locsub  get_byte, regf1
+
+         mov     #0, w0      ;init the returned value
+         mov     #8, w1      ;init number of bits left to get
+gby_bit:                     ;back here to get each new bit
+         mcall   get_bit     ;get this bit into low bit of W0
+         sub     #1, w1      ;count one less bit left to get
+         bra     z, gby_leave ;all done ?
+         sl      w0, #1, w0  ;shift previous bits, make room for new bit
+         jump    gby_bit     ;back to get next bit
+
+gby_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine IIC_PUT
+;
+;   Send the byte in the low bits of W0 to the slave.  FLAG_IICACK is set
+;   according to whether the slave ACKed the byte or not.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.  The IICACK flag is always cleared on error.
+;
+         glbsub  iic[chars uname]_put
+
+         mcall   send_byte   ;send the byte
+
+         push    w0          ;temp save W0
+         clrflag iicack      ;init to got NACK, not ACK
+         mcall   get_bit     ;get the ACK bit into W0 LSB
+         btss    w0, #0      ;really did get NACK ?
+         setflag iicack      ;no, indicate ACK
+         pop     w0          ;restore original W0
+
+         bclr    Sr, #Z      ;inidicate success
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine IIC_START_PUT
+;
+;   Send a IIC start condition followed by the address byte indicating this will
+;   be a write sequence.  The slave address must be in the low 7 bits of W0.
+;   FLAG_IICACK will be set according to whether the slave acknowledged the
+;   address byte or not.
+;
+         glbsub  iic[chars uname]_start_put
+
+         bclr    Sr, #C      ;set read/write bit value
+;
+;   Common code with IIC_START_GET.  The low 7 bits of W0 contain the IIC
+;   address, and C contains the read/write bit.  Nothing has been explicitly
+;   pushed onto the stack.
+;
+start_putget:
+         push    w0          ;save original W0
+
+         rlc     w0, w0      ;move adr into position, shift in read/write bit
+         mcall   sda_release ;make sure SDA line is high
+         sda_low             ;do bus start, SDA goes low with SCL high
+         wait
+         mcall   iic[chars uname]_put ;send the address and read/write byte
+
+         pop     w0          ;restore original W0
+         return
+
+;*******************************************************************************
+;
+;   Subroutine IIC_START_GET
+;
+;   Send a IIC start condition followed by the address byte indicating this will
+;   be a read sequence.  The slave address must be in the low 7 bits of W0.
+;   FLAG_IICACK will be set according to whether the slave acknowledged the
+;   address byte or not.
+;
+         glbsub  iic[chars uname]_start_get
+
+         bset    Sr, #C      ;set read/write bit value
+         jump    start_putget ;to common code to send adr byte and get ACK/NACK
+
+;*******************************************************************************
+;
+;   Subroutine IIC_GET
+;
+;   Read the next byte from the IIC bus into W0.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.
+;
+         glbsub  iic[chars uname]_get
+
+         mcall   get_byte    ;read the byte into W0
+
+         bclr    Sr, #Z      ;inidicate success
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine IIC_ACK
+;
+;   Sends positive ACK bit.  The ACK bit value will be 0.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.
+;
+         glbsub  iic[chars uname]_ack, regf0
+
+         bclr    w0, #15     ;indicate ACK, not NACK
+         mcall   send_bit    ;write the bit
+
+         bclr    Sr, #Z      ;inidicate success
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine IIC_NACK
+;
+;   Sends negative ACK bit.  The ACK bit value will be 1.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.
+;
+         glbsub  iic[chars uname]_nack, regf0
+
+         bset    w0, #15     ;indicate NACK, not ACK
+         mcall   send_bit    ;write the bit
+
+         bclr    Sr, #Z      ;inidicate success
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine IIC_STOP
+;
+;   Write IIC bus stop sequence, then leave both lines floating high.
+;
+;   The Z flag cleared indicates everything proceeded normally with no errors.
+;
+;   When a error is detected, the Z flag is set.  In this case, the bus sequence
+;   in progress will have been aborted, and the hardware and the bus reset to
+;   the extent possible.
+;
+         glbsub  iic[chars uname]_stop
+
+         scl_low             ;clock low, allow SDA to change
+         sda_low             ;set SDA to 0
+         wait
+         scl_high            ;release clock
+         wait
+         sda_high            ;rising edge on SDA while clock is high (bus stop)
+
+         bclr    Sr, #Z      ;inidicate success
+         leaverest

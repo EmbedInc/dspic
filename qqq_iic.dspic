@@ -1,0 +1,158 @@
+;   ***************************************************************
+;   * Copyright (C) 2016, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Procedural interface to a IIC bus.  The following routines are exported:
+;
+;     IIC_INIT  -  Must be first call into this module.  The IIC bus can not be
+;       used until this routine is called.
+;
+;     IIC_LOCK  -  Acquire the exclusive lock on this IIC bus to this task.
+;
+;     IIC_UNLOCK  -  Release the lock on the IIC bus.  This should only be
+;       called by the task holding the lock.
+;
+;     IIC_WAIT  -  Guarantee a wait of at least 1/2 IIC bit time.  This wait is
+;       not guaranteed to be efficient, or to let other tasks run.
+;
+;     IIC_START_PUT  -  Starts a new IIC write sequence.  The address is in the
+;       low 7 bits of W0.  Sets FLAG_IICACK according to ACK bit received.
+;
+;     IIC_PUT  -  Writes byte of a write sequence to the bus.  Sets FLAG_IICACK
+;       according to ACK bit received.  Z cleared on success, set on error.
+;
+;     IIC_START_GET  -  Starts a new IIC read sequence.  The address is in the
+;       low 7 bits of W0.  Sets FLAG_IICACK according to ACK bit received.
+;
+;     IIC_GET  -  Reads a byte of a read sequence from the bus.  Does not send
+;       ACK bit.  Z cleared on success, set on error.
+;
+;     IIC_ACK  -  Sends positive ACK (ACK bit = 0).  Z cleared on success, set
+;       on error.
+;
+;     IIC_NACK  -  Sends negative ACK (ACK bit = 1).  Z cleared on success, set
+;       on error.
+;
+;     IIC_STOP  -  Writes bus stop condition and then leaves the lines floating.
+;       Z cleared on success, set on error.
+;
+;   The following global flag bits must be defined:
+;
+;     FLAG_IICACK  -  Used to communicate the ACK bit value both for reading and
+;       writing.
+;
+;   The actual routine names may have additional characters in them, as set by
+;   the NAME constant, below.  For example, if NAME is set to "xyz" then
+;   "iic_init" is actually "iic_xyz_init".  By default, NAME is set to the empty
+;   string, which results in the names shown above.
+;
+;   The actual code is in a library include file.  This module mostly sets
+;   preprocessor constants to modify how the library code is configured.  The
+;   general configuration constants are:
+;
+;     NAME, string
+;
+;       Unique name for the exported symbols.  May be the empty string.  This
+;       string is inserted after "IIC_" in each exported symbol name.  For
+;       example, the routine IIC_PUT will be called IIC_XYZ_PUT when NAME is set
+;       to "xyz".  This mechanism is intended for supporting multiple IIC busses
+;       in a system.  This would generally be the empty string when only one IIC
+;       is used.  Default is the empty string.
+;
+;     MAXFREQ, real
+;
+;       The maximum allowed clock rate, in Hz.  Clock dividers will be selected
+;       to get as close as possible to this frequency without exceeding it.  The
+;       constant IICFREQ will be set to the actual resulting frequency.  The
+;       default is 400 kHz.
+;
+;   Different include files are available that implement the above routines in
+;   different ways.  These include files and additional configuration parameters
+;   unique to them are:
+;
+;     IIC_FW.INS.DSPIC
+;
+;       This is a firmware-only implementation.  No IIC hardware is assumed or
+;       used.
+;
+;       Two I/O pins, named SCL and SDA are required.  These names are modified
+;       by the NAME string, described above.  When NAME is the empty string, the
+;       I/O pins are just named "scl" and "sda".  When NAME is "xyz", for
+;       example, then the pins must be named "scl_xyz" and "sda_xya".
+;
+;       These pins should be defined with /INBIT to avoid startup glitches.
+;       However, the initialization routine will set the TRIS and LAT bits
+;       appropriately.
+;
+;       Unique configuration constants are:
+;
+;       SCL_DRIVE_HIGH, bool
+;
+;         When true, the SCL line will be actively driven both high and low.
+;         On a standard IIC bus, both the SCL and SDA lines are only driven low
+;         and passively pulled up.  This constant should only be set to TRUE
+;         when it is absolutely certain that this is the only master, and that
+;         none of the slave devices will ever perform clock stretch.  With this
+;         constant set to TRUE, the SCL line does not need a pullup resistor and
+;         will always be actively driven.  The default is FALSE (standard IIC
+;         behavior).
+;
+;     IIC.INS.DSPIC
+;
+;       Drives the IIC peripheral.  Unique configuration constants are:
+;
+;       UN, integer
+;
+;         The hardware number of the IIC module to control.  Usually the first
+;         IIC is called IIC1, the second IIC2, etc.  This value is the 1 or 2 in
+;         these names.  Default is 1.
+;
+;       BRGINST, integer
+;
+;         Number of instructions per input clock to the baud rate generator.
+;         This is 1 on most processors, meaning the baud rate generator is run
+;         from the instruction clock.  On some processors, the baud rate
+;         generator is run from the processor clock, or something else.  For
+;         example, when the baud rate generator is run from the processor clock,
+;         and there are two such clock cycles per instruction cycle, then
+;         BRGINST must be 2.  The default is 1.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   name    string = "" ;unique name for exported symbols, may be empty
+/const   maxfreq real = 400e3 ;desired maximum IIC bus clock rate, Hz
+
+;**** DELETE ALL BUT ONE OF THE FOLLOWING SECTIONS: *****
+
+;
+;   Firmware-only IIC bus implementation.
+;
+/const   scl_drive_high bool = false ;don't actively drive SCL both ways
+
+/include "(cog)src/dspic/iic_fw.ins.dspic"
+
+;
+;   Use the hardware IIC peripheral.
+;
+/const   brginst real = 1    ;instruction cycles per baud rate generator clock
+/const   un      integer = 1 ;1-N number of the peripheral handled by this module
+
+/include "(cog)src/dspic/iic.ins.dspic"
+
+         .end

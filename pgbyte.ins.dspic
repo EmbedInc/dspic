@@ -1,0 +1,135 @@
+;   Routines for accessing program memory as if it were a array of bytes.
+;
+;   See the header comments in QQQ_PGBYTE.DSPIC for details.  This file is the
+;   "library" code that is intended to be included from the project-specific
+;   module.  QQQ_PGBYTE.DSPIC is a template for such a module.
+;
+.section .code_pgbyte, code
+;*******************************************************************************
+;
+;   Subroutine PGBYTE_READ
+;
+;   Read the program memory byte pointed to by W13:W12 into W0, and update
+;   W13:W12 to point to the next byte.
+;
+         glbsub  pgbyte_read
+
+         btsc    w12, #0     ;even address ?
+         jump    rdpb_odd    ;odd address
+         btsc    w13, #15    ;first (low) byte ?
+         jump    rdpb_even2  ;second byte
+;
+;   Read the low byte of the even word.
+;
+         and     #0xFF, w13
+         mov     w13, Tblpag ;set high 8 bits of address to access
+         tblrdl  [w12], w0   ;read the word
+         and     #0xFF, w0   ;mask in only the target byte
+
+         bset    w13, #15    ;indicate to read high byte next time
+         jump    rdpb_leave
+;
+;   Read the high byte of the even word.
+;
+rdpb_even2:
+         and     #0xFF, w13
+         mov     w13, Tblpag ;set high 8 bits of address to access
+         tblrdl  [w12], w0   ;read the word, point to next word
+         lsr     w0, #8, w0  ;extract the high byte only and move it into place
+
+         add     #1, w12     ;point to odd word next time
+         jump    rdpb_leave
+;
+;   Read the odd word.  This word is only one byte wide.
+;
+rdpb_odd:
+         and     #0xFF, w13
+         mov     w13, Tblpag ;set high 8 bits of address to access
+         tblrdh  [w12], w0   ;read the byte into W0
+
+         add     #1, w12     ;update address to point to next byte
+         addc    #0, w12
+
+rdpb_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine PGBYTE_ADR_INC
+;
+;   Increment the program memory bytes address in W13:W12 by one.
+;
+         glbsub  pgbyte_adr_inc
+
+;
+;   Find which of the three bytes within the program memory word is currently
+;   being addressed.
+;
+         btsc    w12, #0     ;even pgmem address ?
+         jump    inc_odd     ;odd address, high byte of three
+         btsc    w13, #15    ;first (low) byte ?
+         jump    inc_even2   ;second byte
+;
+;   Currently addressing low byte of low word.
+;
+         bset    w13, #15    ;to second byte at this pgmem address
+         jump    inc_leave
+;
+;   Currently addressing high byte of low word.
+;
+inc_even2:
+         add     #1, w12     ;point to odd word next time
+         and     #0xFF, w13  ;clear the second byte flag
+         jump    inc_leave
+;
+;   Currently addressing the high byte.
+;
+inc_odd:
+         add     #1, w12     ;update address to point to next byte
+         addc    #0, w12
+
+inc_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine PGBYTE_ADR_ADD
+;
+;   Add the unsigned byte offset in W0 to the program memory byte address in
+;   W13:W12.
+;
+         glbsub  pgbyte_adr_add, regf0 | regf1 | regf2
+;
+;   Compute the number of whole program memory words to advance.  There are 3
+;   bytes in each word.
+;
+         mov     #3, w2      ;get value to divide by
+         repeat  #17
+         div.u   w0, w2      ;whole pgmem words in W0, remaining bytes in W1
+;
+;   W0 contains the whole program memory words to advance, and W1 the remaining
+;   bytes.  W1 is guaranteed to be either 0, 1, or 2.
+;
+;   Now update the address by the whole program memory words.
+;
+         sl      w0, #1, w0  ;make pgmem address offset for the whole pgmem words
+         add     w12, w0, w12 ;add the whole pgmem words offset
+         addc    #0, w13
+;
+;   Advance the remaining bytes within a word.  There are either 0, 1, or 2
+;   remaining bytes to advance over.
+;
+         cp0     w1
+         bra     z, add_dinc ;no remaining bytes to increment over ?
+         mcall   pgbyte_adr_inc ;increment address by one byte
+         sub     #1, w1      ;count one less byte left to increment over
+         bra     z, add_dinc ;done incrementing ?
+         mcall   pgbyte_adr_inc ;increment over one more byte
+add_dinc:                    ;done incrementing over any remaining bytes
+;
+;   Make sure the unused bits in the high address word are set to 0.
+;
+         mov     #0x80FF, w0 ;mask of valid bits in high word
+         and     w13, w0, w13 ;apply the mask
+
+         leaverest

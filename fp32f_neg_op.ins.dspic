@@ -1,0 +1,38 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_neg_op_ins"]] then
+  /const fp32f_neg_op_ins bool = true
+
+.section .code_fp32f_neg_op, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_NEG_OP
+;
+;   Negate the value in the floating point operand (W3:W2).
+;
+;   Negating a floating point value of this format is just flipping the high
+;   bit.  However, if the value is zero, the whole value must be left 0.
+;
+         glbsub  fp32f_neg_op
+
+         ior     w2, w3, [w15] ;set Z if FP value is zero
+         btss    Sr, #Z      ;FP value is zero ?
+         btg     w3, #15     ;not zero, flip the sign bit
+
+         leaverest
+
+  /endif

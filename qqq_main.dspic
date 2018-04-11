@@ -1,0 +1,124 @@
+;   ***************************************************************
+;   * Copyright (C) 2009, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Main event loop.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+
+;
+;   Derived constants.
+;
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_main, bss
+
+;*******************
+;
+;   Local state.
+;
+
+;
+;   Local state in near memory.
+;
+.section .near_main, bss, near ;varibles in near RAM
+
+alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_xxx, 0
+
+
+.section .code_main, code
+;*******************************************************************************
+;
+;   Main operating loop entry point.  MAIN is jumped to from the INIT module
+;   after system level initialization is complete.
+;
+         glbent  main        ;jumps here from INIT after system initialization
+;
+;   Initialize state managed by this module before entering the main operating
+;   loop.
+;
+         clr     flags       ;init all local flags to off
+
+;********************
+;
+;   Main loop.
+;
+loop_main:
+         call    task_yield  ;give all other tasks a chance to run
+;
+;   Handle new 1 ms clock tick.
+;
+         cp0     ev_1ms
+         bra     z, d_tick1ms ;done with all 1 ms ticks ?
+         dec     ev_1ms      ;clear the event condition
+         ;
+         ;   New 1 ms clock tick.
+         ;
+
+d_tick1ms:                   ;done with 1 ms tick processing
+;
+;   Handle new 10 ms clock tick.
+;
+         cp0     ev_10ms
+         bra     z, d_tick10ms ;done with all 10 ms ticks ?
+         dec     ev_10ms     ;clear the event condition
+         ;
+         ;   New 10 ms clock tick.
+         ;
+
+d_tick10ms:
+;
+;   Handle new 100 ms clock tick.
+;
+         cp0     ev_100ms
+         bra     z, d_tick100ms ;done with all 100 ms ticks ?
+         dec     ev_100ms    ;clear the event condition
+         ;
+         ;   New 100 ms clock tick.
+         ;
+
+d_tick100ms:
+;
+;   Handle new 1 s clock tick.
+;
+         cp0     ev_1s
+         bra     z, d_tick1s ;done with all 1 s ticks ?
+         dec     ev_1s       ;clear the event condition
+         ;
+         ;   New 1 s clock tick.
+         ;
+
+d_tick1s:
+;
+;   Done checking all event.
+;
+         jump    loop_main   ;done with this iteration of this task
+.end

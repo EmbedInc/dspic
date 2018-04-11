@@ -1,0 +1,201 @@
+;   ***************************************************************
+;   * Copyright (C) 2009, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Low level CAN bus interface.
+;
+;   CAN bus interface routines.  The exported routines are briefly listed here.
+;   See the header comments of each routine for details.
+;
+;     CAN_INIT  -  One-time module initialization.  Must be first call after
+;       reset.
+;
+;     CAN_START  -  Sets up the CAN hardware ready for use, and also starts the
+;       CAN receiving thread.
+;
+;     CAN_SEND_INIT  -  Acquires exclusive lock on the CAN frame sending
+;       facility and initializes the frame to send.  W0 indicates what kind of
+;       frame to create:
+;
+;         0 - Standard data frame
+;
+;         1 - Extended data frame
+;
+;         2 - Standard remote request frame
+;
+;         3 - Extended remote request frame
+;
+;     CAN_SEND_ID  -  Sets the frame ID from W0 (standard frame) or W1:W0
+;       (extended frame).
+;
+;     CAN_SEND_DAT  -  Adds the low byte of W0 to the output CAN frame.
+;
+;     CAN_SEND_DAT16  -  Adds the word in W0 to the output CAN frame.
+;
+;     CAN_SEND_DAT24  -  Adds the low 24 bits if W1:W0 to the output CAN frame.
+;
+;     CAN_SEND_DAT32  -  Adds the 4 bytes of W1:W0 to the output CAN frame.
+;
+;     CAN_SEND  -  Sends the frame described by the current transmit frame
+;       state and releases the lock on the CAN frame sending facility.
+;
+;   The following global flags are used by this module:
+;
+;     FLAG_CANIN  -  Automatically set by the CAN receiving task in this module
+;       whenever a new CAN frame is received.  The CAN frame data will be in the
+;       global CANIN_xxx variables.  This state is only valid when FLAG_CANIN is
+;       set.  New received CAN frames will be held and will not overwrite the
+;       CANIN_xxx state until FLAG_CANIN is cleared.  This flag must be cleared
+;       by application code outside this file when done with the CANIN_xxx state
+;       for the current frame to allow new CAN frames to be received.
+;
+;       In addition to the FLAG_CANIN_xxx bits described below, the received
+;       CAN frame state is:
+;
+;         CANIN_ID  -  CAN frame ID, 32 bits.
+;
+;         CANIN_NDAT  -  Number of data bytes in the CAN frame, always 0-8.
+;
+;         CANIN_DAT  -  The data bytes, stored sequentially.  This symbol is the
+;           address of the first data byte.  The 8 bytes are stored in memory
+;           address order.  This can also be thought of as four 16-bit words.
+;
+;         CANIN_D0
+;         CANIN_D1
+;         CANIN_D2
+;         CANIN_D3
+;         CANIN_D4
+;         CANIN_D5
+;         CANIN_D6
+;         CANIN_D7  -  Symbols for each of the individual data bytes.  The even
+;           numbers are word-aligned.  These words contain the byte referenced
+;           in the symbol name in the low half, and the next byte in the high
+;           half.  For example CANIN_D2 has data byte 2 in bits 7:0, and byte 3
+;           in bits 15:8.
+;
+;     FLAG_CANIN_EXT  -  Indicates the current received CAN frame is in extended
+;       format (29 bit ID) as apposed to standard format (11 bit ID).  This flag
+;       is read-only outside this file, and is only valid while FLAG_CANIN is
+;       set.
+;
+;     FLAG_CANIN_RTR  -  Indicates the current received CAN frame is a remote
+;       request as apposed to a data frame.  This flag is read-only outside this
+;       file, and is only valid while FLAG_CANIN is set.
+;
+;     FLAG_CANSEND  -  Part of the mutex mechanism to guarantee a single task at
+;       a time is building and sending a CAN frame.  Managed in this module, but
+;       may be examined by external code to see if the CAN sending mechanism is
+;       currently acquired by another task and therefore whether CAN_SEND_INIT
+;       will stall for a while if called immediately.
+;
+;   The following pre-processor constant are used to configure this module:
+;
+;     BITRATE  -  Preprocessor constant, type REAL.  The desired CAN bit rate in
+;       bits per second.  Default = 500 Kbits/second.
+;
+;     CANIN_CALLBACK  -  Preprocessor constant, type STRING.  Name of routine to
+;       call from internal CAN thread when a CAN frame is received.  No routine
+;       is called when this constant is blank.  Default = blank (no received CAN
+;       frame callback routine).
+;
+;     CANOUT_CALLBACK  -  Preprocessor constant, type STRING.  Name of routine
+;       to call from CAN_SEND immediately after a CAN frame transmission has
+;       been initiated but before the CAN frame sending lock is released.  The
+;       registers will contain information about the CAN frame:
+;
+;         W1:W0  -  Frame ID, either 11 or 29 bits, upper unused bits will be 0.
+;
+;         W2  -  Flag bits:
+;
+;           Bit 0  -  0 = standard frame, 11 bit ID
+;                     1 = extended frame, 29 bit ID
+;
+;           Bit 1  -  0 = data frame
+;                     1 = remote request frame
+;
+;           The remaining bits are reserved and will be 0 in this version.  This
+;           word is the same format as the flags word passed to CAN_SEND_INIT.
+;
+;         W3  -  Number of data bytes, always 0-8.
+;
+;         W4, W5, W6, W7  -  Data bytes.  The first data byte is in the low byte
+;           of W4, then the high byte, then the low byte of W5, etc.  Unused
+;           bytes are set to 0.
+;
+;       No routine is called when this constant does not exist or is the empty
+;       string.
+;
+;     DEBUG_CANCFG  -  Preprocessor constant, type BOOL.  TRUE causes detailed
+;       information to be shown about the automatic CAN bit timing
+;       configuration calculations.  The default is FALSE, which just shows the
+;       final result.
+;
+;     NCANBUF  -  Number of CAN frame buffers to allocate in memory.  These will
+;       be in DMA memory if the processor has DMA memory.  One of these buffers
+;       will be used for transmitting with the remaining ones forming a FIFO for
+;       received frames.  Only the values 4, 6, 8, 12, 16, 24, and 32 are
+;       allowed.  The default is 8.
+;
+;     DMA_CANRECV  -  DMA channel number to use for receiving CAN frames.  The
+;       default is 0.
+;
+;     DMA_CANXMIT  -  DMA channel number to use for sending CAN frames.  The
+;       default is 1.
+;
+;     DMARAM  -  True if the processor has a special region of RAM that the DMA
+;       engine can access.  If so, all RAM buffers accessed by DMA must be in
+;       this region.  False indicates that the DMA engine can access all of RAM.
+;
+;     CANRX_RP  -  RPn or RPIn number of the pin to use for the RX function.  0
+;       indicates CANRX is on dedicated pin for that purpose and no remappable
+;       pin will be selected.
+;
+;     CANRX_RPREG  -  Address of the 8 bit register that selects the remappable
+;       input pin for the CANRX function.
+;
+;     CANTX_RPREG  -  String that represents the byte address of the register
+;       that sets the mapping for the remappable output pin to use for the CAN
+;       TX function.  The string must be resolvable to a address by the
+;       assembler, and is not interpreted by the pre-processor.  Blank indicates
+;       to not make any remappable pin assignment for CANTX.  In that case, the
+;       processor must have a dedicated pin for CANTX.
+;
+;     CANTX_RPID  -  The ID value to specify the CAN TX function for a
+;       a remappable output pin.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   bitrate real = 500e3 ;desired CAN bus bit rate, Hz
+/const   canin_callback = "" ;routine to call when CAN frame received
+/const   canout_callback = "" ;routine to call when CAN frame sent
+/const   debug_cancfg bool = false ;no extra output during build about CAN config
+/const   ncanbuf integer = 16 ;number of DMA buffers for CAN messages
+/const   dma_canrecv integer = 0 ;DMA channel to use for receiving
+/const   dma_canxmit integer = 1 ;DMA channel to use for transmitting
+/const   dmaram  bool = False ;processor has no special region of RAM for DMA
+
+/const   canrx_rp integer = 53 ;RPn or RPIn pin number for CANRX, 0 = none
+/const   canrx_rpreg = "Rpinr26+0" ;adr of 8 bit reg to select CANRX remappable pin
+
+/const   cantx_rpreg = "Rpor5+0" ;adr of 8 bit reg for function of our TX pin
+/const   cantx_rpid integer = 2#001110 ;CAN TX ID for remappable output pin
+
+/include "(cog)src/dspic/ecan_dma.ins.dspic" ;driver for ECAN, 2 DMA channels
+
+.end

@@ -1,0 +1,62 @@
+;   Modbus packet sending and receiving interface.
+;
+;   This is the top file of the module.  This file includes a library module
+;   that contains the actual code.  Preprocessor constants are set here first to
+;   configure the generic library file.  The preprocessor constants for
+;   configuring the library file are:
+;
+;     NAME, string
+;
+;       Unique name for the exported symbols.  May be the empty string, which is
+;       the default.  This mechanism is used to differentiate multiple Modbus
+;       modules.  When the underlying transport is via UART, then this name must
+;       match the NAME constant in the UART module.
+;
+;     MASTER, bool
+;
+;       This device is the master, not a slave.  The default is FALSE.
+;
+;     CALLBACK_RECV, string
+;
+;       Name of routine to call when a valid packet has been received.  This
+;       means the packet is of valid length and the checksum test passed.  It
+;       may not be addressed to us.  W1 will contain the starting address of the
+;       packet and W2 the number of bytes.  This will not include the checksum,
+;       since it has already been checked and found to be correct.  All the
+;       general registers W0-W14 may be trashed.
+;
+;       This callback feature is disabled when this constant is the empty
+;       string.  This is also the default.
+;
+;     CALLBACK_RECV, string
+;
+;       Like CALLBACK_RECV except the routine will only be called with packets
+;       addressed to us.  Note that this distinction is only meaningful when
+;       this device is a slave.
+;
+;     CALLBACK_SEND, string
+;
+;       Name of routine that will be called whenever a Modbus packet is sent.
+;       W1 will contain the starting address of the packet data bytes, W2 the
+;       number of data bytes, and W3 the Modbus address of the packet.  The data
+;       bytes do not include the address or the checksum.  All the general
+;       registers W0-W15 must be preserved.
+;
+;       This callback feature is disabled when this constant is the empty
+;       string.  This is also the default.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   name    string = "" ;unique name for exported symbols, may be empty
+/const   master  bool = false ;we are not the bus master
+/const   callback_recv string = "" ;no routine to call on packet received
+/const   callback_recvus string = "" ;no routine to call on packet for us
+/const   callback_send string = "" ;no routine to call when sending packet
+
+/include "(cog)src/dspic/modbus_ser.ins.dspic"
+
+.end

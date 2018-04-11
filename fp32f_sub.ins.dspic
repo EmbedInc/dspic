@@ -1,0 +1,40 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_sub_ins"]] then
+  /const fp32f_sub_ins bool = true
+
+  /include "(cog)src/dspic/fp32f_add.ins.dspic"
+
+.section .code_fp32f_sub, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_SUB
+;
+;   W1:W0 <-- W1:W0 - W3:W2
+;
+         glbsub  fp32f_sub, regf3
+
+         ior     w2, w3, [w15]
+         bra     z, sub_leave ;subtracting 0, nothing to do ?
+
+         btg     w3, #15     ;negate the number to subtract
+         mcall   fp32f_add   ;add it
+
+sub_leave:                   ;common exit point
+         leaverest
+
+  /endif

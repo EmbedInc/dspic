@@ -1,0 +1,37 @@
+;   This module produces no executable code and its binary is not linked into
+;   the firmware build.  It's purpose is to produce H files from state that is
+;   defined in assembler so that it can be accessed from C.
+;
+/include "qq2.ins.dspic"
+
+/call write_c_machine "qq2_machine.h" ;define machine-specific types
+/call write_c_consts "qq2_const.h" ;define preprocessor constants in C
+/call write_c_flags "qq2_flags.h" ;make H file that defines flag bits
+/call write_c_iopins "qq2_iopins.h" ;make H file that defines I/O pins
+
+;*******************************************************************************
+;
+;   Write selected preprocessor constants to the QQ2_CONST.H file.  Since the C
+;   code is intended to be portable, only specific constants are exported.
+;
+/call write_push "qq2_const.h"
+
+/call write_c_const fwtype
+/call write_c_const fwver
+/call write_c_const fwseq
+
+/loop symbols sym const      ;write out all response stream opcode constants
+  /var local name string
+  /set name [sym sym name]   ;get bare symbol name
+  /if [< [slen name] 5] then ;too short to be RSP_x ?
+    /repeat
+    /endif
+  /if [<> [substr 1 4 name] "rsp_"] then ;doesn't start with "rsp_" ?
+    /repeat
+    /endif
+  /call write_c_const [chars sym] ;write this symbol to H file
+  /endloop
+
+/writepop
+
+.end

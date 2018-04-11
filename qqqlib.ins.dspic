@@ -1,0 +1,34 @@
+;   ***************************************************************
+;   * Copyright (C) 2008, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   This include file sets up the environment for the QQ2 firmware.
+;
+/const   picname = "QQ4"     ;specific PIC model name
+/const   srcdir  = "qq1"     ;SOURCE directory containing this project
+/const   buildname = "qq2"   ;name of this project
+/const   fwtype  integer = 0 ;unique ID for this firmware
+/const   using_xc16 bool = false ;no XC16 source modules included in build
+
+/include "(cog)src/dspic/std_def.ins.dspic"
+/include "(cog)src/dspic/fwtype.ins.dspic"
+;
+;   Set configuration for the standard routines and macros.
+;
+/const   freq_osc real = [* 7.3728e6 16] ;CPU oscillator frequency, Hz
+/const   oscdig  integer = 5 ;significant digits to show oscillator values with
+/const   freq_inst real = [/ freq_osc 4] ;instruction cycle frequency, Hz
+
+/include "(cog)src/dspic/std.ins.dspic"

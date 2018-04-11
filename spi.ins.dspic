@@ -1,0 +1,267 @@
+;   ***************************************************************
+;   * Copyright (C) 2016, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Source code "library" file for providing a procedural interface to a SPI
+;   bus.  This file is for including in a main module.  The QQQ_SPI.DSPIC
+;   file is a template for such a main module.  This code can be customized at
+;   build time by the values of various preprocessor constants.  See the
+;   comments in QQQ_SPI.DSPIC for the customization options and a quick
+;   description of the procedural interface that is exported.
+;
+
+;*******************************************************************************
+;
+;   Resolve all configuration settings.  All configuration constants will exist
+;   after this section.  The ones that did not previously exist will be set to
+;   their default values.
+;
+/if [not [exist "name"]] then
+  /const name string = ""
+  /endif
+/if [not [exist "un"]] then
+  /const un integer = 1
+  /endif
+/if [not [exist "maxfreq"]] then
+  /const maxfreq real = 1e6
+  /endif
+
+;*****************************
+;
+;   Derived constants.
+;
+/if [= name ""]
+  /then                      ;no unique name for the subroutines
+    /const uname string = ""
+  /else                      ;subroutine names will be customized
+    /const uname string = [str "_" name]
+  /endif
+;
+;   Determine the clock divider configuration.  The instruction clock is divided
+;   by the primary and secondary prescalers to make the SPI bus clock.  The
+;   primary prescaler can be 1, 4, 16, or 64.  The secondary prescaler can be 1
+;   to 8.  The resulting clock should be as close as possible to MAXFREQ without
+;   exceeding it.
+;
+;   This section defines the following preprocessor constants:
+;
+;     PPRE  -  Primary prescaler selection field value in SPIxCON1 register.
+;
+;     SPRE  -  Secondary prescaler selection field value in SPIxCON1 register.
+;
+;     SPIFREQ  -  Actual resulting clock frequency.
+;
+/block
+  /var local p1div integer   ;divide value represented by P1
+  /var local p2div integer   ;divide value represented by P2
+  /var local bp1 integer     ;P1 for best result so far
+  /var local bp2 integer     ;P2 for best result so far
+  /var local bf real         ;frequency of best result so far
+  /var local r real          ;scratch floating point
+
+  /set bf 0                  ;init to no solution found
+  /loop with p1 from 3 to 0 by -1 ;once for each possible primary prescale value
+    /set p1div [exp 4 [- 3 p1]] ;divide value represented by P1
+    /loop with p2 from 7 to 0 by -1 ;once for each possible secondary prescale value
+      /set p2div [- 8 p2]    ;divide value represented by P2
+      /set r [/ freq_inst [* p1div p2div]] ;frequency with this prescale setup
+      /if [> r maxfreq] then ;frequency higher than maximum allowed ?
+        /repeat
+        /endif
+      /if [> r bf] then      ;better than any previous frequency ?
+        /set bf r            ;update state of best found so far
+        /set bp1 p1
+        /set bp2 p2
+        /endif
+      /endloop               ;back for next secondary prescaler setting
+    /endloop                 ;back for next primary prescaler setting
+
+  /if [= bf 0] then          ;no valid solution ?
+    /show "  Can not achieve " [eng maxfreq] "Hz clock rate or less"
+         .error  "MAXFREQ"
+         .end
+    /stop
+    /endif
+
+  /const ppre integer = bp1  ;save primary prescaler setting
+  /const spre integer = bp2  ;save secondary prescaler setting
+  /const spifreq real = bf   ;save resulting clock frequency
+  /endblock
+
+/block
+  /var local s string
+  /var local ii integer
+
+  /set s ""
+  /set s [str s "SPI clock frequency " [eng spifreq] "Hz"]
+  /set ii [exp 4 [- 3 ppre]]
+  /set s [str s ", Pri pre " ppre " div " ii]
+  /set ii [- 8 spre]
+  /set s [str s ", Sec pre " spre " div " ii]
+  /show "  " s
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+.section .ram_spi[chars uname], bss
+
+allocg   task_spi[chars uname] ;ID of task that has SPI locked, MSB 1 means none
+
+
+.section .code_spi[chars uname], code
+;*******************************************************************************
+;
+;   Subroutine SPI_INIT
+;
+;   Initialize the hardware and other state managed by this module.  This must
+;   be the first call into this module.
+;
+         glbsub  spi[chars uname]_init, regf0
+;
+;   Initialize local state.
+;
+         mov     #0x8000, w0
+         mov     w0, task_spi[chars uname] ;init to unlocked
+;
+;   Initialize the hardware.
+;
+         clr     Spi[v un]stat ;make sure module is off during configuration
+
+         mov     #0b0000000100100000 | [shiftl spre 2] | [v ppre], w0
+                 ;  XXX------------- unused
+                 ;  ---0------------ enable SCK (clock) output
+                 ;  ----0----------- enable SDO (data) output
+                 ;  -----0---------- word size is 8 bits, not 16
+                 ;  ------0--------- SMP: sample input in middle of data output time
+                 ;  -------1-------- CKE: out changes on active to idle clock edge
+                 ;  --------0------- peripheral does not drive slave select
+                 ;  ---------0------ CKP: clock idle low, active high
+                 ;  ----------1----- MSTEN: master mode
+                 ;  -----------XXX-- secondary presecaler, from SPRE above
+                 ;  --------------XX primary prescaler, from PPRE above
+         mov     w0, Spi[v un]con1
+
+         mov     #0b0000000000000000, w0
+                 ;  0--------------- disable hardware framed mode
+                 ;  -X-------------- unused when not in framed mode
+                 ;  --X------------- unused when not in framed mode
+                 ;  ---XXXXXXXXXXX-- unused
+                 ;  --------------0- unused when not in framed mode
+                 ;  ---------------0 disable FIFO buffers
+         mov     w0, Spi[v un]con2
+
+         mov     #0b1000000000000000, w0
+                 ;  1--------------- turn on the module
+                 ;  -X-------------- unused
+                 ;  --0------------- continue operation in idle
+                 ;  ---XX----------- unused
+                 ;  -----XXX-------- number of pending writes
+                 ;  --------X------- shift register empty, ready for next word
+                 ;  ---------0------ reset to no read overflow has occurred
+                 ;  ----------X----- read FIFO empty indicator
+                 ;  -----------XXX-- interrupt mode (we don't use interrupts)
+                 ;  --------------X- transmission not started yet indicator
+                 ;  ---------------X received word available indicator
+         mov     w0, Spi[v un]stat
+;
+;   Work around bug in some SPI peripherals.
+;
+         bclr    Spi[v un]stat, #Spien ;turn the module off and on again
+         bset    Spi[v un]stat, #Spien
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine SPI_LOCK
+;
+;   Acquire the exclusive lock for accessing the SPI bus.  This routine waits
+;   indefinitely until the SPI output stream is available.
+;
+         glbsub  spi[chars uname]_lock, regf0
+
+lock_wait:                   ;back here until lock is available
+         mov     task_spi[chars uname], w0 ;get ID of task that has SPI locked
+         btsc    w0, #15     ;lock is in use ?
+         jump    lock_take   ;no, go take it
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    lock_wait   ;back to check lock again
+
+lock_take:                   ;the lock is available
+         mov     currtask, w0 ;get our task ID
+         mov     w0, task_spi[chars uname] ;indicate we have the lock now
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine SPI_UNLOCK
+;
+;   Release the lock on the SPI output stream if it is held by this task.
+;
+         glbsub  spi[chars uname]_unlock, regf0 | regf1
+
+         mov     task_spi[chars uname], w0 ;get the ID of the task holding the lock
+         mov     currtask, w1 ;get the ID of this task
+         cp      w0, w1
+         bra     nz, unlock_leave ;this task isn't holding the lock ?
+
+         mov     #0xFFFF, w0
+         mov     w0, task_spi[chars uname] ;release the SPI output lock
+
+unlock_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine SPI_BYTE
+;
+;   Transfer one byte in each direction over the SPI bus.  The outgoing byte is
+;   in the low bits of W0.  The received byte is zero-extended into W0.
+;
+         glbsub  spi[chars uname]_byte
+
+         mov     w0, Spi[v un]buf ;start the transfer
+by_wat:                      ;back here to wait for transfer done
+         btss    Spi[v un]stat, #Spirbf ;transfer complete ?
+         jump    by_wat      ;no, go back and check again
+
+         mov     Spi[v un]buf, w0 ;read the received value
+         and     #0xFF, w0   ;mask in only the valid data
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine SPI_WRITE
+;
+;   Write the byte in the low 8 bits of W0 onto the SPI bus.  The received byte
+;   is discarded.
+;
+         glbsub  spi[chars uname]_write, regf0
+         mcall   spi[chars uname]_byte
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine SPI_READ
+;
+;   Write a 0 byte onto the SPI bus, and return the received byte in W0.
+;
+         glbsub  spi[chars uname]_read
+         mov     #0, w0
+         jump    spi[chars uname]_byte

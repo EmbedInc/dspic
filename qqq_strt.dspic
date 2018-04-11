@@ -1,0 +1,218 @@
+;   ***************************************************************
+;   * Copyright (C) 2003, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Top module for the QQ2 project.  See the QQ2.INS.DSPIC include
+;   file for a description of the project.
+;
+/include "qq2.ins.dspic"
+
+/block
+  /var local s string
+  /set s [str "Fosc = " [eng freq_osc oscdig] "Hz"]
+  /set s [str s ", Fcy = " [eng freq_inst oscdig] "Hz"]
+  /set s [str s ", Tcy = " [eng [/ 1 freq_inst] oscdig] "s"]
+  /show "  " s
+  /endblock
+/if [exist "fwtype"]
+  /then                      ;FWTYPE exists
+    /show "  Firmware type ID = " fwtype
+  /else                      ;FWTYPE does not exist
+    /show "  Firmware type ID not defined"
+  /endif
+/if debug_icd then
+  /show "  RealIce debugging enabled"
+  /endif
+
+;*******************************************************************************
+;
+;   Static processor configuration settings.
+;
+config   __FOSC, 0b1111111111110111
+                 ; --XXXX--XXXX----  unused
+                 ; 11--------------  disable clock switching
+                 ; ------11--------  select primary oscillator
+                 ; ------------0111  4-10MHz crystal, 16x PLL
+
+;                ; ------------0110  4-10MHz crystal, 8x PLL
+
+config   __FWDT, 0b0111111111111111
+                 ; -XXXXXXXXX------  unused
+                 ; 0---------------  disable watchdog timer
+                 ; ----------XX----  watchdog timer prescaler A
+                 ; ------------XXXX  watchdog timer prescaler B
+
+config   __FBORPOR, 0b1111111111001111
+                 ;    -XXXX----X--XX--  unused
+                 ;    1---------------  enable MCLR pin as MCLR
+                 ;    -----1----------  motor control PWM pins wake high Z
+                 ;    ------XX--------  motor control PWM pins wakeup polarity
+                 ;    --------1-------  enable brown out reset
+                 ;    ----------00----  select 4.5V low voltage threshold
+                 ;    --------------11  select maximum power on reset time (64mS)
+
+config   __FGS,  0b1111111111111111
+                 ; XXXXXXXXXXXXXX--  unused
+                 ; --------------1-  disable program memory code protection
+                 ; ---------------1  disable program memory write protection
+
+;*******************************************************************************
+;
+;   Reserve RAM for the ICD2.  It needs exclusive control over the first
+;   80 bytes.
+;
+/if debug_icdram then
+.equiv   __ICD2RAM, 1        ;linker reserves ICD RAM when this symbol defined
+.global  __ICD2RAM
+  /endif
+
+;*******************************************************************************
+;
+;   Define the global flag words.  These are defined in near RAM so that bit
+;   manipulation instructions can be used on them directly.  NFLAGB flag words
+;   need to be defined.
+;
+         flags_define
+
+;*******************************************************************************
+;
+;   Constants in program memory so that HEX file editing tools know the version
+;   of this firmware.
+;
+.section .code_fwinfo, code, address(0x800)
+         .pword  fwtype | (fwver << 8) | (fwseq << 16)
+
+
+.section .code_strt, code
+;*******************************************************************************
+;
+;   Start of exeuctable code.
+;
+/if using_c
+  /then
+         glbent  _main       ;C runtime library jumps here after initialization
+  /else
+         glbent  __reset     ;jumps here directly from reset vector
+  /endif
+;
+;   Initialize the interrupt system.
+;
+         clr     Iec0        ;disable all interrupts
+.ifdef Iec1
+         clr     Iec1
+  .endif
+.ifdef Iec2
+         clr     Iec2
+  .endif
+.ifdef Iec3
+         clr     Iec3
+  .endif
+.ifdef Iec4
+         clr     Iec4
+  .endif
+
+.ifdef Ipc0                  ;init all interrupt priorties to 0 (disabled)
+         clr     Ipc0
+  .endif
+.ifdef Ipc1
+         clr     Ipc1
+  .endif
+.ifdef Ipc2
+         clr     Ipc2
+  .endif
+.ifdef Ipc3
+         clr     Ipc3
+  .endif
+.ifdef Ipc4
+         clr     Ipc4
+  .endif
+.ifdef Ipc5
+         clr     Ipc5
+  .endif
+.ifdef Ipc6
+         clr     Ipc6
+  .endif
+.ifdef Ipc7
+         clr     Ipc7
+  .endif
+.ifdef Ipc8
+         clr     Ipc8
+  .endif
+.ifdef Ipc9
+         clr     Ipc9
+  .endif
+.ifdef Ipc10
+         clr     Ipc10
+  .endif
+.ifdef Ipc11
+         clr     Ipc11
+  .endif
+.ifdef Ipc12
+         clr     Ipc12
+  .endif
+.ifdef Ipc13
+         clr     Ipc13
+  .endif
+.ifdef Ipc14
+         clr     Ipc14
+  .endif
+.ifdef Ipc15
+         clr     Ipc15
+  .endif
+.ifdef Ipc16
+         clr     Ipc16
+  .endif
+.ifdef Ipc17
+         clr     Ipc17
+  .endif
+.ifdef Ipc18
+         clr     Ipc18
+  .endif
+.ifdef Ipc19
+         clr     Ipc19
+  .endif
+.ifdef Ipc20
+         clr     Ipc20
+  .endif
+
+         clr     Intcon1     ;initialize interrupt system to defaults
+         clr     Intcon2
+         clr     Sr          ;make sure running with interrupt priority 0
+.ifdef Gie
+         bset    Intcon2, #Gie ;globally allow interrupts
+  .endif
+;
+;   Set up the stack.
+;
+         mov     #__SPLIM_init, w0 ;initalize stack limit register
+         mov     w0, Splim
+         nop                 ;needed after changing SPLIM
+         mov     #__SP_init, w15 ;initialize the stack pointer
+
+         flags_clear         ;initialize all the global flags to off
+;
+;   Initialize the separate modules.
+;
+         gcall   trap_init   ;init traps handler module
+         gcall   port_init   ;init I/O ports
+         gcall   task_init   ;init multi-tasking manager
+         gcall   uart_init   ;init low level UART driver
+         gcall   cmd_init    ;init host command stream processing module
+         gcall   cmds_init   ;init command routines module
+         gcall   clock_init  ;init clock tick hardware and ticks generator
+
+         gjump   init        ;continue with system-wide initialization
+
+.end

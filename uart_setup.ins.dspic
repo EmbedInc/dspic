@@ -1,0 +1,17 @@
+;   Define global symbols and possibly additional build-time setup required by
+;   the UART subsystem.  This file is intended to be included from the main
+;   include file of a project with a UART module using the UART include file.
+;
+
+;   IDs for the various parity configurations.
+;
+/const   uart_parity_none integer = 0 ;no parity bit
+/const   uart_parity_even integer = 1 ;even parity (even number of 1 bits total)
+/const   uart_parity_odd integer = 2 ;odd parity (odd number of 1 bits total)
+/const   uart_parity_zero integer = 3 ;parity bit is always 0
+/const   uart_parity_one integer = 4 ;parity bit is always 1
+;
+;   Numbers for the bits in the activity word returned by UART_ACTIVITY.
+;
+/const   uart_act_recv integer = 0 ;a character was received since last call
+/const   uart_act_send integer = 1 ;a character was sent since last call

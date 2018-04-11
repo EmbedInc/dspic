@@ -1,0 +1,209 @@
+;   Table lookup routine with the following characteristics:
+;
+;     - The table is in program memory.  Each entry is one program memory word,
+;       with the high 8 bits unused (only the low 16 bits are used).
+;
+;     - Linear interpolation will be performed.
+;
+;     - The table values are assumed to be unsigned 16 bit integers.
+;
+;     - The table is one-dimensional (single input value, single output value).
+;
+;     - The table must contain a power of 2 segments, which means a power of 2
+;       plus 1 entries.
+;
+;   The interface to this routine follows the general table lookup routines
+;   interface.  The input value is passed in W0, with 0-65535 being full scale.
+;   The output value is returned in W0.  The table address is passed in the
+;   program memory word immediately following the call instruction.  The lookup
+;   routine returns to the first instruction after that (it skips over the table
+;   address word).
+;
+;   The first word of the table contains the table size as the number of
+;   segments.  The number of segments MUST be a power of 2 and MUST be at least
+;   2.  These conditions are not checked, but all manner of strange things can
+;   occur when they are violated.  Table segments refers to the ranges between
+;   table entries.  The number of table entries is therefore the number of
+;   segments plus 1.  Since the minimum number of segments is 1, the minimum
+;   number of table entries is 2.
+;
+;   Subsequent words of the table after the initial size word are the table
+;   entries.  Entries will be interpolated as 16 bit unsigned integers.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+
+;
+;   Derived constants.
+;
+
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+
+
+;*******************
+;
+;   Local state.
+;
+
+
+.section .code_lookup_lin_prog, code
+;*******************************************************************************
+;
+;   Subroutine LOOKUP_LIN_PROG
+;
+;   Linearly interpolate a table in data memory.  W0 is the table function input
+;   value with a range of 0-65553.  The linearly interpolated result will be
+;   returned in W0.
+;
+;   This routine trashes TBLPAG.
+;
+         glbsub  lookup_lin_prog, regf1 | regf2 | regf3 | regf4 | regf5
+;
+;   The data stack currently looks like this:
+;
+;     W15-14  -->  table pointer address low word
+;     W15-12  -->  table pointer address high word
+;     W15-10  -->  saved W1
+;     W15-8   -->  saved W2
+;     W15-6   -->  saved W3
+;     W15-4   -->  saved W4
+;     W15-2   -->  saved W5
+;     W15     -->  unused
+;
+         sub     w15, #12, w1 ;point to table pointer high address word
+         mov     [w1--], w2  ;get high address word, point to low
+         mov     w2, Tblpag  ;set high bits of program memory address to read
+         mov     [w1], w4    ;get low address word of the table pointer
+         tblrdl  [w4], w2    ;get the table start address in W3:W2
+         tblrdh  [w4], w3
+         add     w4, #2, [w1++] ;update low word of return address
+         mov     [w1], w4
+         addc    w4, #0, [w1] ;update high word of return address
+;
+;   The table start address is in W3:W2 and the return address has been fixed up
+;   to skip over the table pointer.
+;
+         mov     w3, Tblpag  ;read number of table segments into W4
+         tblrdl  [w2], w4
+         add     #2, w2      ;update W3:W2 to point to first data entry
+         addc    #0, w3
+;
+;   Register contents:
+;
+;     W0  -  The input value.
+;
+;     W1  -  Unused.
+;
+;     W3:W2  -  Program memory address of first data point in the table.
+;
+;     W4  -  Number of segments in the table, assumed to be power of 2.
+;
+;     W5  -  Unused.
+;
+;   Now make the number of fraction bits in the input value in W4 and the number
+;   of integer bits in W5.
+;
+         ff1r    w4, w5      ;make number of integer bits + 1
+         sub     #1, w5      ;save number of integer bits
+         subr    w5, #16, w4 ;save number of fraction bits
+;
+;   Register contents:
+;
+;     W0  -  The input value.
+;
+;     W1  -  Unused.
+;
+;     W3:W2  -  Program memory address of first data point in the table.
+;
+;     W4  -  Number of fraction bits in the input value.
+;
+;     W5  -  Number of integer bits in the input value.
+;
+;   Now use the integer part of the input value to fetch the starting and ending
+;   table values of the addressed segment.  The starting value will be put into
+;   W1 and the ending value into W3.
+;
+         lsr     w0, w4, w1  ;make integer part of the input value in W1
+
+         add     w2, w1, w2  ;add 2x the integer part to make address for start value
+         addc    #0, w3
+         add     w2, w1, w2
+         addc    #0, w3
+
+         mov     w3, Tblpag
+         tblrdl  [w2], w1    ;fetch the starting value
+
+         add     #2, w2      ;advance the address one table entry
+         addc    #0, w3
+
+         mov     w3, Tblpag
+         tblrdl  [w2], w3    ;fetch the ending value
+;
+;   Register contents:
+;
+;     W0  -  The input value.
+;
+;     W1  -  Starting value of the interval.
+;
+;     W2  -  unused
+;
+;     W3  -  Ending value of the interval.
+;
+;     W4  -  Number of fraction bits in the input value.
+;
+;     W5  -  Number of integer bits in the input value.
+;
+;   Now make the weights for the starting and ending values in W0 and W2,
+;   respectively.
+;
+         sl      w0, w5, w2  ;make ending value weight in W2
+         lsr     w2, w5, w2
+
+         mov     #1, w0      ;make relative weight of 1.0 in W0
+         sl      w0, w4, w0
+         sub     w0, w2, w0  ;make 1 - ending weight in W0
+;
+;   Register contents:
+;
+;     W0  -  Relative weight for starting value.
+;
+;     W1  -  Starting value of the interval.
+;
+;     W2  -  Relative weight for ending value.
+;
+;     W3  -  Ending value of the interval.
+;
+;     W4  -  Number of fraction bits in the input value.
+;
+;     W5  -  Number of integer bits in the input value.
+;
+;   Now apply the weights to each of their respective values, combine the
+;   results, and shift it into the proper scale.
+;
+         mul.uu  w0, w1, w0  ;make weighted start value in W1:w0
+         mul.uu  w2, w3, w2  ;make weighted end value in W3:W2
+
+         add     w0, w2, w0  ;make sum in W1:W0
+         addc    w1, w3, w1
+
+         mov     #0x8000, w2 ;make 1/2 for rounding
+         lsr     w2, w5, w2
+         add     w0, w2, w0  ;add the 1/2 to round the result
+         addc    #0, w1
+
+         lsr     w0, w4, w0  ;get the low bits of the result into W0
+         sl      w1, w5, w1  ;move the high bits of the result into place
+         ior     w0, w1, w0  ;assemble the final result in W0
+
+         leaverest

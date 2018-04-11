@@ -1,0 +1,284 @@
+;   ***************************************************************
+;   * Copyright (C) 2013, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   This module provides the basic infrastructure for interpreting and
+;   responding to commands over the EmCan byte stream interface.  The commands
+;   defined by EmCan are handled in this module, with hooks provided for the
+;   application to add its own commands to the application-specific opcode
+;   space.
+;
+;   Application-specific commands and other application-level resources required
+;   by this module are intended to be external.  The ECSTRA template is intended
+;   as a start for building the application-specific module related to
+;   processing the EmCan byte stream.
+;
+;   The canned code in this module can be customized by setting the following
+;   preprocessors state:
+;
+;     DEVMAN  -  String.  Contains the manufacturer's name.
+;
+;     DEVMOD  -  String.  Contains the manufacturer's model name of this device.
+;       The default is the empty string.
+;
+;     DEVDESC  -  String.  Contains the fixed device description string.  The
+;       default is the empty string.
+;
+;     DEVUSE  -  String.  Contains a assembler expression for the starting
+;       address of the user-settable device usage string in non-volatile memory.
+;       The default is the empty string, which indicates that no storage is
+;       supplied for the device usage string, in which case it will always be
+;       the empty string.
+;
+;       When existing, the first non-volatile memory byte must be the storage
+;       length of the string.  This is the maximum length the string can be, and
+;       is the size of the characters buffer in bytes.  The second byte is the
+;       actual length of the string as currently set.  Only this many valid data
+;       bytes follow.  If this value is less than the maximum length, then the
+;       the remaining bytes are ignored.
+;
+
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   devman  string = "" ;manufacturer's name
+/const   devmod  string = "" ;model name
+/const   devdesc string = "" ;fixed device description
+/const   devuse  string = "" ;non-volatile address of device usage string
+
+
+/include "(cog)src/dspic/ecstr.ins.dspic"
+
+;*******************************************************************************
+;
+;   Application-specific part of the commands dispatch table.  This table was
+;   started in ECSTR.INS.DSPIC, so this section must immediately follow where it
+;   is included.
+;
+;   There is one table entry for each possible 0 - 255 command opcode, with the
+;   entries for the EmCan-specific commands defined in the ECSTR.INS.DSPIC
+;   include file.  The part of the table that contains the application-specific
+;   commands is defined here.  Each table entry uses one program memory word
+;   (24 bits), and contains the address of the command processing routine for
+;   that opcode.
+;
+;   All EmCan specific command routines are named ECSCM_xxx, and other symbols
+;   internal to this module are named ECSTR_xxx.  It is suggested to avoid such
+;   names to prevent a naming conflict.
+;
+;   The table entries for unimplemented commands must contain 0.  This will
+;   cause the opcode byte to be ignored and the command reported as
+;   unimplemented in the CMDS response.
+;
+;   It is intended that application code not be added to this module, but to the
+;   ECSTRA module instead.  See the header comments in the ECSTRA module for the
+;   requirements on EmCan stream command routines.
+;
+         .pword  0           ;64
+         .pword  0           ;65
+         .pword  0           ;66
+         .pword  0           ;67
+         .pword  0           ;68
+         .pword  0           ;69
+         .pword  0           ;70
+         .pword  0           ;71
+         .pword  0           ;72
+         .pword  0           ;73
+         .pword  0           ;74
+         .pword  0           ;75
+         .pword  0           ;76
+         .pword  0           ;77
+         .pword  0           ;78
+         .pword  0           ;79
+         .pword  0           ;80
+         .pword  0           ;81
+         .pword  0           ;82
+         .pword  0           ;83
+         .pword  0           ;84
+         .pword  0           ;85
+         .pword  0           ;86
+         .pword  0           ;87
+         .pword  0           ;88
+         .pword  0           ;89
+         .pword  0           ;90
+         .pword  0           ;91
+         .pword  0           ;92
+         .pword  0           ;93
+         .pword  0           ;94
+         .pword  0           ;95
+         .pword  0           ;96
+         .pword  0           ;97
+         .pword  0           ;98
+         .pword  0           ;99
+         .pword  0           ;100
+         .pword  0           ;101
+         .pword  0           ;102
+         .pword  0           ;103
+         .pword  0           ;104
+         .pword  0           ;105
+         .pword  0           ;106
+         .pword  0           ;107
+         .pword  0           ;108
+         .pword  0           ;109
+         .pword  0           ;110
+         .pword  0           ;111
+         .pword  0           ;112
+         .pword  0           ;113
+         .pword  0           ;114
+         .pword  0           ;115
+         .pword  0           ;116
+         .pword  0           ;117
+         .pword  0           ;118
+         .pword  0           ;119
+         .pword  0           ;120
+         .pword  0           ;121
+         .pword  0           ;122
+         .pword  0           ;123
+         .pword  0           ;124
+         .pword  0           ;125
+         .pword  0           ;126
+         .pword  0           ;127
+         .pword  0           ;128
+         .pword  0           ;129
+         .pword  0           ;130
+         .pword  0           ;131
+         .pword  0           ;132
+         .pword  0           ;133
+         .pword  0           ;134
+         .pword  0           ;135
+         .pword  0           ;136
+         .pword  0           ;137
+         .pword  0           ;138
+         .pword  0           ;139
+         .pword  0           ;140
+         .pword  0           ;141
+         .pword  0           ;142
+         .pword  0           ;143
+         .pword  0           ;144
+         .pword  0           ;145
+         .pword  0           ;146
+         .pword  0           ;147
+         .pword  0           ;148
+         .pword  0           ;149
+         .pword  0           ;150
+         .pword  0           ;151
+         .pword  0           ;152
+         .pword  0           ;153
+         .pword  0           ;154
+         .pword  0           ;155
+         .pword  0           ;156
+         .pword  0           ;157
+         .pword  0           ;158
+         .pword  0           ;159
+         .pword  0           ;160
+         .pword  0           ;161
+         .pword  0           ;162
+         .pword  0           ;163
+         .pword  0           ;164
+         .pword  0           ;165
+         .pword  0           ;166
+         .pword  0           ;167
+         .pword  0           ;168
+         .pword  0           ;169
+         .pword  0           ;170
+         .pword  0           ;171
+         .pword  0           ;172
+         .pword  0           ;173
+         .pword  0           ;174
+         .pword  0           ;175
+         .pword  0           ;176
+         .pword  0           ;177
+         .pword  0           ;178
+         .pword  0           ;179
+         .pword  0           ;180
+         .pword  0           ;181
+         .pword  0           ;182
+         .pword  0           ;183
+         .pword  0           ;184
+         .pword  0           ;185
+         .pword  0           ;186
+         .pword  0           ;187
+         .pword  0           ;188
+         .pword  0           ;189
+         .pword  0           ;190
+         .pword  0           ;191
+         .pword  0           ;192
+         .pword  0           ;193
+         .pword  0           ;194
+         .pword  0           ;195
+         .pword  0           ;196
+         .pword  0           ;197
+         .pword  0           ;198
+         .pword  0           ;199
+         .pword  0           ;200
+         .pword  0           ;201
+         .pword  0           ;202
+         .pword  0           ;203
+         .pword  0           ;204
+         .pword  0           ;205
+         .pword  0           ;206
+         .pword  0           ;207
+         .pword  0           ;208
+         .pword  0           ;209
+         .pword  0           ;210
+         .pword  0           ;211
+         .pword  0           ;212
+         .pword  0           ;213
+         .pword  0           ;214
+         .pword  0           ;215
+         .pword  0           ;216
+         .pword  0           ;217
+         .pword  0           ;218
+         .pword  0           ;219
+         .pword  0           ;220
+         .pword  0           ;221
+         .pword  0           ;222
+         .pword  0           ;223
+         .pword  0           ;224
+         .pword  0           ;225
+         .pword  0           ;226
+         .pword  0           ;227
+         .pword  0           ;228
+         .pword  0           ;229
+         .pword  0           ;230
+         .pword  0           ;231
+         .pword  0           ;232
+         .pword  0           ;233
+         .pword  0           ;234
+         .pword  0           ;235
+         .pword  0           ;236
+         .pword  0           ;237
+         .pword  0           ;238
+         .pword  0           ;239
+         .pword  0           ;240
+         .pword  0           ;241
+         .pword  0           ;242
+         .pword  0           ;243
+         .pword  0           ;244
+         .pword  0           ;245
+         .pword  0           ;246
+         .pword  0           ;247
+         .pword  0           ;248
+         .pword  0           ;249
+         .pword  0           ;250
+         .pword  0           ;251
+         .pword  0           ;252
+         .pword  0           ;253
+         .pword  0           ;254
+         .pword  0           ;255
+.end

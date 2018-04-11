@@ -1,0 +1,163 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_exp_ins"]] then
+  /const fp32f_exp_ins bool = true
+
+  /include "(cog)src/dspic/fp32f_add.ins.dspic"
+  /include "(cog)src/dspic/fp32f_div.ins.dspic"
+  /include "(cog)src/dspic/fp32f_fltu.ins.dspic"
+  /include "(cog)src/dspic/fp32f_mul.ins.dspic"
+  /include "(cog)src/dspic/fp32f_neg.ins.dspic"
+  /include "(cog)src/dspic/fp32f_sub.ins.dspic"
+
+.section .code_fp32f_exp, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_EXP
+;
+;               W1:W0
+;   W1:W0 <-- e
+;
+;   Computes e to the power of the FP accumulator, and writes the result back
+;   into the accumulator.
+;
+         glbsub  fp32f_exp, regf2|regf3|regf4|regf5|regf6|regf7|regf8|regf9|regf10|regf11
+;
+;   The exponential will be computed by adding terms of a Taylor series:
+;
+;                   2    3    4
+;      x           x    x    x
+;     e  = 1 + x + -- + -- + -- + ...
+;                  2!   3!   4!
+;
+;   The terms are added into a accumulator, with the first two terms added at
+;   the end.  Otherwise, each new term is made by multiplying the previous term
+;   by x and dividing it by the next integer of the factorial.  New terms are
+;   added to the sum until the value of a new term is so small relative to the
+;   accumulated value that adding it does not change the accumulated value.
+;
+;   The first two terms are added into the accumulator after terms 3-N to
+;   minimize the loss of adding small numbers into a larger one.  The 3-N loop
+;   terminates when adding the current term didn't change the accumulated value.
+;   However, the sum of the next few terms might be large enough to changed the
+;   accumulator when added in as one value.  Put another way, with floating
+;   point addition, adding in lots of small values is not the same as adding in
+;   the sum of all the small values in one operation.  The latter can result in
+;   less lost data.
+;
+;   Terms 3-N are accumulated so that adding the next term is too small to
+;   change the sum.  Then (1 + X) is added into the accumulator as one value.
+;   This minimizes the data lost due to adding in small values.
+;
+;   Register usage:
+;
+;     W1:W0  -  Result of each floating point operation.
+;
+;     W3:W2  -  Operand for floating point operations.
+;
+;     W5:W4  -  Accumulated sum.
+;
+;     W7:W6  -  X.
+;
+;     W9:W8  -  Last term.
+;
+;     W10    -  Next integer for factorial.
+;
+;     W11    -  Original sign bit of X in high bit.
+;
+         mov     w1, w11     ;save original sign of X
+         btss    w1, #15     ;input value is negative ?
+         jump    d_abs       ;no, skip this section
+         gcall   fp32f_neg   ;make absolute value of X
+d_abs:                       ;done taking absolute value
+         mov.d   w0, w6      ;save X
+
+         mov.d   w0, w2      ;make X**2, the numerator of term 3
+         gcall   fp32f_mul
+         fpload  w2, 2.0     ;get the denominator of term 3
+         gcall   fp32f_div   ;make term 3 (x**2 / 2!)
+         mov.d   w0, w4      ;init the accumulated sum with this term
+         mov.d   w0, w8      ;this will the previous term next iteration
+         mov     #3, w10     ;init next integer to make factorial of next term
+;
+;   Back here to make each new term and add it into the accumulated result.
+;
+exp_term:
+         ;
+         ;   Make the amount to divide the previous term by as part of the
+         ;   the process of making the new term.  This divide value is then
+         ;   temporarily saved on the stack.
+         ;
+         mov     w10, w0     ;expand integer for new factorial into W1:W0
+         mov     #0, w1
+         mov     #0, w2      ;pass number of fraction bits in W1:W0
+         gcall   fp32f_fltu  ;convert the integer to floating point
+         push.d  w0          ;temp save new factorial contribution
+         ;
+         ;   Make the new term from the previous term.  This is done by
+         ;   multiplying by X and dividing by the next sequential integer of the
+         ;   factorial.  This divide value has already been computed and pushed
+         ;   onto the stack.
+         ;
+         mov.d   w8, w0      ;get the previous term
+         mov.d   w6, w2      ;multiply X into it
+         gcall   fp32f_mul
+         pop.d   w2          ;divide by the new factorial contribution
+         gcall   fp32f_div
+         ;
+         ;   The new term is in W1:W0.
+         ;
+         mov.d   w0, w8      ;save new term as the next previous term
+         mov.d   w4, w2      ;add new term to accumulated value so far
+         gcall   fp32f_add
+         cp      w0, w4      ;compare new to old accumulator value
+         cpb     w1, w5
+         bra     z, exp_dacc ;accumulator didn't change, stop adding terms ?
+
+         mov.d   w0, w4      ;update accumulated value so far
+         add     #1, w10     ;upate integer for next factorial
+         jump    exp_term    ;back to add in next term
+;
+;   Done accumulating terms 3-N.  The accumulated value is in W1:W0 and W5:W4.
+;
+;   Add the first two terms of the Taylor series (1 + X) to the accumulated
+;   value in W1:W0.
+;
+exp_dacc:
+         mov.d   w6, w0      ;make X + 1 in W1:W0
+         fpload  w2, 1.0
+         gcall   fp32f_add
+
+         mov.d   w4, w2      ;get sum of terms 3-N
+         gcall   fp32f_add   ;make sum of all terms in W1:W0
+;
+;   Compensate for the original input value being negative.  So far, the
+;   exponential was taken of the absolute value of the input.  If it was
+;   negative, the reciprocal of this needs to be returned.
+;
+         btss    w11, #15    ;input value was negative ?
+         jump    exp_dneg    ;no, skip this section
+
+         mov.d   w0, w2      ;move the result so far into FP operand
+         fpload  w0, 1.0     ;divide 1 by the result so far to make reciprocal
+         gcall   fp32f_div   ;reciprocal of accumulated value into W1:W0
+
+exp_dneg:                    ;done handling negative X
+
+         leaverest
+
+  /endif

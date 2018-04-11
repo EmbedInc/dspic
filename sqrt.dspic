@@ -1,0 +1,46 @@
+;   WARNING:  Totally untested, not even syntax checked.
+;
+
+;   Take square root of the unsigned integer in W1:W0 and write the
+;   result to W2.
+;
+;   Register usage:
+;
+;     W1:W0  -  Value to take square root of, unaltered.
+;
+;     W2  -  Square root result.
+;
+;     W3  -  Mask for next result bit.
+;
+;     W5:W4  -  Square of current result.
+;
+         mov     #0x8000, w3 ;init mask for first result bit
+         mov     #0, w2      ;init result
+
+         do      #15, sqrtend ;once for each result bit to generate
+         ior     w3, w2, w2  ;init this bit to set
+         mul.uu  w2, w2, w4  ;square the candidate result value
+         cp      w4, w0      ;compare low word with input value
+         cpb     w5, w1      ;finish 32 bit compare
+         bra     leu, 1f     ;leave the result bit set to 1 ?
+         com     w3, w4      ;make inverse mask for this bit
+         and     w4, w2, w2  ;set this bit to 0
+1:                           ;skip to here to leave bit at 1
+sqrtend: lsr     w3, w3      ;advance the mask to the next bit
+
+
+;****************************************************************
+;
+;   Unrolled loop version.
+;
+         mov     #0, w2      ;init all result bits to 0
+
+         ;   Repeat this section 16 times, with XXX from 15 to 0.
+         ;
+         bsf     w2, #xxx    ;init this result bit to 1
+         mul.uu  w2, w2, w4  ;square the candidate result value
+         cp      w4, w0      ;compare low word with input value
+         cpb     w5, w1      ;finish 32 bit compare
+         bra     leu, dbitxxx ;leave the result bit set to 1 ?
+         bcf     w2, #xxx    ;set this result bit to 0
+dbitxxx:                     ;skip to here to leave bit at 1

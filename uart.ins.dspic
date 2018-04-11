@@ -1,0 +1,1108 @@
+;   ***************************************************************
+;   * Copyright (C) 2010, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   UART handler.
+;
+;   This generic library code is customized to particular applications by a set
+;   of pre-processor constant.  See the QQQ_UART.DSPIC file for a description
+;   of these constants.
+;
+;*******************************************************************************
+;
+;   Derived constants.
+;
+
+/if [= name ""]
+  /then                      ;no unique name for the subroutines
+    /const uname string = ""
+  /else                      ;subroutine names will be customized
+    /const uname string = [str "_" name]
+  /endif
+
+/if [not [exist "un"]] then
+  /const un integer = 1;
+  /endif
+
+/if [not [exist "prio_reg_rx"]] then
+  /const prio_reg_rx = ""
+  /endif
+
+/if [not [exist "rxpin"]] then
+  /const rxpin integer = 0
+  /endif
+
+/if [not [exist "txpinreg"]] then
+  /const txpinreg = ""
+  /endif
+
+/if [not [exist "prio_reg_tx"]] then
+  /const prio_reg_tx = ""
+  /endif
+
+/if [not [exist "fifoi_sz"]] then
+  /const fifoi_sz integer = 16
+  /endif
+/if [not [exist "fifoo_sz"]] then
+  /const fifoo_sz integer = 16
+  /endif
+
+/if [not [exist "altpins"]] then
+  /const altpins bool = false
+  /endif
+
+/if [not [exist "handle_overrun"]] then
+  /const handle_overrun string = ""
+  /endif
+/if [not [exist "handle_framerr"]] then
+  /const handle_framerr string = ""
+  /endif
+/if [not [exist "handle_rfull"]] then
+  /const handle_rfull string = ""
+  /endif
+
+/if [not [exist "lready_n"]] then
+  /const lready_n = [min 8 [- fifoi_sz 1]]
+  /endif
+/if [not [exist "lready"]] then
+  /const lready = ""
+  /endif
+/if [<> lready ""] then
+  /if [>= lready_n fifoi_sz] then
+    /show "  LREADY_N not less input FIFO size"
+         .error  "LREADY_N"
+    /stop
+    /endif
+  /endif
+
+/if [not [exist "rready"]] then
+  /const rready = ""
+  /endif
+
+/if [not [exist "rready_high"]] then
+  /const rready_high bool = false
+  /endif
+
+/if [not [exist "rrint_rp"]] then
+  /const rrint_rp integer = 0
+  /endif
+
+/if [not [exist "txdrive"]] then
+  /const txdrive = ""
+  /endif
+
+/if [not [exist "runtime_baud"]] then
+  /const runtime_baud bool = false
+  /endif
+
+/const   rxintr  bool = [<> prio_reg_rx ""] ;using interrupts to read from UART
+/const   txintr  bool = [<> prio_reg_rx ""] ;using interrupts to write to UART
+
+/call baud_setup30 baud      ;compute the UART baud rate setup
+
+.equiv   Umode,  U[v un]mode ;make aliases for registers of the selected UART
+.equiv   Usta,   U[v un]sta
+.equiv   Ubrg,   U[v un]brg
+.equiv   Urxreg, U[v un]rxreg
+.equiv   Utxreg, U[v un]txreg
+
+/var new didun bool = false
+/if [= un 1] then            ;make interrupt system aliases if UART 1 selected
+         .equiv  Urxif_reg, Ifs0 ;receive interrupt
+         .equiv  Urxif_bit, U1rxif
+         .equiv  Urxie_reg, Iec0
+         .equiv  Urxie_bit, U1rxie
+  /if rxintr then
+         .equiv  Urxprio_reg, [chars prio_reg_rx]
+         .equiv  Urxprio_bit, [v prio_bit_rx]
+    /endif
+         .equiv  Utxif_reg, Ifs0 ;transmit interrupt
+         .equiv  Utxif_bit, U1txif
+         .equiv  Utxie_reg, Iec0
+         .equiv  Utxie_bit, U1txie
+  /if txintr then
+         .equiv  Utxprio_reg, [chars prio_reg_tx]
+         .equiv  Utxprio_bit, [v prio_bit_tx]
+    /endif
+  /set didun true            ;aliases created for the selected UART
+  /endif
+/if [= un 2] then            ;make interrupt system aliases if UART 2 selected
+         .equiv  Urxif_reg, Ifs1 ;receive interrupt
+         .equiv  Urxif_bit, U2rxif
+         .equiv  Urxie_reg, Iec1
+         .equiv  Urxie_bit, U2rxie
+  /if rxintr then
+         .equiv  Urxprio_reg, [chars prio_reg_rx]
+         .equiv  Urxprio_bit, [v prio_bit_rx]
+    /endif
+         .equiv  Utxif_reg, Ifs1 ;transmit interrupt
+         .equiv  Utxif_bit, U2txif
+         .equiv  Utxie_reg, Iec1
+         .equiv  Utxie_bit, U2txie
+  /if txintr then
+         .equiv  Utxprio_reg, [chars prio_reg_tx]
+         .equiv  Utxprio_bit, [v prio_bit_tx]
+    /endif
+  /set didun true            ;aliases created for the selected UART
+  /endif
+/if [= un 3] then            ;make interrupt system aliases if UART 3 selected
+         .equiv  Urxif_reg, Ifs5 ;receive interrupt
+         .equiv  Urxif_bit, U[v un]RXIF
+         .equiv  Urxie_reg, Iec5
+         .equiv  Urxie_bit, U[v un]RXIE
+  /if rxintr then
+         .equiv  Urxprio_reg, [chars prio_reg_rx]
+         .equiv  Urxprio_bit, [v prio_bit_rx]
+    /endif
+         .equiv  Utxif_reg, Ifs5 ;transmit interrupt
+         .equiv  Utxif_bit, U[v un]TXIF
+         .equiv  Utxie_reg, Iec5
+         .equiv  Utxie_bit, U[v un]TXIE
+  /if txintr then
+         .equiv  Utxprio_reg, [chars prio_reg_tx]
+         .equiv  Utxprio_bit, [v prio_bit_tx]
+    /endif
+  /set didun true            ;aliases created for the selected UART
+  /endif
+/if [= un 4] then            ;make interrupt system aliases if UART 4 selected
+         .equiv  Urxif_reg, Ifs5 ;receive interrupt
+         .equiv  Urxif_bit, U[v un]RXIF
+         .equiv  Urxie_reg, Iec5
+         .equiv  Urxie_bit, U[v un]RXIE
+  /if rxintr then
+         .equiv  Urxprio_reg, [chars prio_reg_rx]
+         .equiv  Urxprio_bit, [v prio_bit_rx]
+    /endif
+         .equiv  Utxif_reg, Ifs5 ;transmit interrupt
+         .equiv  Utxif_bit, U[v un]TXIF
+         .equiv  Utxie_reg, Iec5
+         .equiv  Utxie_bit, U[v un]TXIE
+  /if txintr then
+         .equiv  Utxprio_reg, [chars prio_reg_tx]
+         .equiv  Utxprio_bit, [v prio_bit_tx]
+    /endif
+  /set didun true            ;aliases created for the selected UART
+  /endif
+/if [not didun] then         ;no interrupt aliases created ?
+  /show "  No interrupt symbol aliases for UART " un
+         .error  "UART number"
+  /stop
+  /endif
+/del didun
+
+/block
+  /var new s string
+  /set s [str "Using UART " un]
+  /if [= name ""]
+    /then
+      /set s [str s ", no unique name added to symbols"]
+    /else
+      /set s [str s ", name """ [ucase name] """ added to exported symbols"]
+    /endif
+  /show "  " s
+  /endblock
+
+/if altpins
+  /then
+         .equiv  umode_mask, (1 << Altio)
+  /else
+         .equiv  umode_mask, 0
+  /endif
+
+.equiv   fifoi_sz, [v fifoi_sz]
+.equiv   fifoo_sz, [v fifoo_sz]
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_uart[chars uname], bss
+
+allocg   task_uart[chars uname] ;ID of task that has UART locked, MSB 1 means none
+
+/if runtime_baud then
+allocg   uart[chars uname]_baud, 4 ;actual baud rate
+  /endif
+
+;*******************
+;
+;   Local state.
+;
+/if [> fifoi_sz 0] then
+         fifob_define fifoi, fifoi_sz ;define the UART input FIFO
+  /endif
+/if [> fifoo_sz 0] then
+         fifob_define fifoo, fifoo_sz ;define the UART output FIFO
+  /endif
+
+/if [or rxintr txintr] then
+alloc    uartw0              ;saved registers during receive interrupt
+alloc    uartw1
+alloc    uartw2
+alloc    uartw3
+
+.if (ipr_uart_recv - ipr_uart_xmit)
+         ;
+         ;   The receive and transmit interrupts are at different priorities.
+         ;   This means the two interrupt service routines could be nested, and
+         ;   each needs its own register save area.
+         ;
+alloc    uarttw0             ;define transmit save area with its own memory
+alloc    uarttw1
+alloc    uarttw2
+  .else
+         ;
+         ;   Receive and transmit interrupts are at the same priority, and can
+         ;   therefore not be nested.  This means one register save area can be
+         ;   used by both interrupt routines.
+         ;
+         .equiv  uarttw0, uartw0 ;define transmit save as alias to receive save
+         .equiv  uarttw1, uartw1
+         .equiv  uarttw2, uartw2
+  .endif
+  /endif
+
+
+.section .code_uart[chars uname], code
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro SET_LREADY
+//
+//   Set the LREADY output line according to how much room is in the input FIFO.
+//
+//   WARNING: W0 is trashed.
+//
+/macro set_lready
+         fifow_empty_n fifoi ;get room in the input FIFO into W0
+         sub     #[v lready_n], w0 ;compare FIFO room to the threshold
+         bra     gtu, [lab ready] ;enough room, ready to accept more ?
+         set_[chars lready]_off ;too little room, indicate not ready for more bytes
+         jump    [lab slready_done]
+[lab ready]:                 ;there is enough room
+         set_[chars lready]_on ;indicate ready to accept more bytes
+[lab slready_done]:
+  /endmac
+
+;*******************************************************************************
+;
+;   Subroutine UART_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  uart[chars uname]_init, regf0 | regf1
+
+         bclr    Urxie_reg, #Urxie_bit ;make sure uart Interrupts are off
+         bclr    Utxie_reg, #Utxie_bit
+         clr     Umode       ;make sure UART is off, causes complete reset
+         clr     Usta
+;
+;   Init local state.
+;
+         mov     #0xFFFF, w0
+         mov     w0, task_uart[chars uname] ;init to UART output not locked by a task
+
+/if [> fifoi_sz 0] then
+         fifob_init fifoi    ;initialize the UART input FIFO
+  /endif
+/if [> fifoo_sz 0] then
+         fifob_init fifoo    ;initialize the UART output FIFO
+  /endif
+;
+;   Init the UART hardware.
+;
+         ;
+         ;   The UART hardware requires the transmitter to be enabled while the
+         ;   UART as a whole is already enabled.  We therefore set up everything
+         ;   first, then enable the UART, then enable the transmitter in
+         ;   separate sequential steps.
+         ;
+         mov     #0b0000000000000000 | umode_mask, w0
+                 ;  0--------------- leave UART off for now
+                 ;  -X-------------- unused
+                 ;  --0------------- continue operation in idle mode
+                 ;  ---0------------ disable IrDA encoder and decoder
+                 ;  ----0----------- RTS/CTS in flow control versus simplex mode
+                 ;  -----X---------- alternate pins selection, from UMODE_MASK above
+                 ;  ------00-------- RTS/CTS not used by UART hardware
+                 ;  ------01-------- RTS sent, CTS not used
+                 ;  ------10-------- RTS and CTS used
+                 ;  --------0------- start bit wakeup from sleep disabled
+                 ;  ---------0------ disable loopback mode
+                 ;  ----------0----- disable auto baud rate detection
+                 ;  -----------0---- normal receive polarity of idle high
+                 ;  ------------0--- low speed baud rate mode (16x bit clock)
+                 ;  -------------00- select 8 data bits, no parity
+                 ;  ---------------0 select 1 stop bit
+         mov     w0, Umode
+
+         mov     #0b0000000000000000, w0
+                 ;  0-0------------- set interrupt flag when FIFO can accept new byte
+                 ;  -0-------------- normal transmit polarity of idle high
+                 ;  ---X------------ unused
+                 ;  ----0----------- do not transmit a break now
+                 ;  -----0---------- leave transmitter off for now
+                 ;  ------X--------- transmit FIFO is full (read only)
+                 ;  -------X-------- transmit register empty (read only)
+                 ;  --------00------ set interrupt flag when at least one char available
+                 ;  ----------0----- disable address detect mode using 9th data bit
+                 ;  -----------X---- receiver is idle (read only)
+                 ;  ------------X--- parity error (read only)
+                 ;  -------------X-- framing error (read only)
+                 ;  --------------0- clear any receive overrun condition
+                 ;  ---------------X receive buffer data available (read only)
+         mov     w0, Usta
+
+         mov     #[v uart_brg], w0 ;set the baud rate
+         mov     w0, Ubrg
+
+/if runtime_baud then
+  /var new ii integer = [rnd uart_baud] ;baud rate rounded to nearest integer
+         mov     #[and ii 16#FFFF], w0
+         mov     w0, uart[chars uname]_baud+0
+         mov     #[shiftr ii 16], w0
+         mov     w0, uart[chars uname]_baud+2
+  /del ii
+  /endif
+;
+;   Map the RX pin.
+;
+/if [<> rxpin 0] then
+         mov     #[chars rxpinreg], w1
+         mov     #[v rxpin], w0
+         mov.b   w0, [w1]
+  /endif
+;
+;   Map the TX pin.
+;
+/if [<> txpinreg ""] then
+         mov     #[chars txpinreg], w1
+         mov     #[v txpinid], w0
+         mov.b   w0, [w1]
+  /endif
+;
+;   Set up for handling the remote ready line if this is defined.
+;
+/if [<> rready ""] then      ;remote system ready line in use ?
+  /if [<> rrint_rp 0] then   ;line is received via remappable pin ?
+         mov     #[chars rrint_rpreg], w1
+         mov     #[v rrint_rp], w0
+         mov.b   w0, [w1]
+    /endif
+         intr_priority [chars rrint_prioreg], [v rrint_priobit], ipr_uart_xmit
+  /if rready_high
+    /then                    ;line goes high when ready
+         bclr    Intcon2, #[v rrint] ;select rising edge for interrupt condition
+    /else                    ;line goes low when ready
+         bset    Intcon2, #[v rrint] ;select falling edge for interrupt condition
+    /endif
+         bclr    Ifs[v rrint_flgregn], #Int[v rrint]if ;clear any pending interrupt
+         bset    Iec[v rrint_flgregn], #Int[v rrint]ie ;enable the RR interrupt
+  /endif
+;
+;   Initialize the UART interrupts.  Receive interrupts are enabled here
+;   and stay enabled.  Transmit interrupts are initialized to disabled.
+;   These are enabled when a byte is written into the software output
+;   FIFO, and disabled when the FIFO is drained to empty.
+;
+/if rxintr then
+         intr_priority Urxprio_reg, Urxprio_bit, ipr_uart_recv ;recv intr priority
+         intr_priority Utxprio_reg, Utxprio_bit, ipr_uart_xmit ;xmit intr priority
+         bclr    Urxif_reg, #Urxif_bit ;clear any pending receive interrupt
+         bset    Urxie_reg, #Urxie_bit ;enable receive interrupts
+  /endif
+;
+;   All configuration has been set.  Turn on the UART.  The transmitter must be
+;   enabled after the UART as a whole is enabled.
+;
+         bset    Umode, #Uarten ;enable the UART as a whole
+         bset    Usta, #Utxen ;enable the transmitter
+;
+;   Indicate we are ready to receive data over the UART.
+;
+/if [<> lready ""] then      ;configured to drive LREADY line ?
+         set_[chars lready]_on ;indicate we are ready to receive
+  /endif
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_INN
+;
+;   Gets the number of input bytes immediately available into W0.
+;
+         glbsub  uart[chars uname]_inn
+
+/if rxintr
+  /then                      ;using receive interrupts
+         fifob_full_n fifoi
+  /else
+         mov     #0, w0      ;init to no data immediately available
+         btsc    Usta, #Urxda ;nothing is in fact available ?
+         mov     #1, w0      ;indicate at least one byte is available
+  /endif
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_OUTN
+;
+;   Gets the number of bytes that can be written to the output immediately into
+;   W0.
+;
+         glbsub  uart[chars uname]_outn
+
+/if txintr
+  /then                      ;using transmit interrupts
+         fifob_empty_n fifoo
+  /else
+         mov     #0, w0      ;init to UART output buffer is full
+         btss    Usta, #Utxbf ;really is full ?
+         mov     #1, w0      ;no, indicate at least one char can be written now
+  /endif
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_LOCKED
+;
+;   Sets the Z flag if the UART is not currently locked by a task, and clears it
+;   if the UART is locked.  When this routine returns with Z set and no other
+;   tasks are allowed to run afterwards, the next call to UART_LOCK will return
+;   immediately without performing any wait.
+;
+         glbsub  uart[chars uname]_locked, regf0
+
+         mov     task_uart[chars uname], w0 ;get unlocked flag in high bit
+         com     w0, w0      ;make locked flag in high bit
+         btst.z  w0, #15     ;set Z according to locked flag
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_LOCK
+;
+;   Acquire the exclusive lock for writing to the UART output stream.  This
+;   routine waits indefinitely until the UART output stream is available.
+;
+         glbsub  uart[chars uname]_lock, regf0
+
+lock_wait:                   ;back here until lock is available
+         mov     task_uart[chars uname], w0 ;get ID of task that has UART locked
+         btsc    w0, #15     ;lock is in use ?
+         jump    lock_take   ;no, go take it
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    lock_wait   ;back to check lock again
+
+lock_take:                   ;the lock is available
+         mov     currtask, w0 ;get our task ID
+         mov     w0, task_uart[chars uname] ;indicate we have the lock now
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_UNLOCK
+;
+;   Release the lock on the UART output stream if it is held by this task.
+;
+         glbsub  uart[chars uname]_unlock, regf0 | regf1
+
+         mov     task_uart[chars uname], w0 ;get the ID of the task holding the lock
+         mov     currtask, w1 ;get the ID of this task
+         cp      w0, w1
+         bra     nz, unlock_leave ;this task isn't holding the lock ?
+
+         mov     #0xFFFF, w0
+         mov     w0, task_uart[chars uname] ;release the UART output lock
+
+unlock_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_PUT
+;
+;   Send the byte in the low 8 bits of W0 out the UART.
+;
+/if txintr
+  /then                      ;using interrupts
+
+//****************************
+//
+//   Interrupts.
+//
+
+;   The byte is actually written to the UART output software FIFO, and will be
+;   written to the UART by the UART transmit interrupt routine separately.  If
+;   the software output FIFO is full, this routine waits until it can receive
+;   another byte.
+;
+         glbsub  uart[chars uname]_put, regf1 | regf2 | regf3
+         push    w0          ;save word with data byte on the top of the stack
+
+put_wait:
+         fifob_z_full fifoo  ;set Z iff the software FIFO is completely full
+         bra     nz, put_room ;there is room in the output FIFO ?
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    put_wait
+;
+;   The output FIFO has room to accept the new byte.
+;
+put_room:
+         pop     w0          ;restore W0 to contain the word with the data byte
+         disi    #0x3FFF     ;temp disable interrupts
+         fifob_put fifoo     ;stuff the byte into the output FIFO
+         bset    Utxie_reg, #Utxie_bit ;make sure transmit interrupt is enabled
+         clr     Disicnt     ;re-enable interrupts
+
+         leaverest
+
+  /else                      ;using programmed I/O, not interrupts
+
+//****************************
+//
+//   Programmed I/O.
+//
+         glbsub  uart[chars uname]_put
+
+uput_wait:                   ;back here to wait UART ready for another character
+         btss    Usta, #Utxbf ;buffer still full ?
+         jump    uput_ready  ;no, go send the character
+         gcall   task_yield_save ;give all other tasks a chance to run
+         jump    uput_wait   ;back to check for UART ready again
+uput_ready:                  ;the UART is ready to accept a new character
+         mov     w0, Utxreg  ;write the character to the UART
+
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   UART transmit interrupt routine.
+;
+;   The UART is ready to accept another output byte.  This interrupt is
+;   enabled whenever a byte is written to the output FIFO.  It is disabled
+;   in this interrupt routine when the FIFO is drained to empty.
+;
+;   If configured for transmit flow control, then the interrupt is disabled if
+;   the RREADY input is de-asserted, which indicates that the remote system is
+;   not ready to accept another byte.  In that case, this interrupt will be
+;   re-enabled in the INTn interrupt when the RREADY line transitions to the
+;   asserted state again.  This interrupt and the INTn interrupt are always at
+;   the same priority, so neither can interrupt the other.
+;
+/if txintr then
+         glbsub  __U[v un]TXInterrupt
+         mov     w0, uarttw0 ;save registers that will be trashed
+         mov     w1, uarttw1
+         mov     w2, uarttw2
+;
+;   Disable the interrupt and leave if the remote system is not ready for
+;   another byte.
+;
+  /if [<> rready ""] then    ;configured for output flow control ?
+    /if rready_high
+      /then                  ;RREADY is asserted high
+         btss    [chars rready]_reg, #[chars rready]_bit ;remote system is ready ?
+      /else                  ;RREADY is assterted low
+         btsc    [chars rready]_reg, #[chars rready]_bit ;remote system is ready ?
+      /endif
+         jump    txoff       ;no, disable this interrupt and leave
+    /endif
+;
+;   Send the next byte from the output FIFO.
+;
+  /if [<> txdrive ""] then   ;configured to drive is-transmitting output ?
+         set_[chars txdrive]_on ;indicate now transmitting
+    /endif
+
+         bclr    Utxif_reg, #Utxif_bit ;clear the interrupt condition
+         fifob_get fifoo     ;get next byte from FIFO into W0
+         mov     w0, Utxreg  ;write the byte to the UART
+;
+;   Disable this interrupt if the FIFO is now empty.
+;
+         fifob_z_empty fifoo ;set Z flag if the FIFO is now empty
+         bra     nz, done_txoff ;FIFO not yet empty ?
+txoff:                       ;disable the UART transmit interrupt and leave
+         bclr    Utxie_reg, #Utxie_bit ;disable the interrupt
+done_txoff:                  ;done disabling this interrupt on FIFO empty
+
+         mov     uarttw0, w0 ;restore registers
+         mov     uarttw1, w1
+         mov     uarttw2, w2
+         disi    #2
+         retfie              ;return from the interrupt
+  /endif
+
+;*******************************************************************************
+;
+;   INTn interrupt routine.
+;
+;   This interrupt is triggered on the leading edge of the remote ready line.
+;   This indicates the remote system is transitioning from not-ready to ready to
+;   receive characters.
+;
+;   This interrupt is always at the same priority as the UART transmit
+;   interrupt, so neither can interrupt the other.
+;
+/if [<> rready ""] then      ;configured for output flow control ?
+         glbsub  __INT[v rrint]Interrupt
+         mov     w0, uarttw0 ;save registers that will be trashed
+
+         bclr    Ifs[v rrint_flgregn], #Int[v rrint]if ;clear the interrupt condition
+
+         fifob_z_empty fifoo ;set Z if the output FIFO is empty
+         bra     z, rready_leave ;nothing to send, don't enable xmit interrupt ?
+         bset    Utxie_reg, #Utxie_bit ;enable the UART transmit interrupt
+
+rready_leave:
+         mov     uarttw0, w0 ;restore registers
+         disi    #2
+         retfie              ;return from the interrupt
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine UART_TXDRIVE_CHECK
+;
+;   When configured for a firmware-controlled output that indicates the UART is
+;   currently transmitting data (indicated by TXDRIVE not set or the empty
+;   string), this routine must be called periodically.  The output indicated by
+;   TXDRIVE is set whenever a new byte is written to the UART.  It is only
+;   deasserted by this routine when the UART is completely done sending.  This
+;   is indicated by the TRMT bit in the Usta register set.  However, this bit is
+;   not a interrupt condition, so can only be polled.
+;
+;   This routine is intended to be called frequently, like one every time thru
+;   the main event loop.  It only takes a few instruction cycles, so does not
+;   need to be called conditionally.
+;
+/if [<> txdrive ""] then     ;configured for fw-controlled is-transmitting output ?
+         glbsub  uart[chars uname]_txdrive_check
+
+         disi    #4          ;prevent interrupt between check and action
+         btsc    Usta, #Trmt ;UART is still transmitting ?
+         set_[chars txdrive]_off ;no, indicate not currently transmitting
+
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   UART receive interrupt routine.
+;
+;   The UART has at least one byte available.  This routine drains all available
+;   bytes into the software input FIFO.
+;
+/if rxintr then
+         glbsub  __U[v un]RXInterrupt
+         mov     w0, uartw0  ;save registers that will be trashed
+         mov     w1, uartw1
+         mov     w2, uartw2
+         mov     w3, uartw3
+;
+;   Loop back here until the UART has no received bytes left.  All UART input
+;   bytes MUST be drained in a single interrupt service because the interrupt
+;   flag is set when a byte is received and is reset in software here.  This
+;   means the interrupt condition is cleared regardless of whether just one or
+;   multiple input bytes are available.  If only one input byte was drained and
+;   another is available, no new interrupt would occur for the remaining byte to
+;   be read from the UART.
+;
+;   The interrupt flag is reset before the URXDA (byte available) flag is
+;   checked.  If a new byte is received after the URXDA flag is checked, then it
+;   will be received next interrupt.
+;
+recv_loop:                   ;back here to receive each new available byte
+         bclr    Urxif_reg, #Urxif_bit ;clear the interrupt condition
+         ;
+         ;   Check for and handle framing error.
+         ;
+         btss    Usta, #Ferr ;framing error ?
+         jump    recv_dfrerr ;no, skip this section
+         mov     Urxreg, w0  ;read the byte with the framing error to discard it
+  /if [<> handle_framerr ""] then
+         gcall   [chars handle_framerr] ;notify app of the framing error
+    /endif
+recv_dfrerr:
+         ;
+         ;   Check for and handle overrun.
+         ;
+         btss    Usta, #Oerr ;overrun condition ?
+         jump    recv_dovrun ;no, skip this section
+         bclr    Usta, #Oerr ;clear the overrun condition
+  /if [<> handle_overrun ""] then
+         gcall   [chars handle_overrun] ;notify app of the overrun
+    /endif
+recv_dovrun:                 ;done handling overrun
+         ;
+         ;   Handle the received byte, if there is one.
+         ;
+         btss    Usta, #Urxda ;a received byte is available ?
+         jump    recv_leave  ;no, nothing more to do this interrupt
+
+         mov     Urxreg, w3  ;read the received byte into W3
+         fifob_z_full fifoi  ;set Z iff software FIFO full (trashes W0, W1)
+         mov     w3, w0      ;put the data byte into W0
+         bra     nz, recv_room ;there is room in the FIFO ?
+         ;
+         ;   Software FIFO overrun.  We read a byte from the UART but have no
+         ;   place to put it.  The received byte is in W0.
+         ;
+  /if [<> handle_rfull ""] then
+         gcall   [chars handle_rfull] ;notify app of the software FIFO overrun
+    /endif
+         jump    recv_dbyte  ;done processing this received byte
+         ;
+         ;   Stuff the received byte into the software FIFO, which has already
+         ;   determined to have room for the new byte.  The data byte is in W0.
+         ;
+recv_room:
+         fifob_put fifoi     ;stuff the data byte into the software input FIFO
+
+recv_dbyte:                  ;done receiving this byte
+         btsc    Usta, #Urxda ;UART completely drained ?
+         bra     recv_loop   ;no, go back and get the next byte
+;
+;   Set the local-ready output line according to how much room is now in the
+;   input FIFO.
+;
+  /if [<> lready ""] then    ;configured to drive local ready output ?
+         set_lready          ;set it appropriately
+    /endif
+
+recv_leave:                  ;common exit point for UART receive interrupt
+         mov     uartw0, w0  ;restore registers
+         mov     uartw1, w1
+         mov     uartw2, w2
+         mov     uartw3, w3
+         disi    #2
+         retfie              ;return from the interrupt
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine UART_GET_READY
+;
+;   Determine whether a byte from the UART is immediately available.  If a byte
+;   is available then the Z flag is reset and set otherwise.  If this routine
+;   returns with the Z flag reset, then the next call to UART_GET is guaranteed
+;   to return immediately with a new byte.
+;
+/if rxintr
+  /then
+
+//****************************
+//
+//   Interrupts.
+//
+         glbsub  uart[chars uname]_get_ready, regf0
+
+         fifob_z_empty fifoi ;set Z if no byte available
+
+         leaverest
+
+  /else
+
+//****************************
+//
+//   Programmed I/O.
+//
+         glbsub  uart[chars uname]_get_ready
+
+         bset    Sr, #Z      ;init to no data available now
+         btsc    Usta, #Urxda ;really is nothing to read ?
+         bclr    Sr, #Z      ;at least one char can be read now
+
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine UART_GET
+;
+;   Return the next byte from the UART in W0.  If no byte is immediately
+;   available, then this routine waits indefinitely until one is.
+;
+/if rxintr
+  /then
+
+//****************************
+//
+//   Interrupts.
+//
+         glbsub  uart[chars uname]_get, regf1 | regf2
+
+get_wait:                    ;back here until a byte is available from the FIFO
+         fifob_z_empty fifoi ;set Z if no byte is available
+         bra     nz, get_byte ;a byte is available, go get it
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    get_wait
+;
+;   At least one byte is available in the software input FIFO.  Get the byte
+;   from the FIFO into W0.
+;
+get_byte:
+         disi    #0x3FFF     ;temp disable interrupts
+         fifob_get fifoi     ;get the next byte into W0
+         clr     Disicnt     ;re-enable interrupts
+;
+;   Set the LREADY output line according to how much room is now in the FIFO.
+;
+    /if [<> lready ""] then  ;configured to drive LREADY output line ?
+         nop                 ;allow any pending interrupts
+         mov     w0, w1      ;save returned byte
+         disi    #0x3FFF     ;temp disable interrupts
+         set_lready          ;set LREADY output according to room in the FIFO
+         clr     Disicnt     ;re-enable interrupts
+         mov     w1, w0      ;restore returned byte into W0
+      /endif
+         leaverest
+
+  /else
+
+//****************************
+//
+//   Programmed I/O.
+//
+         glbsub  uart[chars uname]_get
+;
+;   Check for and handle framing error.
+;
+         btss    Usta, #Ferr ;framing error ?
+         jump    recv_dfrerr ;no, skip this section
+         mov     Urxreg, w0  ;read the byte with the framing error to discard it
+    /if [<> handle_framerr ""] then
+         gcall   [chars handle_framerr] ;notify app of the framing error
+      /endif
+recv_dfrerr:
+;
+;   Check for and handle overrun.
+;
+         btss    Usta, #Oerr ;overrun condition ?
+         jump    recv_dovrun ;no, skip this section
+         bclr    Usta, #Oerr ;clear the overrun condition
+    /if [<> handle_overrun ""] then
+         gcall   [chars handle_overrun] ;notify app of the overrun
+      /endif
+recv_dovrun:                 ;done handling overrun
+;
+;   Wait for a data byte to be available.
+;
+get_wait:                    ;back here until a char is available from the UART
+         btsc    Usta, #Urxda ;still nothing available ?
+         jump    get_byte    ;a byte is available, go get it
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    get_wait
+;
+;   The UART has a byte available.  Read it from the UART and return it in W0.
+;
+get_byte:
+         mov     Urxreg, w0  ;get the byte into W0
+         and     #0xFF, w0
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine UART_ACTIVE
+;
+;   Set the Z flag if the UART subsystem is completely idle, otherwise clear it.
+;   Being completely idle means:
+;
+;     1  -  The input buffer is empty.
+;
+;     2  -  The output buffer is empty.
+;
+;     3  -  The hardware is not sending a character.
+;
+;     4  -  The UART is not locked by a task.
+;
+         glbsub  uart[chars uname]_active, regf0
+
+         mov     task_uart[chars uname], w0 ;get ID of task that has UART locked
+         btss    w0, #15     ;unlocked ?
+         jump    act_nidle   ;no
+
+/if [> fifoo_sz 0] then
+         fifob_z_empty fifoo ;set Z to indicate output FIFO empty
+         bra     nz, act_nidle ;output FIFO is not empty ?
+  /endif
+
+         btss    Usta, #Trmt ;hardware transmitter is idle ?
+         jump    act_nidle   ;no
+
+         btss    Usta, #Ridle ;hardware receiver is idle ?
+         jump    act_nidle   ;no
+
+/if [> fifoi_sz 0] then
+         fifob_z_empty fifoi ;set Z to indicate input FIFO empty
+         bra     nz, act_nidle ;input FIFO is not empty ?
+  /endif
+
+         bset    Sr, #Z      ;indicate the UART system is idle
+         jump    act_leave
+
+act_nidle:                   ;jump here if UART is not idle
+         bclr    Sr, #Z      ;indicate not idle
+         jump    act_leave
+
+act_leave:                   ;common exit point, Z flag already set
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_OFF
+;
+;   Turn off the UART.  The UART will draw little power, incoming characters
+;   will not be received, and no outgoing charactes will be sent.  Any received
+;   bytes already in the software FIFO can continue to be drained.
+;
+         glbsub  uart[chars uname]_off, regf0
+
+/if [<> lready ""] then      ;configured to drive LREADY line ?
+         set_[chars lready]_off ;indicate we are not ready to receive
+  /endif
+
+         bclr    Urxie_reg, #Urxie_bit ;disable receive interrupts
+         bclr    Utxie_reg, #Utxie_bit ;make sure transmit interrupts are disabled
+         bclr    Umode, #Uarten ;turn off the UART
+         bclr    Utxif_reg, #Utxif_bit ;clear any pending transmit interrupt condition
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_ON
+;
+;   Re-enables the UART after having been off.  The FIFOs are reset to empty.
+;   This routine is intended to be called when the UART is off.  The UART may
+;   be glitched and state reset if called when already on.
+;
+;
+;   Subroutine UART_RESET
+;
+;   Resets the UART hardware, the software FIFOs, and leaves the UART on.  This
+;   routine can be called whether the UART is off or on, as long as it has been
+;   previously initialized by UART_INIT.
+;
+         glbent  uart[chars uname]_on
+         glbsub  uart[chars uname]_reset, regf0
+
+         mcall   uart[chars uname]_off ;make sure UART is properly turned off first
+         bclr    Usta, #Utxen ;xmit off so can be turned on separately
+
+/if [> fifoi_sz 0] then
+         fifob_init fifoi    ;reset the software input FIFO
+  /endif
+/if [> fifoo_sz 0] then
+         fifob_init fifoo    ;reset the software output FIFO
+  /endif
+
+         bclr    Urxif_reg, #Urxif_bit ;clear any receive interrupt condition
+/if rxintr then
+         bset    Urxie_reg, #Urxie_bit ;enable receive interrupts
+  /endif
+         bset    Umode, #Uarten ;turn on the UART
+         bset    Usta, #Utxen ;turn on the transmitter
+
+/if [<> lready ""] then      ;configured to drive LREADY line ?
+         set_[chars lready]_on ;indicate we are ready to receive
+  /endif
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_BAUD_SET
+;
+;   Set the baud rate from the value in W1:W0.  The closest attainable baud rate
+;   will be set and this value saved in the global variable UART_BAUD.
+;
+/if runtime_baud then
+  /var new ii integer
+
+         glbsub  uart[chars uname]_baud_set, regf0 | regf1 | regf2 | regf3
+;
+;   The baud rate register value is:
+;
+;            freq_inst
+;     Ubrg = --------- - 1
+;            16 * BAUD
+;
+         mov     #-4, w2     ;pass number of fraction bits
+         gcall   fp32f_fltu  ;convert BAUD*16 to floating point in W1:W0
+         mov.d   w0, w2      ;save BAUD*16 in W3:W2
+
+         fpload  w0, [v freq_inst] ;get FREQ_INST into W1:W0
+         gcall   fp32f_div   ;do the divide
+
+         fpload  w2, -.5     ;subtract 1, but add 1/2 for rounding
+         gcall   fp32f_add
+
+         mov     #0, w2      ;pass number of fraction bits
+         gcall   fp32f_fixu  ;convert FP in W1:W0 to integer
+         cp0     w1
+         skip_z              ;no overflow ?
+         mov     #0xFFFF, w0 ;overflow, use maximum possible value
+;
+;   The new Ubrg register value for the selected baud rate is in W0.
+;
+;   Set the new baud rate, but also reset the UART and the software FIFOs.
+;
+         mcall   uart[chars uname]_off ;turn the UART off
+
+         mov     w0, Ubrg    ;set the new baud rate
+
+         mcall   uart[chars uname]_on ;turn the UART back on
+;
+;   Compute the actual new baud rate and save it in the global variable
+;   UART_BAUD.  The baud rate is:
+;
+;             freq_inst
+;     BAUD = ------------
+;            16(Ubrg + 1)
+;
+         mov     Ubrg, w0    ;get baud rate register value into W1:W0
+         mov     #0, w1
+         add     #1, w0      ;add 1
+         addc    #0, w1
+
+         mov     #-4, w2     ;pass number of fraction bits in W1:W0
+         gcall   fp32f_fltu  ;make floating point 16(Ubrg - 1)
+         mov.d   w0, w2      ;save it in W3:W2
+
+         fpload  w0, [v freq_inst] ;get the numerator into W1:W0
+         gcall   fp32f_div   ;compute FP baud rate in W1:W0
+         fpload  w2, .5      ;add 1/2 for rounding
+         gcall   fp32f_add
+
+         mov     #0, w2      ;pass number of fraction bits to make
+         gcall   fp32f_fixu  ;make integer baud rate in W1:W0
+         mov     w0, uart[chars uname]_baud+0 ;save result in global variable
+         mov     w1, uart[chars uname]_baud+2
+
+         leaverest
+  /del ii
+  /endif

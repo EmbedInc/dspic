@@ -1,0 +1,263 @@
+;   ***************************************************************
+;   * Copyright (C) 2010, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Command processing routines.
+;
+;   Most routines to process individual commands are in this module.  The
+;   general mechanics of command processing other than implementing individual
+;   commands is in the CMD module.
+;
+;   The interface to all command routines is the same.  The entry point to each
+;   command processing routine is named CM_xxx.  This naming convention is
+;   not be used elsewhere in the system except for command processing routines.
+;
+;   Each command processing routine must follow these rules:
+;
+;     1 - TASK_YIELD must be called in a loop whenever waiting for a external
+;         event.
+;
+;     2 - Sending any data to the response stream must be preceeded by a call
+;         to CMD_LOCK_OUT.
+;
+;     3 - CMD_UNLOCK_OUT may only be called between whole responses.  It is not
+;         necessary to call CMD_UNLOCK_OUT after the last response.
+;
+;     4 - When done, execution must end up at CMD_DONE.  This can be done by
+;         explicitly jumping there.  It can also be done by executing a RETURN
+;         from the top nesting level.  The CMD_DONE return address is seeded
+;         onto the stack for this purpose before the command processing routine
+;         is run.  In other words, the command processing routine may act as a
+;         subroutine.
+;
+;         The stack will be reset to empty by CMD_DONE, so it is permissible to
+;         jump to CMD_DONE from a nested subroutine or with data left on the
+;         stack.  It is also permissible to call CMD_DONE, as may be necessary
+;         from a higher level language that has no ability to jump to a external
+;         address.
+;
+;         CMD_DONE will also release any output stream lock, so this need not be
+;         explicitly done by a command routine if sending a response is the last
+;         thing it does.
+;
+;   Several subroutines and other resources are available to command routines:
+;
+;     CMD_GET8
+;
+;       Gets the next command stream byte into W0.
+;
+;     CMD_GET16
+;
+;       Gets the next two command stream bytes as a 16 bit integer and returns
+;       it in W0.  The bytes are assumed to be in most to least significant
+;       order.
+;
+;     CMD_GET24U
+;
+;       Gets the next three command stream bytes as a 24 bit unsigned integer
+;       and returns it in W1:W0.  The bytes are assumed to be in most to least
+;       significant order.
+;
+;     CMD_GET24S
+;
+;       Gets the next three command stream bytes as a 24 bit signed integer and
+;       returns it in W1:W0.  The bytes are assumed to be in most to least
+;       significant order.
+;
+;     CMD_GET32
+;
+;       Gets the next four command stream bytes as a 32 bit integer and returns
+;       it in W1:W0.  The bytes are assumed to be in most to least significant
+;       order.
+;
+;     CMD_PUT8
+;
+;       Sends the byte in the low 8 bits of W0 out the response stream.  The
+;       response stream lock must be held when this routine is called.
+;
+;     CMD_PUT16
+;
+;       Sends the 16 bits in W0 out the response stream.  The bytes are sent
+;       in most to least significant order.  The response stream lock must be
+;       held when this routine is called.
+;
+;     CMD_PUT24
+;
+;       Sends the 24 low bits of W1:W0 out the response stream.  The bytes are
+;       sent in most to least significant order.  The response stream lock must
+;       be held when this routine is called.
+;
+;     CMD_PUT32
+;
+;       Sends the 32 bits in W1:W0 out the response stream.  The bytes are sent
+;       in most to least significant order.  The response stream lock must be
+;       held when this routine is called.
+;
+;     CMD_LOCK_OUT
+;
+;       Acquires the exclusive lock on the response stream.  Whole responses
+;       must be sent with this lock held to prevent them being interleaved with
+;       response data sent by other parts of the system asynchronously.
+;
+;     CMD_UNLOCK_OUT
+;
+;       Releases the lock on the response stream, if held by this task.  This
+;       may be called after sending a complete response to let other parts of
+;       the system send response data.  Any output stream lock held by this task
+;       is automatically released by CMD_DONE, so it is not necessary to call
+;       CMD_UNLOCK_OUT at the end of a command routine.
+;
+;       If a command routine sends multiple responses, it is permissible to
+;       hold the output lock continuously for all of them as long as the command
+;       routine does not wait on a external event.  Note that simply releasing
+;       the lock then acquiring it again without a call to TASK_YIELD in between
+;       is just a waste of cycles since no other task has the opportunity to
+;       acquire the lock while it is available.
+;
+;     CMD_PUTBUF
+;
+;       Writes the low 8 bits of W0 as the next sequential byte into the command
+;       routines scratch buffer.  The buffer starts at CMDBUF, and the global
+;       variable NCMDBUF contains the number of bytes currently in the buffer.
+;       The buffer is reset to empty before each command routine is run.  When
+;       the buffer is already full, attempts to write additional bytes to it are
+;       ignored.
+;
+;     CMD_PUTBUFN
+;
+;       Get the number of bytes indicated in W0 from the input stream and write
+;       them sequentially into the scratch buffer.
+;
+;     CMDBUF, NCMDBUF
+;
+;       These are the global symbols for accessing the scratch buffer.  CMDBUF
+;       is the first byte of the buffer, and NCMDBUF is the number of bytes in
+;       the buffer.  The buffer is reset to empty before each command is
+;       processed.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+
+;
+;   Derived constants.
+;
+
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_cmds, bss
+
+allocg   usb_fwtype          ;USB converter firmware type ID
+allocg   usb_fwver           ;USB converter firmware version number
+allocg   usb_fwseq           ;USB converter firmware sequence number
+
+;*******************
+;
+;   Local state.
+;
+
+
+.section .code_cmds, code
+;*******************************************************************************
+;
+;   Subroutine CMDS_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  cmds_init, regf0
+
+         mov     #0, w0
+         mov     w0, usb_fwtype ;init USB converter firmware info to unknown
+         mov     w0, usb_fwver
+         mov     w0, usb_fwseq
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Command PING
+;
+;   Sends the PONG response.
+;
+         glbent  cm_ping
+
+         gcall   cmd_lock_out
+         mov     #rsp_pong, w0
+         gcall   cmd_put8    ;send the PONG response
+         return
+
+;*******************************************************************************
+;
+;   Command USTAT stat [parm ... parm]
+;
+;   This command is not sent by the host, but by a serial to USB converter
+;   between here and the host.  The command is used to provide information about
+;   the converter and the USB link.  It is part of the Embed USB device 10
+;   protocol.  See the "embed10" documentation file for details.
+;
+         glbent  cm_ustat
+
+         gcall   cmd_get8    ;get STAT into W0
+         mov     w0, w1      ;save it in W1
+         lsr     w0, #5, w0  ;get the 0-7 opcode into W0
+         dispatch ustat_opc, 7 ;jump to specific routine for this opcode
+         return              ;invalid opcode (not supposed to be possible}
+
+ustat_opc:                   ;table of dispatch addresses for each opcode
+         .pword  ustat_opc_status ;0 - STATUS
+         .pword  ustat_opc_fw ;1 - FW type version sequence
+         .pword  cmd_done    ;2
+         .pword  cmd_done    ;3
+         .pword  cmd_done    ;4
+         .pword  cmd_done    ;5
+         .pword  cmd_done    ;6
+         .pword  cmd_done    ;7
+;
+;   USTAT STATUS
+;
+ustat_opc_status:
+         btss    w0, #0
+         setflag usb_host
+         btsc    w0, #0
+         clrflag usb_host
+
+         btss    w0, #1
+         setflag usb_app
+         btsc    w0, #1
+         clrflag usb_app
+         return
+;
+;   USTAT FW type version sequence
+;
+ustat_opc_fw:
+         gcall   cmd_get8    ;get type ID
+         mov     w0, usb_fwtype
+         gcall   cmd_get8    ;get version number
+         mov     w0, usb_fwver
+         gcall   cmd_get8    ;get sequence number
+         mov     w0, usb_fwseq
+         return
+
+.end

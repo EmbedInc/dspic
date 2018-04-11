@@ -1,0 +1,64 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_comp_ins"]] then
+  /const fp32f_comp_ins bool = true
+
+.section .code_fp32f_comp, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_COMP
+;
+;   Compare the accumulator value to the operand value.  A virtual subtract will
+;   be performed of ACC - OP with the system flags set from that operation.  The
+;   various conditional branches intended for use after signed compares can then
+;   be used.
+;
+;   The floating point format guarantees that the exponent and mantissa together
+;   are in magnitude order if just interpreted as a unsigned integer.  With the
+;   sign bit, a whole floating point number is in sign-magnitude format.  The
+;   PIC numeric comparison flags and conditional branch instruction work with
+;   unsigned or signed twos-complement format, not sign-magnitude format.  The
+;   sign-magnitude format is therefore converted to twos-complement before the
+;   comparison is performed.  This means complementing the magnitude part if the
+;   sign indicates negative.
+;
+         glbsub  fp32f_comp
+         push.d  w0          ;save original ACC
+         push.d  w2          ;save original OP
+
+         btss    w1, #15     ;ACC is negative ?
+         jump    comp_dacc   ;no, done adjusting ACC to twos complement
+         com     w0, w0      ;complement all but the sign bit
+         com     w1, w1
+         bset    w1, #15
+comp_dacc:
+
+         btss    w3, #15     ;OP is negative ?
+         jump    comp_dop    ;no, done adjusting OP to twos complement
+         com     w2, w2      ;complement all but the sign bit
+         com     w3, w3
+         bset    w3, #15
+comp_dop:
+
+         cp      w0, w2      ;compare as two 32-bit signed integers
+         cpb     w1, w3
+
+         pop.d   w2          ;restore original OP
+         pop.d   w0          ;restore original ACC
+         leaverest
+
+  /endif

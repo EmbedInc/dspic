@@ -1,0 +1,48 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_flts_ins"]] then
+  /const fp32f_flts_ins bool = true
+
+  /include "(cog)src/dspic/fp32f_fltu.ins.dspic"
+
+.section .code_fp32f_flts, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_FLTS
+;
+;   Convert the signed fixed point value in W1:W0 with W2 fraction bits to
+;   floating point.  This routine is the same as FP32F_FLTU except that the
+;   input is signed instead of unsigned.
+;
+         glbsub  fp32f_flts, regf3
+
+         mov     w1, w3      ;save word with original sign bit in W3
+         btss    w1, #15     ;input value is negative ?
+         jump    flts_pos    ;is positive or zero
+
+         com     w0, w0      ;complement
+         com     w1, w1
+         add     w0, #1, w0  ;increment
+         addc    w1, #0, w1
+flts_pos:                    ;unsigned magnitude now in W1:W0
+         mcall   fp32f_fltu  ;convert the unsigned value to FP
+         btsc    w3, #15     ;original value was positive ?
+         bset    w1, #15     ;was negative, make FP negative
+
+         leaverest
+
+  /endif

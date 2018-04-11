@@ -1,0 +1,38 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_min_ins"]] then
+  /const fp32f_min_ins bool = true
+
+  /include "(cog)src/dspic/fp32f_comp.ins.dspic"
+
+.section .code_fp32f_min, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_MIN
+;
+;   Set the floating point accumulator (W1:W0) to the minimum of it and the
+;   floating point operand (W3:W2).
+;
+         glbsub  fp32f_min
+
+         mcall   fp32f_comp  ;compare ACC to OP and leave condition result bits
+         bra     le, min_leave ;ACC is already the minimum ?
+         mov.d   w2, w0      ;no, copy OP --> ACC
+min_leave:
+         leaverest
+
+  /endif

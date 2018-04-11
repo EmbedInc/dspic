@@ -1,0 +1,146 @@
+;   ***************************************************************
+;   * Copyright (c) 2005, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Declare defaults for all the assembly values required by STD.INS.DSPIC.
+;   Applications should include this file, set any values they know and care
+;   about, then include STD.INS.DSPIC.
+;
+;   See the comments in STD.INS.DSPIC for a description of all the
+;   assembly values it needs.
+;
+
+;*******************************************************************************
+;
+;   Handle the version and sequence numbers for this build.  This section is
+;   only run if the following preprocessor constants exist:
+;
+;     SRCDIR  -  The name of the directory within (cog)source containing the
+;       source code of the project.  Builds are run in a directory of the same
+;       name in (cog)src.
+;
+;     FWNAME  -  Name of the firmware project.  The name of ordinary source
+;       modules would start with this name followed by a underscore.  For
+;       example, if FWNAME was "blah", then the standard project init module
+;       would be called "blah_init.dspic".
+;
+;       This constant is allowed to not exist.  If so, then BUILDNAME must be
+;       defined, and FWNAME will be defined here the same as BUILDNAME.
+;
+;     BUILDNAME  -  This constant is optional.  It specifies the subdirectory
+;       within the source directory where the source code for this build is
+;       stored.  When this variable does not exist or is the empty string, flat
+;       structure is assumed where all source files are directly in the source
+;       directory.
+;
+;   If the boolean variable MAKE_VERSION exists and is set to TRUE, then the
+;   version include file is always made and the preprocessing is aborted
+;   immediately afterwards.  Otherwise, the version include file is only made
+;   if it does not already exist.  In that case, processing continues and uses
+;   the new version include file.  The sequence number is updated whenever the
+;   version include file is written.  MAKE_VERSION is intended to be set from
+;   the command line by the build script to explicitly create the version
+;   include file before any modules are built for real.
+;
+;   If the boolean variable MAKE_VERSION_CONTINUE exists and is set to TRUE,
+;   then the version include file is always made and processing continues
+;   normally.  This switch can be used by single-module projects.
+;
+/block
+  /var local fnam string     ;customized firmware version info include file name
+  /var local snam string     ;sequence file name
+  /var local ver integer     ;firmware version number
+  /var local seq integer     ;firmware sequence number
+
+  /if [not [exist "buildname"]] then ;make sure BUILDNAME exists, empty string if needed
+    /const buildname = ""
+    /endif
+  /if [not [exist "fwname"]] then
+    /if [= buildname ""]
+      /then                  ;both FWNAME and BUILDNAME not defined
+        /quit
+      /else                  ;default FWNAME to BUILDNAME
+        /const fwname = buildname
+      /endif
+    /endif
+  /if [not [exist "srcdir"]] then
+    /quit
+    /endif
+
+  /if [exist "make_version"]
+    /then                    ;MAKE_VERSION exists
+      /if [not [exist "make_version_continue"]] then
+        /const make_version_continue bool = false
+        /endif
+    /else                    ;MAKE_VERSION does not exist
+      /if [exist "make_version_continue"]
+        /then
+          /const make_version bool = make_version_continue
+        /else
+          /const make_version bool = false
+          /const make_version_continue bool = true
+        /endif
+    /endif
+
+  /set fnam [tnam "(cog)src/" srcdir "/" fwname "_fwver.ins.dspic"]
+  /if [or make_version [not [exist fnam fnam]]] then
+;
+;   Create the <fwname>_FWVER.INS.DSPIC file.  FNAM is set to the name of the
+;   file.  This file defines the FWVER and FWSEQ constants both in ASM30 and in
+;   the preprocessor.  The sequence number is advanced after being written to
+;   the file.
+;
+    /if [= buildname ""]
+      /then                  ;flat source structure
+        /set snam [str "(cog)source/" srcdir "/" fwname]
+      /else                  ;this build has its own directory
+        /set snam [str "(cog)source/" srcdir "/" buildname "/seq/" fwname]
+      /endif
+    /set ver [seq snam 0 1]  ;get the version number, we don't change this
+    /set snam [str snam ver] ;make sequence number file name
+    /set seq [seq snam 1 1]  ;get this sequence number, advance it for next time
+         ;
+         ;   Write the version and sequence numbers to the VER include file.  The
+         ;   pathname of that include file is in FNAM.
+         ;
+    /writepush fnam          ;open the version include file
+    /write "/const fwver integer = " ver
+    /write "/const fwseq integer = " seq
+    /write ".equiv fwver, " ver
+    /write ".equiv fwseq, " seq
+    /writepop                ;close the version include file
+
+    /show "  Building " [ucase fwname] " version " ver " sequence " seq
+
+    /if [not make_version_continue] then ;just make version, don't process ?
+      /stop
+      /endif
+    /endif
+;
+;   The version include file exists and its name is in FNAM.
+;
+  /include fnam
+  /endblock                  ;done setting firmware version and sequence number
+
+;*******************************************************************************
+;
+;   Include the processor-specific include file.  Old code did this directly in
+;   the xxxLIB.INS.DSPIC file.  To avoid breaking old code, this section is only
+;   run if the preprocessor constant PICNAME exists.
+;
+/if [exist "picname"] then   ;using the new processor setup ?
+  /include [str "(cog)src/dspic/p" [lcase picname] ".ins.dspic"]
+.list
+  /endif

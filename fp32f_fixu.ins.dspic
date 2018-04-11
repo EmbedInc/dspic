@@ -1,0 +1,87 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_fixu_ins"]] then
+  /const fp32f_fixu_ins bool = true
+
+.section .code_fp32f_fixu, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_FIXU
+;
+;   Convert the floating point value in W1:W0 to fixed point with W2 fraction
+;   bits.  W2 may be negative to indicate there will be additional 0 integer
+;   bits to the right of the resulting value.  The result will be unsigned in
+;   W1:W0.
+;
+         glbsub  fp32f_fixu, regf3 | regf4
+
+         ior     w1, w0, w3
+         bra     z, fixu_0   ;zero special case ?
+         btsc    w1, #15     ;positive or 0 ?
+         bra     fixu_0      ;negative, return 0
+
+         mov     #16384, w3
+         sub     w1, w3, w3  ;make signed exponent value in W3
+         sub     #16, w3     ;make left shift amount based on exponent
+         add     w3, w2, w3  ;make final left shift amount including fract bits
+         btsc    w3, #15     ;shifting left or staying put ?
+         jump    fixu_right  ;shifting right
+;
+;   Shift the mantissa left by W3 bits.  W3 is positive or 0.  W0 contains the
+;   raw mantissa field of the FP number.
+;
+         cp      w3, #15
+         bra     gtu, fixu_max ;shift would overflow, return max
+
+         mov     #1, w1      ;init high word with implied 1 of the mantissa
+         sl      w1, w3, w1  ;shift the high word
+         sl      w0, w3, w4  ;make final low word in W4
+         subr    w3, #16, w3 ;bits to shift low word right for high word part
+         lsr     w0, w3, w0  ;make low contribution to high word
+         ior     w1, w0, w1  ;assemble final high word
+         mov     w4, w0      ;get final low word
+         jump    fixu_leave
+;
+;   Shift the mantissa right by -W3 bits.  W3 is negative.  W0 contains the raw
+;   mantissa field of the FP number.
+;
+fixu_right:
+         subr    w3, #0, w3  ;make number of bits to shift right
+         cp      w3, #16
+         bra     gtu, fixu_0 ;shift would leave only 0 bits ?
+
+         lsr     w0, w3, w0  ;shift bits from raw mantissa field into place
+         sub     #1, w3
+         mov     #0x8000, w1
+         lsr     w1, w3, w1  ;get implied 1 bit into correct position
+         ior     w0, w1, w0  ;assemble low word of result
+         mov     #0, w1      ;high word of result is always 0 on right shift
+
+fixu_leave:                  ;common exit point
+         leaverest
+
+fixu_0:                      ;return zero
+         mov     #0, w1
+         mov     #0, w0
+         jump    fixu_leave
+
+fixu_max:                    ;return maximum possible unsigned value
+         mov     #0xFFFF, w1
+         mov     #0xFFFF, w0
+         jump    fixu_leave
+
+  /endif

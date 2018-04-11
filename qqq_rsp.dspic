@@ -1,0 +1,884 @@
+;   ***************************************************************
+;   * Copyright (C) 2010, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Interface to the QQ3 processor.
+;
+;   The communication to this remote processor is via a UART interface.  We act
+;   as the host controlling the processor.  A separate task in this module
+;   processes the responses received from the processor.  See the FW_QQ3
+;   documentation file for a description of the communication protocol.
+;
+;   The global flag QQ3_COMM is maintained to indicate whether communication
+;   with the remote processor is up and working normally, or not.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   bufsize integer = 32 ;size of buffer for temp saving response data
+/const   sendnnop integer = 8 ;number of NOP commands to send at startup
+/const   uart_name string = "qq3" ;unique name given to the specific UART
+/const   stacksz integer = 128 ;responses processing task stack size
+/const   waitstart real = 200e-3 ;seconds to wait on startup before NOPs and FWINFO
+/const   commwait real = 500e-3 ;max seconds to wait for comm startup completed
+/const   syncwait real = 50e-3 ;max seconds to wait in QQ3_SYNC
+/const   fwreq   bool = true ;send request for FW info on startup
+/const   resetpin string = "" ;name of out pin to hold processor in reset
+;
+;   Command opcodes.
+;
+.equiv   cmd_nop, 0          ;does nothing
+.equiv   cmd_ping, 1         ;requests PONG response
+.equiv   cmd_fwinfo, 2       ;gets firmware info
+;
+;   Derived constants.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /if [not [exist "debug_rspdel"]] then
+    /const debug_rspdel bool = false
+    /endif
+  /if [= uart_name ""]
+    /then                    ;no name given to UART
+      /const uname string = "uart"
+    /else                    ;UART has a specific name
+      /const uname string = [str "uart_" uart_name]
+    /endif
+
+  /const waitstartms integer = [rnd [* waitstart 1000]] ;ms to wait on startup
+  /const commwaitms integer = [rnd [* commwait 1000]] ;ms ticks to wait comm startup
+  /const syncwaitms integer = [rnd [* syncwait 1000]] ;ms ticks to wait for sync
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_qq3, bss
+
+allocg   qq3_fwtype          ;firmware info of remote processor
+allocg   qq3_fwver
+allocg   qq3_fwseq
+
+/if [> bufsize 0] then
+allocg   nrspbuf             ;number of bytes in RSPBUF
+allocg   rspbuf, [v bufsize] ;temp buffer for use during individual responses
+  /endif
+
+;*******************
+;
+;   Local state.
+;
+alloc    stack_qq3, [v stacksz], 2 ;command processing task stack
+
+;*******************
+;
+;   Local state in near memory.
+;
+.section .near_qq3, bss near
+
+alloc    flags               ;individual flag bits, use FLG_xxx constants
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_started, 0      ;COMM has been started, FLAG_QQ3_COMM appropriately set
+.equiv   flg_ev, 1           ;the selected event has occurred
+.equiv   flg_evpong, 2       ;set EV on PONG response received
+.equiv   flg_evfwinfo, 3     ;set EV on FWINFO response received
+
+
+.section .code_qq3, code
+;*******************************************************************************
+;
+;   Subroutine QQ3_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  qq3_init, regf0
+
+         mov     #0, w0
+         mov     w0, qq3_fwtype ;init to remote processor firmware info not known
+         mov     w0, qq3_fwver
+         mov     w0, qq3_fwseq
+
+         clr     flags       ;init all local flag bits to off
+
+         clrflag qq3_comm    ;init to communication with remote not up yet
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine WAIT_TOUT
+;
+;   Wait for the local EV flag to be set or a timeout, whichever comes first.
+;   W0 contains the maximum milliseconds to wait.  If the timeout is reached
+;   before the event occurs, then the Z flag is set, otherwise cleared.  The EV
+;   flag is cleared if returning due to the event.
+;
+         locsub  wait_tout, regf0 | regf1 | regf2
+
+         btsc    flags, #flg_ev ;check for special case of no wait required
+         jump    wtout_leave
+         cp0     w0          ;check for special case of 0 timeout
+         bra     z, wtout_leave
+
+         mov     tick1ms, w1 ;init clock value updated to
+wtout_wait:                  ;back here to wait a while
+         gcall   task_yield_save ;give other tasks a chance to run
+wtout_recheck:               ;back here to check state again
+         btsc    flags, #flg_ev ;event still hasn't occurred ?
+         jump    wtout_leave
+         mov     tick1ms, w2 ;get latest clock value
+         xor     w2, w1, w2  ;compare to last clock value updated to
+         bra     z, wtout_wait ;no new clock tick ?
+;
+;   New clock tick.
+;
+         sub     #1, w0      ;count one less tick until timeout over
+         bra     z, wtout_leave ;timeout has expired ?
+         add     #1, w1      ;update the clock value now current with
+         jump    wtout_recheck ;back and check the state again
+;
+;   Common exit point.
+;
+wtout_leave:
+         cp0     w0          ;set Z iff the timeout has expired
+         btss    flags, #flg_ev ;the event occurred ?
+         jump    wtout_ret   ;no
+         bclr    flags, #flg_ev ;clear the event condition
+         bclr    Sr, #Z      ;indicate returning due to event occurred
+wtout_ret:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine QQ3_SYNC
+;
+;   Wait for the remote processor to process whatever commands have been sent to
+;   it.  This is done by sending a PING command and waiting for the PONG
+;   response.  If the PONG response is not received within SYNCWAIT seconds,
+;   then the global QQ3_COMM flag is cleared, otherwise it is set.  The set of
+;   commands sent before this routine is called must not contain PING.
+;
+         locsub  qq3_sync, regf0
+
+         bclr    flags, #flg_ev ;clear event
+         bset    flags, #flg_evpong ;indicate to set event on PONG response
+
+         mcall   qq3_lock_out
+         mov     #cmd_ping, w0 ;send PING command
+         mcall   qq3_put8
+         mcall   qq3_unlock_out
+
+         mov     #[v syncwaitms], w0 ;max ms to wait
+         mcall   wait_tout   ;wait for the commands to be processed
+         btss    Sr, #Z
+         setflag qq3_comm    ;indicate remote system is up and running
+         btsc    Sr, #Z
+         clrflag qq3_comm    ;indicate error communicating with remote system
+         bclr    flags, #flg_evpong ;clear EV trigger condition
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_LOCK_OUT
+;
+;   Lock the output to the remote processor.  The output stream must be locked
+;   before sending any commands.
+;
+         glbsub  qq3_lock_out
+
+         gcall   [chars uname]_lock ;set the lock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_UNLOCK_OUT
+;
+;   Release any lock on the command stream to the remote processor held by this
+;   task.
+;
+         glbsub  qq3_unlock_out
+
+         gcall   [chars uname]_unlock ;release the lock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_GET8
+;
+;   Get the next 8 bit byte from the response input stream into W0.  This routine
+;   waits indefinitely until a byte is available.
+;
+         glbsub  qq3_get8
+
+         gcall   [chars uname]_get ;get the byte from the UART
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_GET16
+;
+;   Get the next two bytes from the response input stream as a 16 bit value into
+;   W0.  The bytes are assumed to be in most to least significant order.
+;
+         glbsub  qq3_get16, regf1
+
+         mcall   qq3_get8    ;get the high byte into W0
+         sl      w0, #8, w1  ;save it in W1 in the right position
+         mcall   qq3_get8    ;get the low byte into W0
+         ior     w1, w0, w0  ;assemble the 16 bit word in W0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_GET24U
+;
+;   Get the next three bytes from the response input stream as a unsigned 24 bit
+;   integer into W1:W0.  The bytes are assumed to be in most to least
+;   significant order.
+;
+         glbsub  qq3_get24u
+
+         mcall   qq3_get8    ;get the high byte
+         mov     w0, w1
+         mcall   qq3_get16   ;get the low word
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_GET24S
+;
+;   Get the next three bytes from the response input stream as a signed 24 bit
+;   integer into W1:W0.  The bytes are assumed to be in most to least
+;   significant order.
+;
+         glbsub  qq3_get24s
+
+         mcall   qq3_get8    ;get the high byte into W0
+         se      w0, w1      ;sign extend and save it in W1
+         mcall   qq3_get16   ;get the low word into W0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_GET32
+;
+;   Get the next four bytes from the response input stream as a 32 bit value into
+;   W1:W0.  The bytes are assumed to be in most to least significant order.
+;
+         glbsub  qq3_get32
+
+         mcall   qq3_get16   ;get the high word
+         mov     w0, w1
+         mcall   qq3_get16   ;get the low word
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_PUT8
+;
+;   Write the byte in the low 8 bits of W0 to the command stream to the remote
+;   processor.  The command sending lock should be held.
+;
+         glbsub  qq3_put8
+
+         gcall   [chars uname]_put ;write the byte to the UART
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_PUT16
+;
+;   Write the 16 bit word in W0 to the command stream.  The bytes are written
+;   in most to least significant order.  The command sending lock should be
+;   held.
+;
+         glbsub  qq3_put16
+
+         swap    w0
+         mcall   qq3_put8    ;send the high byte
+         swap    w0
+         mcall   qq3_put8    ;send the low byte
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_PUT24
+;
+;   Write the 24 low bits of W1:W0 to the command stream.  The bytes are written
+;   in most to least significant order.  The command sending lock should be
+;   held.
+;
+         glbsub  qq3_put24
+
+         exch    w0, w1
+         mcall   qq3_put8    ;send the high byte
+         exch    w0, w1
+         mcall   qq3_put16   ;send the low word
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_PUT32
+;
+;   Write the 32 bit word in W1:W0 to the command stream.  The bytes are written
+;   in most to least significant order.  The command sending lock should be
+;   held.
+;
+         glbsub  qq3_put32
+
+         exch    w0, w1
+         mcall   qq3_put16   ;send the high word
+         exch    w0, w1
+         mcall   qq3_put16   ;send the low word
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_PUTBUF
+;
+;   Write the low 8 bits of W0 as the next byte into the responses scratch
+;   buffer.  Nothing is done if the buffer is already full.  NRSPBUF is udpated
+;   as appropriate to contain the total number of bytes in the buffer.  Note
+;   that the buffer is automatically reset to empty before each response routine
+;   is run.  This buffer may only be used by the response processing task in
+;   this module.  It is made global so that response processing routines can be
+;   in other modules.
+;
+/if [> bufsize 0] then
+         glbsub  qq3_putbuf, regf1 | regf2
+
+         mov     nrspbuf, w1 ;get number of bytes already in the buffer
+         mov     #[v bufsize], w2 ;get maximum bytes allowed in the buffer
+         cp      w1, w2
+         bra     geu, pbuf_leave ;buffer is already full, nothing more to do
+
+         mov     #rspbuf, w2 ;get address of start of buffer
+         add     w2, w1, w2  ;point W2 to where to store this byte
+         mov.b   w0, [w2]    ;stuff the byte into the buffer
+
+         add     #1, w1      ;update number of bytes in the buffer
+         mov     w1, nrspbuf
+
+pbuf_leave:                  ;common exit point
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_PUTBUFN
+;
+;   Get the next N bytes from the response stream and save them into the
+;   response routines scratch buffer, RSPBUF.  N is passed in W0.
+;
+/if [> bufsize 0] then
+         glbsub  qq3_putbufn, regf0 | regf1
+
+         mov     w0, w1      ;init number of bytes left to do
+pbn_byte:                    ;back here each new byte
+         cp0     w1
+         bra     z, pbn_done ;done with all the bytes ?
+         mcall   qq3_get8    ;get the next input byte into W0
+         mcall   qq3_putbuf  ;save it in the scratch buffer
+         sub     #1, w1      ;count one less byte left to do
+         jump    pbn_byte    ;back to do next byte
+pbn_done:                    ;done copying all the bytes
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine QQ3_START
+;
+;   Start communication with the remote processor.
+;
+;   If successful, the global flag QQ3_COMM is set, and the QQ3_FWxxx variables
+;   holding the firmware version in the remote processor are filled in.
+;
+;   When communication could not be fully established, the global flag QQ3_COMM
+;   is cleared.
+;
+         glbsub  qq3_start, regf0 | regf13 | regf14
+
+         bclr    flags, #flg_started ;init to comm not started yet
+
+         mov     #[v stacksz], w13 ;pass size of data stack
+         mov     #stack_qq3, w14 ;pass start address of data stack
+         call    task_new    ;create response processing task
+         goto    qq3_task    ;start point of the new task
+;
+;   Wait for communication to be started.
+;
+         mov     #[v commwaitms], w14 ;init max ms ticks left to wait
+         mov     tick1ms, w13 ;init clock value current with
+start_wait:                  ;wait for comm working to be determined
+         gcall   task_yield  ;let other tasks run for a bit
+         btsc    flags, #flg_started ;comm not yet started ?
+         jump    start_started ;is started
+start_tick:                  ;back here to check for each new clock tick
+         mov     tick1ms, w0 ;get current clock value
+         cp      w13, w0
+         bra     z, start_wait ;no new tick ?
+         add     #1, w13     ;update clock value now current with
+         sub     #1, w14     ;one less tick until timeout
+         bra     nz, start_tick ;back to check for another tick
+         jump    start_leave ;comm startup timed out, nothing more to do
+
+start_started:               ;comm startup completed
+         mcall   qq3_sync    ;verify communications, set global flag accordingly
+
+start_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Routine QQ3_TASK
+;
+;   This code is run in a separate task.  The task receives and processes the
+;   responses from the remote processor.
+;
+qq3_task:                    ;task starts here
+         clrflag qq3_comm    ;init to communications not up and running
+         bclr    flags, #flg_started ;init to comm startup not completed yet
+//
+//   Blip the reset line to the remote processor, if we have such control.
+//
+/if [<> resetpin ""] then
+         set_[chars resetpin]_on ;hold remote processor in reset
+         mov     #5, w0      ;make sure reset is asserted solidly
+         gcall   waitms
+         set_[chars resetpin]_off ;release the remote processor from reset
+  /endif
+//
+//   Give the remote processor time to start up before attempting to communicate
+//   with it.
+//
+/if [<> waitstart 0] then    ;wait on startup before attempting to send ?
+         mov     #[v waitstartms], w0 ;leave time for remote processor to get started
+         gcall   waitms
+  /endif
+//
+//   Send a bunch of NOP commands so that the remote processor will be in sync
+//   with our command stream.  The number of NOPs to send is set by the constant
+//   SENDNNOP at the top of this module.  This section is omitted when SENDNNOP
+//   is 0.
+//
+/if [> sendnnop 0] then
+;
+;   Send some NOP commands so that the remote processor is synced to the command
+;   stream.
+;
+         mov     #[v sendnnop], w1 ;init number of NOPs left to send
+         gcall   qq3_lock_out ;acquire exclusive lock on the response stream
+loop_nop:
+         mov     #cmd_nop, w0
+         gcall   qq3_put8    ;send one NOP
+         sub     #1, w1      ;count one less NOP left to send
+         bra     nz, loop_nop ;back to send the next NOP
+         gcall   qq3_unlock_out ;release lock on the response stream
+  /endif
+//
+//   Send a request for the firmware version info, if this is enabled.
+//
+/if fwreq then
+;
+;   Send a request for the firmware version info.
+;
+         mcall   qq3_lock_out
+         mov     #cmd_fwinfo, w0
+         mcall   qq3_put8
+         mcall   qq3_unlock_out
+  /endif
+;
+;   Return point after done executing a response.  response routines can jump
+;   here from nested subroutines or with data on the stack.  The stack will be
+;   reset to empty before any further processing.
+;
+         glbent  qq3_rspdone
+
+         disi    #1
+         mov     #stack_qq3, w15 ;reset the stack to empty
+         mcall   qq3_unlock_out ;make sure this task is not holding output lock
+
+/if [> bufsize 0] then
+         mov     #0, w0
+         mov     w0, nrspbuf ;reset the scratch response data buffer to empty
+  /endif
+;
+;   Get and process the next response.
+;
+         mcall   qq3_get8    ;get the opcode byte into W0
+;
+;   If the DEBUG_RSPDEL switch is enabled, wait a while for any parameters for
+;   this response to arrive.  This makes single stepping thru response
+;   interpretation possible since all data bytes will already have been received
+;   by the hardware and they will be coming from the software FIFO.
+;
+/if debug_rspdel then
+         mov     w0, w1      ;temp save the opcode byte
+         mov     #10, w0     ;number of ms ticks to wait
+         gcall   waitms      ;do the wait
+         mov     w1, w0      ;restore the opcode into W0
+  /endif
+
+         mov     #tbloffset(qq3_rspdone), w1 ;put QQ3_RSPDONE as return address onto stack
+         push    w1
+         mov     #tblpage(qq3_rspdone), w1
+         and     #0x7F, w1
+         push    w1
+
+         mov     #tbloffset(qq3_rsp_tbl), w1 ;get response table address into W2:W1
+         mov     #tblpage(qq3_rsp_tbl), w2
+         and     #0x7F, w2
+         sl      w0, #1, w3  ;make offset into table for this opcode
+         add     w1, w3, w1  ;make table entry address in W2:W1
+         addc    #0, w2
+         mov     w2, Tblpag  ;set high bits of program memory address to fetch
+         tblrdl  [w1], [w15++] ;fetch low 16 bits and push them onto the stack
+         tblrdh  [w1], [w15++] ;fetch and push the remaining high bits
+         return              ;jump to the address just pushed onto the stack
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Response processing routines.
+
+;*******************************************************************************
+;
+;   Response PONG
+;
+         locent  rsp_pong
+
+         btss    flags, #flg_evpong ;this event sets EV flag ?
+         return              ;no
+
+         bclr    flags, #flg_evpong ;clear the event trigger
+         bset    flags, #flg_ev ;indicate the selected event occurred
+         return
+
+;*******************************************************************************
+;
+;   Response FWINFO type ver seq
+;
+         locent  rsp_fwinfo
+
+         gcall   qq3_get8
+         mov     w0, qq3_fwtype
+         gcall   qq3_get8
+         mov     w0, qq3_fwver
+         gcall   qq3_get8
+         mov     w0, qq3_fwseq
+
+         bset    flags, #flg_started ;comm startup has completed
+
+         btss    flags, #flg_evfwinfo ;this event sets EV flag ?
+         return              ;no
+         bclr    flags, #flg_evfwinfo ;clear the event trigger
+         bset    flags, #flg_ev ;indicate the selected event occurred
+         return
+
+;*******************************************************************************
+;
+;   Responses dispatch table.  There is one table entry for each possible 0 -
+;   255 response opcode.  Each table entry uses one program memory word (24
+;   bits), and contains the address of the reponse processing routine for that
+;   opcode.
+;
+;   The default RSP_NOP dispatch point is in this module (above).  This is the
+;   same as RSP_DONE, where all response processing routines must go to when
+;   done.
+;
+qq3_rsp_tbl:
+         .pword  qq3_rspdone ;0 - NOP, response explicitly ignored
+         .pword  rsp_pong    ;1 - PONG, sent in response to PING
+         .pword  rsp_fwinfo  ;2 - FWINFO, firmware information
+         .pword  qq3_rspdone ;3
+         .pword  qq3_rspdone ;4
+         .pword  qq3_rspdone ;5
+         .pword  qq3_rspdone ;6
+         .pword  qq3_rspdone ;7
+         .pword  qq3_rspdone ;8
+         .pword  qq3_rspdone ;9
+         .pword  qq3_rspdone ;10
+         .pword  qq3_rspdone ;11
+         .pword  qq3_rspdone ;12
+         .pword  qq3_rspdone ;13
+         .pword  qq3_rspdone ;14
+         .pword  qq3_rspdone ;15
+         .pword  qq3_rspdone ;16
+         .pword  qq3_rspdone ;17
+         .pword  qq3_rspdone ;18
+         .pword  qq3_rspdone ;19
+         .pword  qq3_rspdone ;20
+         .pword  qq3_rspdone ;21
+         .pword  qq3_rspdone ;22
+         .pword  qq3_rspdone ;23
+         .pword  qq3_rspdone ;24
+         .pword  qq3_rspdone ;25
+         .pword  qq3_rspdone ;26
+         .pword  qq3_rspdone ;27
+         .pword  qq3_rspdone ;28
+         .pword  qq3_rspdone ;29
+         .pword  qq3_rspdone ;30
+         .pword  qq3_rspdone ;31
+         .pword  qq3_rspdone ;32
+         .pword  qq3_rspdone ;33
+         .pword  qq3_rspdone ;34
+         .pword  qq3_rspdone ;35
+         .pword  qq3_rspdone ;36
+         .pword  qq3_rspdone ;37
+         .pword  qq3_rspdone ;38
+         .pword  qq3_rspdone ;39
+         .pword  qq3_rspdone ;40
+         .pword  qq3_rspdone ;41
+         .pword  qq3_rspdone ;42
+         .pword  qq3_rspdone ;43
+         .pword  qq3_rspdone ;44
+         .pword  qq3_rspdone ;45
+         .pword  qq3_rspdone ;46
+         .pword  qq3_rspdone ;47
+         .pword  qq3_rspdone ;48
+         .pword  qq3_rspdone ;49
+         .pword  qq3_rspdone ;50
+         .pword  qq3_rspdone ;51
+         .pword  qq3_rspdone ;52
+         .pword  qq3_rspdone ;53
+         .pword  qq3_rspdone ;54
+         .pword  qq3_rspdone ;55
+         .pword  qq3_rspdone ;56
+         .pword  qq3_rspdone ;57
+         .pword  qq3_rspdone ;58
+         .pword  qq3_rspdone ;59
+         .pword  qq3_rspdone ;60
+         .pword  qq3_rspdone ;61
+         .pword  qq3_rspdone ;62
+         .pword  qq3_rspdone ;63
+         .pword  qq3_rspdone ;64
+         .pword  qq3_rspdone ;65
+         .pword  qq3_rspdone ;66
+         .pword  qq3_rspdone ;67
+         .pword  qq3_rspdone ;68
+         .pword  qq3_rspdone ;69
+         .pword  qq3_rspdone ;70
+         .pword  qq3_rspdone ;71
+         .pword  qq3_rspdone ;72
+         .pword  qq3_rspdone ;73
+         .pword  qq3_rspdone ;74
+         .pword  qq3_rspdone ;75
+         .pword  qq3_rspdone ;76
+         .pword  qq3_rspdone ;77
+         .pword  qq3_rspdone ;78
+         .pword  qq3_rspdone ;79
+         .pword  qq3_rspdone ;80
+         .pword  qq3_rspdone ;81
+         .pword  qq3_rspdone ;82
+         .pword  qq3_rspdone ;83
+         .pword  qq3_rspdone ;84
+         .pword  qq3_rspdone ;85
+         .pword  qq3_rspdone ;86
+         .pword  qq3_rspdone ;87
+         .pword  qq3_rspdone ;88
+         .pword  qq3_rspdone ;89
+         .pword  qq3_rspdone ;90
+         .pword  qq3_rspdone ;91
+         .pword  qq3_rspdone ;92
+         .pword  qq3_rspdone ;93
+         .pword  qq3_rspdone ;94
+         .pword  qq3_rspdone ;95
+         .pword  qq3_rspdone ;96
+         .pword  qq3_rspdone ;97
+         .pword  qq3_rspdone ;98
+         .pword  qq3_rspdone ;99
+         .pword  qq3_rspdone ;100
+         .pword  qq3_rspdone ;101
+         .pword  qq3_rspdone ;102
+         .pword  qq3_rspdone ;103
+         .pword  qq3_rspdone ;104
+         .pword  qq3_rspdone ;105
+         .pword  qq3_rspdone ;106
+         .pword  qq3_rspdone ;107
+         .pword  qq3_rspdone ;108
+         .pword  qq3_rspdone ;109
+         .pword  qq3_rspdone ;110
+         .pword  qq3_rspdone ;111
+         .pword  qq3_rspdone ;112
+         .pword  qq3_rspdone ;113
+         .pword  qq3_rspdone ;114
+         .pword  qq3_rspdone ;115
+         .pword  qq3_rspdone ;116
+         .pword  qq3_rspdone ;117
+         .pword  qq3_rspdone ;118
+         .pword  qq3_rspdone ;119
+         .pword  qq3_rspdone ;120
+         .pword  qq3_rspdone ;121
+         .pword  qq3_rspdone ;122
+         .pword  qq3_rspdone ;123
+         .pword  qq3_rspdone ;124
+         .pword  qq3_rspdone ;125
+         .pword  qq3_rspdone ;126
+         .pword  qq3_rspdone ;127
+         .pword  qq3_rspdone ;128
+         .pword  qq3_rspdone ;129
+         .pword  qq3_rspdone ;130
+         .pword  qq3_rspdone ;131
+         .pword  qq3_rspdone ;132
+         .pword  qq3_rspdone ;133
+         .pword  qq3_rspdone ;134
+         .pword  qq3_rspdone ;135
+         .pword  qq3_rspdone ;136
+         .pword  qq3_rspdone ;137
+         .pword  qq3_rspdone ;138
+         .pword  qq3_rspdone ;139
+         .pword  qq3_rspdone ;140
+         .pword  qq3_rspdone ;141
+         .pword  qq3_rspdone ;142
+         .pword  qq3_rspdone ;143
+         .pword  qq3_rspdone ;144
+         .pword  qq3_rspdone ;145
+         .pword  qq3_rspdone ;146
+         .pword  qq3_rspdone ;147
+         .pword  qq3_rspdone ;148
+         .pword  qq3_rspdone ;149
+         .pword  qq3_rspdone ;150
+         .pword  qq3_rspdone ;151
+         .pword  qq3_rspdone ;152
+         .pword  qq3_rspdone ;153
+         .pword  qq3_rspdone ;154
+         .pword  qq3_rspdone ;155
+         .pword  qq3_rspdone ;156
+         .pword  qq3_rspdone ;157
+         .pword  qq3_rspdone ;158
+         .pword  qq3_rspdone ;159
+         .pword  qq3_rspdone ;160
+         .pword  qq3_rspdone ;161
+         .pword  qq3_rspdone ;162
+         .pword  qq3_rspdone ;163
+         .pword  qq3_rspdone ;164
+         .pword  qq3_rspdone ;165
+         .pword  qq3_rspdone ;166
+         .pword  qq3_rspdone ;167
+         .pword  qq3_rspdone ;168
+         .pword  qq3_rspdone ;169
+         .pword  qq3_rspdone ;170
+         .pword  qq3_rspdone ;171
+         .pword  qq3_rspdone ;172
+         .pword  qq3_rspdone ;173
+         .pword  qq3_rspdone ;174
+         .pword  qq3_rspdone ;175
+         .pword  qq3_rspdone ;176
+         .pword  qq3_rspdone ;177
+         .pword  qq3_rspdone ;178
+         .pword  qq3_rspdone ;179
+         .pword  qq3_rspdone ;180
+         .pword  qq3_rspdone ;181
+         .pword  qq3_rspdone ;182
+         .pword  qq3_rspdone ;183
+         .pword  qq3_rspdone ;184
+         .pword  qq3_rspdone ;185
+         .pword  qq3_rspdone ;186
+         .pword  qq3_rspdone ;187
+         .pword  qq3_rspdone ;188
+         .pword  qq3_rspdone ;189
+         .pword  qq3_rspdone ;190
+         .pword  qq3_rspdone ;191
+         .pword  qq3_rspdone ;192
+         .pword  qq3_rspdone ;193
+         .pword  qq3_rspdone ;194
+         .pword  qq3_rspdone ;195
+         .pword  qq3_rspdone ;196
+         .pword  qq3_rspdone ;197
+         .pword  qq3_rspdone ;198
+         .pword  qq3_rspdone ;199
+         .pword  qq3_rspdone ;200
+         .pword  qq3_rspdone ;201
+         .pword  qq3_rspdone ;202
+         .pword  qq3_rspdone ;203
+         .pword  qq3_rspdone ;204
+         .pword  qq3_rspdone ;205
+         .pword  qq3_rspdone ;206
+         .pword  qq3_rspdone ;207
+         .pword  qq3_rspdone ;208
+         .pword  qq3_rspdone ;209
+         .pword  qq3_rspdone ;210
+         .pword  qq3_rspdone ;211
+         .pword  qq3_rspdone ;212
+         .pword  qq3_rspdone ;213
+         .pword  qq3_rspdone ;214
+         .pword  qq3_rspdone ;215
+         .pword  qq3_rspdone ;216
+         .pword  qq3_rspdone ;217
+         .pword  qq3_rspdone ;218
+         .pword  qq3_rspdone ;219
+         .pword  qq3_rspdone ;220
+         .pword  qq3_rspdone ;221
+         .pword  qq3_rspdone ;222
+         .pword  qq3_rspdone ;223
+         .pword  qq3_rspdone ;224
+         .pword  qq3_rspdone ;225
+         .pword  qq3_rspdone ;226
+         .pword  qq3_rspdone ;227
+         .pword  qq3_rspdone ;228
+         .pword  qq3_rspdone ;229
+         .pword  qq3_rspdone ;230
+         .pword  qq3_rspdone ;231
+         .pword  qq3_rspdone ;232
+         .pword  qq3_rspdone ;233
+         .pword  qq3_rspdone ;234
+         .pword  qq3_rspdone ;235
+         .pword  qq3_rspdone ;236
+         .pword  qq3_rspdone ;237
+         .pword  qq3_rspdone ;238
+         .pword  qq3_rspdone ;239
+         .pword  qq3_rspdone ;240
+         .pword  qq3_rspdone ;241
+         .pword  qq3_rspdone ;242
+         .pword  qq3_rspdone ;243
+         .pword  qq3_rspdone ;244
+         .pword  qq3_rspdone ;245
+         .pword  qq3_rspdone ;246
+         .pword  qq3_rspdone ;247
+         .pword  qq3_rspdone ;248
+         .pword  qq3_rspdone ;249
+         .pword  qq3_rspdone ;250
+         .pword  qq3_rspdone ;251
+         .pword  qq3_rspdone ;252
+         .pword  qq3_rspdone ;253
+         .pword  qq3_rspdone ;254
+         .pword  qq3_rspdone ;255
+.end

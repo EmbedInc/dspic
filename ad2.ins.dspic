@@ -1,0 +1,776 @@
+;   ***************************************************************
+;   * Copyright (C) 2017, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   A/D handler.  See the comments in QQQ_AD.DSPIC for how to configure this
+;   module.
+;
+;   This is the second of two include files that make up the canned code for
+;   the standard A/D module.
+;
+//
+//   Verify user settings and supply defaults.
+//
+/if [<= ad_nusedch 0] then   ;no channels to scan ?
+  /show "  No used channels defined."
+         .error  "No channels"
+         .end
+  /stop
+  /endif
+
+/if [not [exist "adbits"]] then
+  /const adbits integer = 12 ;default A/D result bit width
+  /endif
+/if [not [or [= adbits 10] [= adbits 12]]] then
+  /show "  The A/D can not be configured for " adbits " output."
+         .error  "ADBITS"
+         .end
+  /stop
+  /endif
+
+/if [not [exist "adper"]] then
+  /const adper real = 10e-6
+  /endif
+
+/if [not [exist "adrefv"]] then
+  /show "  ADREFV not defined."
+         .error  "ADREFV"
+         .end
+  /stop
+  /endif
+
+/if [not [exist "advref"]] then
+  /const advref bool = false
+  /endif
+
+/if [not [exist "mintad"]] then
+  /show "  MINTAD not defined."
+         .error  "MINTAD"
+         .end
+  /stop
+  /endif
+
+/if [not [exist "adtimer"]] then
+  /const adtimer integer = 3
+  /endif
+/if [not [or [= adtimer 3] [= adtimer 5]]] then
+  /show "  The A/D can not be triggered by timer " adtimer "."
+         .error  "ADTIMER"
+         .end
+  /stop
+  /endif
+//
+//   Compute derived parameters.
+//
+//   This module uses two different channel numbering schemes.
+//
+//   The ANx channels referenced by the datasheet and the hardware are referred
+//   to as the "hardware" channel numbers.  The channels actually used as A/D
+//   inputs to convert can be any combination of these hardware channels.
+//
+//   The "logical" channel numbers are abstractions in this module only.  These
+//   are the in-use channels numbered 1-N sequentially.  If 5 hardware channels
+//   are in use, then logical channels 1-5 will exist, regardless of the actual
+//   hardware channel numbers.
+//
+//   For example, consider hardware channels 7, 29, and 13 are in use and were
+//   defined in that order.  The hardware and logical channel numbers are then:
+//
+//      hardware   logical
+//      --------   -------
+//             7         1
+//            29         2
+//            13         3
+//
+//   To minimize confusion, a consistant naming scheme for constants and
+//   variables relating to specific hardware and logical channels is used:
+//
+//       Channel              Channel number
+//          type   Constant         variable
+//      --------   --------   --------------
+//      Hardware    CHn_xxx               CH
+//       Logical   CHLn_xxx               LG
+//
+//   The N in the constant names are the channel numbers.
+//
+//   The following constants and variables have already been created:
+//
+//     ADBITS  -  Number of bits in the A/D conversion result.
+//
+//     ADPER  -  Desired A/D conversion period, seconds.
+//
+//     ADREFV  -  Positive A/D reference, Volts
+//
+//     ADVREF  -  Bool.  Vref input is used instead of AVdd.
+//
+//     MINTAD  -  Min allowed Tad, seconds.
+//
+//     ADTIMER  -  1-N number of timer to trigger the A/D conversions.
+//
+//     AD_NUSEDCH  -  Number of used A/D input channels.
+//
+//     CHLn_CH  -  Integer constants that indicate the hardware channel number
+//       for a specific logical channel.  N is the logical channel number.
+//
+//     CHn_PORT  -  Lower case name of the I/O port the input pin is in.
+//
+//     CHn_BIT  -  Bit with the I/O port the input pin is in.
+//
+//     CHn_NAME  -  Name of the global variable the final result will be written
+//       to.
+//
+//     CHn_UNITS  -  Volts of Vin change per final result increment.  For
+//       example, when this value is 0.001, then the final result will be in
+//       millivolts.
+//
+//     CHn_SIGNED  -  Final result is signed (-32768 to 32767), not unsigned
+//       (0 to 65535).
+//
+//     CHn_R1, CHn_R2, CHn_V2, CHn_R3, CHn_V3  -  Resistor divider configuration
+//       from Vin to the A/D input.  See QQQ_AD.DSPIC for details.
+//
+//     CHn_NFILT  -  Number of filter stages, may be 0.
+//
+//     CHn_FILTBITSx  -  Integer number of bits to shift right per filter stage.
+//
+//   The derived values are:
+//
+//     ADPERCY  -  A/D conversion period in instruction cycles
+//     ADFREQ  -  A/D conversion frequency, Hz
+//     CHANFREQ  -  Sampling frequency for each channel, Hz
+//
+//     NCHAN  -  Number of used A/D input channels.  This is just a copy of
+//       AD_NUSEDCH, but easier to use.
+//
+//     MAXV  -  Center of input voltage range for max A/D output.
+//     MAXFILT  -  Max possible filtered value.
+//
+//     ADPERCY  -  A/D period in instruction cycles.
+//     ADFREQ  -  A/D frequency, Hz.
+//     CHANFREQ  -  Conversion frequency for any one channel.
+//
+//     TADCY  -  Tad time in instruction cycles.
+//     TAD  -  Tad time in seconds.
+//     ADCS  -  Value for ADCS field in AC1CON3
+//
+//     NFILTW  -  Total number of 16 bit words for all the filters of all the
+//       channels.
+//
+//     CHn_NEXT  -  Next hardware channel number in use after the hardware
+//       channel N.  For the last used channel, this will be the first used
+//       channel
+//
+//     CHn_OFS  -  Amount to add directly to the filtered value.
+//
+//     CHn_MULT  -  Amount to multiply by the high 16 bits of the filtered and
+//       offset value.  The high 16 bits of the resulting 32 bit product is the
+//       final value in the user's desired units.
+//
+/var new ii integer          ;scratch integer
+/var new r real              ;scratch floating point
+/var new s string            ;scratch string
+/var new name string         ;scratch symbol name
+/var new ch integer          ;hardware channel number
+/var new lg integer          ;logical channel number
+/var new nfiltw integer = 0  ;16 bit words used by all filters
+/const   nchan   integer = ad_nusedch ;make easier constant for number of used channels
+
+/set ii [- [exp 2 adbits] 1] ;max raw A/D value
+/const   maxv    real = [* adrefv [/ [+ ii .5] [+ ii 1]]]
+/const   maxfilt integer = [shiftl ii [- 31 adbits]] ;filtered value for full scale
+//
+//   Compute the conversion timing setup.
+//
+/call timer_sec [v adper]    ;compute timer configuration for triggering A/D
+/const   adpercy integer = timer_percy ;A/D period in instruction cycles
+/const   adfreq  real = [/ 1 timer_per] ;actual A/D conversion frequency
+/const   chanfreq real = [/ adfreq nchan] ;sampling frequency for each channel
+//
+//   Compute the Tad setup.
+//
+/set r [* mintad 1.05]       ;add a little margin to the minimum allowed Tad
+/set ii [trunc [* r freq_inst]]
+/if [< [/ ii freq_inst] r] then
+  /set ii [+ ii 1]
+  /endif
+/const   tadcy   integer = ii ;instruction cycles per Tad
+/const   tad     real = [/ tadcy freq_inst] ;actual resulting Tad in seconds
+/const   adcs    integer = [- tadcy 1] ;AD1CON3 ADCS field value (length of Tad)
+/if [> adcs 255] then
+  /show "  Desired Tad is out of range"
+         .error  "MINTAD"
+         .end
+  /stop
+  /endif
+//
+//   Check the per-channel user configuration as appropriate, and create any
+//   defaults not set by the user.  This section also creates the CHn_NEXT.
+//   constants.
+//
+/loop with lg from 1 to nchan ;loop over all the logical channels
+  /set ch chl[v lg]_ch       ;get hardware channel number for this logical channel
+  /set ii [+ lg 1]           ;make raw next logical channel number
+  /if [> ii nchan] then      ;past the last used channel ?
+    /set ii 1                ;wrap back to first used channel
+    /endif
+  /const ch[v ch]_next integer = chl[v ii]_ch ;save next HW chan number
+
+  /set name [str "ch" ch "_units"] ;CHn_UNITS constant name
+  /if [not [exist name]] then
+    /const [chars name] real = 0.001 ;default to units of mV
+    /endif
+
+  /set name [str "ch" ch "_signed"] ;CHn_SIGNED constant name
+  /if [not [exist name]] then
+    /const [chars name] bool = false ;default to unsigned
+    /endif
+
+  /set name [str "ch" ch "_r1"] ;CHn_R1 constant name
+  /if [not [exist name]] then
+    /const [chars name] real = 0.0 ;default to directly connected to Vin
+    /endif
+
+  /set name [str "ch" ch "_r2"] ;CHn_R2 constant name
+  /if [not [exist name]] then
+    /const [chars name] real = 0.0 ;default to R2 not used
+    /endif
+
+  /set name [str "ch" ch "_v2"] ;CHn_V2 constant name
+  /if [not [exist name]] then
+    /const [chars name] real = 0.0 ;default R2 goes to ground
+    /endif
+
+  /set name [str "ch" ch "_r3"] ;CHn_R3 constant name
+  /if [not [exist name]] then
+    /const [chars name] real = 0.0 ;default to R3 not used
+    /endif
+
+  /set name [str "ch" ch "_v3"] ;CHn_V3 constant name
+  /if [not [exist name]] then
+    /const [chars name] real = adrefv ;default to R3 goes to the reference voltage
+    /endif
+
+  /set nfiltw [+ nfiltw [* ch[v ch]_nfilt 2]] ;update total number of filter words
+  /endloop                   ;back for next logical channel
+//
+//   Compute the offset and gain required to convert the filtered value of
+//   each channel to the final units.  The constants to compute are CHn_OFS
+//   and CHn_MULT.
+//
+//   The offset is a 32 bit constant that is added directly to the filtered
+//   value.  If the value is unsigned, then negative results are clipped to 0.
+//
+//   The high 16 bits of the offsetted result is multiplied by a 16 bit scale
+//   factor.  The final result is the high 16 bits of the 32 bit product,
+//   after rounding.
+//
+//   Signed and unsigned numbers are handled a little differently.
+//   The filtered values of each are the same, which always includes a sign
+//   bit.  However, since the sign bit of unsigned numbers is always 0, this
+//   bit carries no information.  The "high 16 bits" of the offset result for
+//   unsigned numbers is after the 32 bit filtered value is shifted left 1
+//   bit.  The scale factors for unsigned values are therefore half of those
+//   for signed values.  The multiply by the scale factor must be unsigned,
+//   while that for a signed value must be signed.  The runtime code per
+//   channel configures itself based on the CHn_SIGNED constant.
+//
+
+//******************
+//
+//   Subroutine ADV vin var
+//
+//   Compute the A/D input voltage resulting from VIN.  The variable VAR will be
+//   set to the result.
+//
+//   This routine assumes local state in the loop below.
+//
+/subroutine adv
+  /set [arg 2] [/ [+ [* [arg 1] r1r] [* ch[v ch]_v2 r2r] [* ch[v ch]_v3 r3r]] sumr]
+  /endsub
+//
+//******************
+
+/loop with lg from 1 to nchan ;loop over all the logical channels
+  /var local r1r real        ;reciprocal of R1
+  /var local r2r real        ;reciprocal of R2
+  /var local r3r real        ;reciprocal of R3
+  /var local sumr real       ;sum of resistance reciprocals
+  /var local v0 real         ;A/D input voltage resulting from Vin = 0
+  /var local gain real       ;gain from Vin to A/D voltage
+  /var local maxin real      ;Vin resulting in max A/D value
+
+  /set ch chl[v lg]_ch       ;get hardware channel number for this logical channel
+  //
+  //   Find the overall offset and gain from Vin to the A/D input voltage.
+  //
+  /set r2r 0.0               ;init to R2 and R3 do not exist (open)
+  /set r3r 0.0
+  /if [= ch[v ch]_r1 0.0]
+    /then                    ;direct connection to input, no scaling or offset
+      /set r1r 1             ;arbitrary value that doesn't cause arithmetic problems
+    /else                    ;R1 is non-zero, R2 and R3 contributions may exist
+      /set r1r [/ 1 ch[v ch]_r1] ;set reciprocal of R1
+      /if [<> ch[v ch]_r2 0.0] then ;R2 connection exists ?
+        /set r2r [/ 1 ch[v ch]_r2] ;make relative contribution thru R2
+        /endif
+      /if [<> ch[v ch]_r3 0.0] then ;R3 connection exists ?
+        /set r3r [/ 1 ch[v ch]_r3] ;make relative contribution thru R3
+        /endif
+    /endif
+  /set sumr [+ r1r r2r r3r]  ;make sum of all resistance reciprocals
+
+  /call adv 0 v0             ;make A/D voltage with Vin = 0
+  /call adv 1 r              ;make A/D voltage with Vin = 1
+  /set gain [- r v0]         ;gain from Vin to A/D voltage
+  //
+  //   Create CHn_OFS.
+  //
+  /set r [* maxfilt [/ v0 maxv]] ;filtered value from Vin = 0
+  /set r [- 0 r]             ;amount to add for Vin 0 to result in 0
+  /const ch[v ch]_ofs integer = [rnd r] ;add to filtered value to make 0
+  //
+  //   Create CHn_MULT.
+  //
+  /set maxin [/ [- maxv v0] gain] ;Vin for max A/D reading
+  /set ii [+ maxfilt ch[v ch]_ofs] ;filtered value after offset from MAXV in
+  /if ch[v ch]_signed
+    /then                    ;offset result could be negative
+      /set ii [rnd [/ ii 65536]] ;make signed 16 bit filtered result
+    /else                    ;offset is always positive
+      /set ii [rnd [/ ii 32768]] ;make unsigned 16 bit filtered result
+    /endif
+  /set r [/ maxin ii]        ;mult factor to make Volts
+  /set r [/ r ch[v ch]_units] ;add scale for final output units
+  /set r [* r 65536]         ;scale for result in high 16 bit of 32
+  /const ch[v ch]_mult integer = [rnd r] ;16 bit mult factor to apply at run time
+  /endloop                   ;back to do next logical channel
+
+//   Show some of the configuration.
+//
+/set s ""
+/set s [str s "A/D rate " [eng adfreq] "Hz"]
+/set s [str s ", period " [eng [/ 1 adfreq]] "s"]
+/set s [str s " = " adpercy " cycles"]
+/set s [str s ", Tad " tadcy " cycles = " [eng tad] "s"]
+/show "  " s
+/set s ""
+/set s [str s "Scanning " nchan " channels, per channel "]
+/set s [str s [eng chanfreq] "Hz"]
+/set s [str s ", " [eng [/ 1 chanfreq]] "s"]
+/show "  " s
+
+/loop with lg from 1 to nchan ;once for each logical channel
+  /set ch chl[v lg]_ch       ;get hardware channel number
+  /call get_port_data [chars Portdata_[chars ch[v ch]_port][v ch[v ch]_bit]]
+  /set s ""
+  /set s [str s "AN" ch]
+  /set s [str s " (R" [ucase ch[v ch]_port] ch[v ch]_bit ")"]
+  /set s [str s " """ iobit_name """"]
+  /set s [str s " --> " ch[v ch]_name]
+  /if [> ch[v ch]_nfilt 0] then
+    /set s [str s ", filter "]
+    /loop with f from 1 to ch[v ch]_nfilt ;once for each filter
+      /if [<> f 1] then
+        /set s [str s ","]
+        /endif
+      /set s [str s ch[v ch]_filtbits[v f]]
+      /endloop
+    /set s [str s " bits"]
+    /endif
+  /show "    " s
+  /endloop
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_ad, bss
+         ;
+         ;   The final filtered and scaled values for each channel.  These are
+         ;   updated automatically by the interrupt routine.  The foreground
+         ;   code can read these at any time to get the lastest measured value.
+         ;
+/loop with lg from 1 to nchan ;loop over all the logical channels
+  /set ch chl[v lg]_ch       ;get hardware channel number for this logical channel
+allocg   [chars ch[v ch]_name]
+  /endloop
+
+;*******************
+;
+;   Local state.
+;
+/if [> nchan 1] then
+alloc    chvect, 4           ;jump address for handling the next A/D result
+  /endif
+alloc    reading, 4          ;current A/D reading, in same format as filters
+
+/if [> nfiltw 0] then
+         ;
+         ;   Low pass filters for each analog signal.  There can be different
+         ;   numbers of poles for each channel.  Each pole is a 32 bit signed
+         ;   value.  The raw A/D reading is left justified into bit 30.
+         ;   This maximizes the value within the word, but leaves the sign bit
+         ;   0.  The state for each pole is named ANchanFn, where CHAN is the
+         ;   analog input channel number and N is the 1-N filter number within
+         ;   that channel.
+         ;
+alloc    filtstart, 0        ;filters starting address
+  /loop with lg from 1 to nchan ;loop over all the logical channels
+    /set ch chl[v lg]_ch     ;get hardware channel number for this logical channel
+    /loop with f from 1 to ch[v ch]_nfilt ;once for each filter for this channel
+alloc    an[v ch]f[v f], 4
+      /endloop               ;back for next filter this channel
+    /endloop                 ;back for next channel
+  /endif                     ;end of at least one filter exists
+
+
+.section .code_ad, code
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro NEXTCHAN ch
+//
+//   Select the indicated hardware analog input channel and start sampling.
+//
+//   If this module is configured to sample multiple inputs, then the dispatch
+//   vector CHVECT is set pointing to the code to handle the conversion for the
+//   newly selected channel.
+//
+//   WARNING: W2 is trashed.
+//
+/macro nextchan
+  /var local ch integer = [arg 1]
+
+  /if [> ch 63] then
+    /show "  Bad parameter " ch " to NEXTCHAN macro, must be 63 or less"
+         .error  "NEXTCHAN"
+         .end
+    /stop
+    /endif
+
+         mov     #[v ch], w2 ;select new channel
+         mov     w2, Ad1chs0
+         bset    Ad1con1, #Samp ;start sampling
+
+  /if [> nchan 0] then       ;scanning multiple channels ?
+         mov     #tbloffset([chars "dochan" ch]), w2 ;update dispatch vector
+         mov     w2, chvect+0
+         mov     #tblpage([chars "dochan" ch]), w2
+         and     #0xFF, w2   ;mask in only the valid bits
+         mov     w2, chvect+2
+    /endif
+  /endmac
+
+;*******************************************************************************
+;
+;   Subroutine AD_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  ad_init, regf0 | regf1 | regf2
+;
+;   Init global state.
+;
+         ;
+         ;   Initialize the final result for each channel.
+         ;
+         mov     #0, w0
+/loop with lg from 1 to nchan ;loop over all the logical channels
+  /set ch chl[v lg]_ch       ;get hardware channel number for this logical channel
+         mov     w0, [chars ch[v ch]_name]
+  /endloop
+//
+//
+//
+/if [> nfiltw 0] then
+;
+;   Init the filters.
+;
+         mov     #0, w0      ;value to set each filter word to
+         mov     #filtstart, w1 ;init address of next word to set
+         mov     #[v nfiltw], w2 ;init number of filter words left to do
+ini_fword:
+         mov     w0, [w1++]  ;init this filter word
+         sub     #1, w2      ;count one less filter word left to do
+         bra     nz, ini_fword ;back to init next filter word
+  /endif                     ;end of at least one filter exists
+;
+;   Configure the A/D converter.
+;
+         clr     T[v adtimer]con ;make sure the timer can't trigger the A/D
+
+.set     ii,     #0b0000000000000000 ;set fixed fields
+                 ;  0--------------- keep the A/D off for now
+                 ;  -X-------------- unused
+                 ;  --0------------- continue in idle mode
+                 ;  ---X------------ DMA buffer mode
+                 ;  ----X----------- unused
+                 ;  ------00-------- right justified integer output format
+                 ;  ------------0--- unused in 12 bit mode
+                 ;  -------------0-- sampling starts when SAMP bit is explicitly set
+                 ;  --------------0- don't start sampling now
+                 ;  ---------------X read-only, conversion has completed
+/if [= adbits 10] then
+.set     ii,     #0b0000000000000000 | ii
+                 ;  -----0---------- 10 bit operation
+  /endif
+/if [= adbits 12] then
+.set     ii,     #0b0000010000000000 | ii
+                 ;  -----1---------- 12 bit operation
+  /endif
+/if [= adtimer 3] then
+.set     ii,     #0b0000000001000000 | ii
+                 ;  --------0100---- timer 3 compare triggers start of conversion
+  /endif
+/if [= adtimer 5] then
+.set     ii,     #0b0000000010000000 | ii
+                 ;  --------1000---- timer 5 compare triggers start of conversion
+  /endif
+         mov     #ii, w0
+         mov     w0, Ad1con1
+
+.set     ii,     #0b0000000000000000 ;set fixed fields
+                 ;  ---XX----------- unused
+                 ;  -----0---------- do not auto-scan inputs
+                 ;  ------00-------- convert internal channel 0
+                 ;  --------X------- read-only status bit
+                 ;  ---------00000-- interrupt after every conversion
+                 ;  --------------0- start filling result buffer at first word
+                 ;  ---------------0 always use MUX A configuration
+/if advref
+  /then
+.set     ii,     #0b0010000000000000 | ii
+                 ;  001------------- references are AVss and external Vref
+  /else
+.set     ii,     #0b0000000000000000 | ii
+                 ;  000------------- references are AVss and AVdd
+  /endif
+         mov     #ii, w0
+         mov     w0, Ad1con2
+
+         mov     #0b0000000000000000 | [v adcs], w0
+                 ;  0--------------- use system clock, not internal clock
+                 ;  -XX------------- unused
+                 ;  ---XXXXX-------- auto-sample time, we trigger explicitly
+                 ;  --------XXXXXXXX conversion clock divider, from ADCS above
+         mov     w0, Ad1con3
+
+         mov     #0b0000000000000000, w0
+                 ;  XXXXXXX--------- unused
+                 ;  -------0-------- do not use DMA
+                 ;  --------XXXXX--- unused
+                 ;  -------------XXX used only in DMA mode
+         mov     w0, Ad1con4
+
+         clr     Ad1cssl     ;no channels configured for scanning
+         clr     Ad1cssh
+
+         bset    Ad1con1, #Adon ;turn on the A/D
+
+         nextchan [v chl1_ch] ;set to first chan, start sampling, set dispatch vector
+
+         intr_priority Ipc3, 4, ipr_ad ;set interrupt priority
+         bclr    Ifs0, #Ad1if ;clear any previous interrupt condition
+         bset    Iec0, #Ad1ie ;enable the A/D conversion done interrupt
+;
+;   Set up the timer to periodically trigger the A/D.
+;
+         mov     #0b0000000000000000 | [v timer_tckps], w0
+                 ;  0--------------- leave timer off for now
+                 ;  -X-------------- unused
+                 ;  --0------------- continue in idle mode
+                 ;  ---XXXXXX------- unused
+                 ;  ---------X------ unused when instruction clock is source
+                 ;  ----------XX---- prescaler selection, from TIMER_TCKPS above
+                 ;  ------------XX-- unused
+                 ;  --------------0- clock source is internal clock
+                 ;  ---------------X unused
+         mov     w0, T[v adtimer]con
+
+         mov     #[- timer_cnt 1], w0 ;set timer period
+         mov     w0, Pr[v adtimer]
+         clr     Tmr[v adtimer] ;init to start of whole period
+         bset    T[v adtimer]con, #Ton ;start the timer running
+
+         leaverest
+
+;*******************************************************************************
+;
+;   A/D conversion done interrupt.
+;
+;   This interrupt is taken after each individual reading.  The reading is in
+;   ADC1BUF0.  The reading is grabbed, the A/D set up to sample the next
+;   channel, then the result of this conversion is processed.
+;
+         glbent  __AD1Interrupt
+         bclr    Ifs0, #Ad1if ;clear the interrupt condition
+         push.s              ;save W0-W3 in shadow registers
+;
+;   Get this reading into W1:W0 in the format of the filters and also save it in
+;   READING.
+;
+         mov     Adc1buf0, w1
+/if [= nchan 1] then         ;always reading the same channel ?
+         bset    Ad1con1, #Samp ;start sampling again
+  /endif
+         sl      w1, #[- 15 adbits], w1
+         bclr    w1, #15     ;make sure sign bit is cleared
+         mov     #0, w0
+         mov     w0, reading+0 ;save the normalized reading in READING
+         mov     w1, reading+2
+//
+//
+/if [> nchan 1] then
+;
+;   Dispatch to the routine to handle this reading.  The local variable CHVECT
+;   contains the address to jump to.  The normalized A/D reading in W1:W0 is
+;   preserved.
+;
+         mov     chvect+0, w2 ;get low word of jump address
+         push    w2          ;write it to the stack
+         mov     chvect+2, w2 ;get word containing high bits of jump address
+         push    w2          ;push the address high word onto the stack
+         return              ;jump to the address and pop it off the stack
+  /endif
+
+;***************************************
+;
+;   Process this reading.  The new reading is in W1:W0 in the same format as the
+;   filters, and has also been saved in READING.  W2 and W3 are available for
+;   scratch.
+;
+;   Execution must end up at DONE_CHAN when done processing the reading.
+;
+
+//
+//  Create the code to process the readings for each of the channels.
+//
+/loop with lg from 1 to nchan ;once for each channel
+  /set ch chl[v lg]_ch       ;get hardware channel number for this logical channel
+  /write ";"
+  /write ";   Process the reading from channel " ch " into " [ucase ch[v ch]_name] "."
+  /write ";"
+  /if [> nchan 1] then
+dochan[v ch]:
+    /endif
+  //
+  //   Switch the A/D to the next channel and update the dispatch vector to tne
+  //   routine for that channel.
+  //
+  /if [> nchan 1] then       ;scanning multiple channels ?
+         ;
+         ;   Set up for the next reading.
+         ;
+         nextchan [v ch[v ch]_next] ;set up for reading the next channel
+    /endif
+  //
+  //   Apply the filters, if any.
+  //
+  /loop with f from 1 to ch[v ch]_nfilt ;once for each filter stage
+    /var local ffbits integer = ch[v ch]_filtbits[v f]
+    /write "         ;"
+    /write "         ;   Apply filter " f ", shift = " ffbits " bits."
+    /write "         ;"
+    /if [= f 1] then         ;right before doing first filter stage ?
+         mov     #an[v ch]f[v f], w2 ;point W2 to the filter to update
+      /write
+      /endif
+         sub     w0, [w2++], w0 ;NEW - FILT --> W1:W0
+         subb    w1, [w2--], w1
+
+         lsr     w0, #[v ffbits], w0 ;shift the result in W1:W0 right
+         sl      w1, #[- 16 ffbits], w3
+         ior     w0, w3, w0
+         asr     w1, #[v ffbits], w1
+
+         add     w0, [w2++], w0 ;add FILT to make final result in W1:W0
+         addc    w1, [w2--], w1
+
+         mov     w0, [w2++]  ;write result to the filter state, advance pointer
+         mov     w1, [w2++]
+    /endloop
+  //
+  //   Apply the offset if it is non-zero.  Unsigned values are clipped at 0 if
+  //   they go negative.
+  //
+  /set ii ch[v ch]_ofs       ;get the offset into more handy form
+  /if [<> ii 0] then         ;there is a offset to add ?
+    /write "         ;"
+    /write "         ;   Add the fixed offset."
+    /write "         ;"
+         mov     #0x[chars [int [and ii 16#FFFF] "fw 4 lz base 16 usin"]], w2 ;add offset low word
+         add     w0, w2, w0
+         mov     #0x[chars [int [shiftr ii 16] "fw 4 lz base 16 usin"]], w2 ;add offset high word
+         addc    w1, w2, w1
+    /if [and [not ch[v ch]_signed] [< ii 0]] then ;unsigned could have gone negative ?
+         bra     nn, [lab nn] ;result didn't go negative ?
+         mov     #0, w0      ;did go negative, clip at 0
+         mov     #0, w1
+[lab nn]:
+      /endif                 ;done dealing with unsigned possibly going negative
+    /endif                   ;done adding fixed offset
+  //
+  //   Apply the scale factor.  The high 16 bits of the filtered result are
+  //   multiplied by CHn_MULT to make a 32 bit result in W1:W0.  The multiply
+  //   factor has been scaled so that the high word of that result is the final
+  //   value.  Rounding will be applied.
+  //
+  //   For signed values, the high word of the filtered result are the highest
+  //   16 bits.  For unsigned values, the sign bit of the filtered result is not
+  //   used.  Unsigned values are therefore shifted left 1 bit before the
+  //   multiply, to maximize the number of meaningful bits.  The multiply factor
+  //   has already been scaled accordingly.
+  //
+         ;
+         ;   Apply the scale factor.
+         ;
+  /if [not ch[v ch]_signed] then ;unsigned ?
+         rlc     w0, w0      ;maximize input value into high 16 bits
+         rlc     w1, w1
+    /write
+    /endif
+
+         mov     #[v ch[v ch]_mult], w0 ;get the mult factor
+  /if ch[v ch]_signed
+    /then                    ;value could be negative, use signed arithmetic
+         mul.su  w1, w0, w0  ;scale value, result in high word
+    /else                    ;value is always positive, use unsigned arithmetic
+         mul.uu  w1, w0, w0  ;scale value, result in high word
+    /endif
+         rlc     w0, w0      ;get next bit into C
+         addc    #0, w1      ;round up if next lower bit is 1
+  //
+  //   Save the result.
+  //
+  /write
+         mov     w1, [chars ch[v ch]_name] ;save the final result
+
+  /if [<> lg nchan] then     ;not last channel ?
+    /write
+         jump    done_chan   ;all done processing value for this channel
+    /endif
+  /endloop
+
+;***************************************
+;
+;   Common code after done with the channel-specific processing.
+;
+done_chan:
+         pop.s               ;restore W0-W3 from shadow registers
+         disi    #2
+         retfie              ;return from the interrupt

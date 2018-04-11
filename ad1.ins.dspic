@@ -1,0 +1,157 @@
+;   ***************************************************************
+;   * Copyright (C) 2017, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   A/D handler.  See the comments in QQQ_AD.DSPIC for how to configure this
+;   module.
+;
+;   This is the first of two include files that make up the canned code for
+;   the standard A/D module.
+;
+;   This file should be included before the configuration constants are
+;   defined in the main module.  It contains preprocessor routines for helping
+;   set the A/D configuration.
+;
+/var new ad_nusedch integer = 0 ;init number of A/D input channels in use
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine CONFIGURE_CHANNEL_INIT
+//
+//   Initialize the preprocessor state in preperation for configuring the next
+//   A/D input channel.
+//
+/subroutine configure_channel_init
+  /var exist ad_pname string
+  /var exist ad_vname string
+  /var exist ad_units real
+  /var exist ad_signed bool
+  /var exist ad_r1 real
+  /var exist ad_r2 real
+  /var exist ad_v2 real
+  /var exist ad_r3 real
+  /var exist ad_v3 real
+
+  /set ad_pname ""
+  /set ad_vname ""
+  /set ad_units 0.001
+  /set ad_signed false
+  /set ad_r1 0.0
+  /set ad_r2 0.0
+  /set ad_v2 0.0
+  /set ad_r3 0.0
+  /set ad_v3 adrefv
+//
+//   Delete any existing AD_FILTBITSx constants or variables.
+//
+  /loop symbols sym vcon     ;scan all constants and variables
+    /var local sy string     ;bare symbol name
+    /var local tk string     ;scratch token
+
+    /set sy [sym sym name]   ;get bare symbol name into SY
+    /if [< [slen sy] 12] then ;not long enough ?
+      /repeat
+      /endif
+    /set tk [substr 1 11 sy]
+    /if [<> tk "ad_filtbits"] then ;not the right name ?
+      /repeat
+      /endif
+    /loop                    ;delete all versions of this symbol
+      /del [chars sy]
+      /if [not [exist sy]] then
+        /quit
+        /endif
+      /endloop               ;back to delete next version
+    /endloop                 ;back to check next variable or constant name
+  /endsub
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine CONFIGURE_CHANNEL
+//
+//   Create the configuration for one more A/D input channel from the AD_xxx
+//   variables and constants set by the user code.
+//
+/subroutine configure_channel
+  /var local lg integer      ;logical 1-N channel number
+  /var local ch integer      ;hardware ANx analog input channel number
+  /var local port string     ;lower case I/O port name letter
+  /var local bit integer     ;bit number within I/O port
+  /var local tk string       ;scratch token or string
+  /var local ii integer      ;scratch integer
+
+  /if [= ad_pname ""] then
+    /show "  AD_PNAME not defined on attempt to configure A/D channel"
+         .end
+    /stop
+    /endif
+  /if [= ad_vname ""] then   ;default variable name to input pin name ?
+    /set ad_vname ad_pname
+    /endif
+//
+//   Check the pin configuration and set CH to the analog ANx channel number.
+//
+  /set tk [str "Inbit_" ad_pname "_port"]
+  /if [not [exist tk]] then
+    /show "  There is no input pin named " [ucase ad_pname]
+         .end
+    /stop
+    /endif
+  /set port [lcase [chars tk]]
+  /set tk [str "Inbit_" ad_pname "_bit"]
+  /set bit [chars tk]
+  /call get_port_data [chars Portdata_[chars port][v bit]]
+  /if [not iobit_ana] then
+    /show "  Pin " [ucase ad_pname] " (R" [ucase port] bit ") is not defined as analog."
+         .end
+    /stop
+    /endif
+  /set ch iobit_chan         ;save ANx hardware channel number
+//
+//   Update the logical channel state.
+//
+  /set ad_nusedch [+ ad_nusedch 1] ;count one more A/D input in use
+  /set lg ad_nusedch         ;set logical channel number
+  /const chl[v lg]_ch integer = ch ;hardware channel for this logical channel
+//
+//   Create constants for this hardware channel number.
+//
+  /const ch[v ch]_port string = port
+  /const ch[v ch]_bit integer = bit
+  /const ch[v ch]_name string = ad_vname
+  /const ch[v ch]_units real = ad_units
+  /const ch[v ch]_signed bool = ad_signed
+  /const ch[v ch]_r1 real = ad_r1
+  /const ch[v ch]_r2 real = ad_r2
+  /const ch[v ch]_v2 real = ad_v2
+  /const ch[v ch]_r3 real = ad_r3
+  /const ch[v ch]_v3 real = ad_v3
+
+  /set ii 0                  ;init number of filter stages
+  /loop with f from 1
+    /if [not [exist [str "ad_filtbits" f]]] then ;no more filter stages ?
+      /quit
+      /endif
+    /if [<= ad_filtbits[v f] 0] then ;this filter stage explicitly disabled ?
+      /quit
+      /endif
+    /set ii [+ ii 1]         ;count one more filter stage
+    /const ch[v ch]_filtbits[v f] integer = ad_filtbits[v f] ;save data for this stage
+    /endloop
+  /const ch[v ch]_nfilt integer = ii ;save number of filter stages
+  /call configure_channel_init ;reset live state for defining next A/D input
+  /endsub
+
+/call configure_channel_init ;set up for configuring the first channel

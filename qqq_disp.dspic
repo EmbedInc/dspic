@@ -1,0 +1,120 @@
+;   ***************************************************************
+;   * Copyright (C) 2005, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Display manager.  The rest of the system accesses the display and button via
+;   the interface presented by this module.
+;
+;   The application-level routines are listed briefly here.  See their comment
+;   headers in DISP.INS.DSPIC for details.  These application-callable routines
+;   are:
+;
+;     DISP_INIT  -  Module initialization.  This must be first call.
+;
+;     DISP_START  -  Initializes the display and starts the display task.  This
+;       is necessary for the display system to function.
+;
+;     DISP_BACKLIGHT  -  W0 = 0 backlight off, else on.
+;
+;     DISP_CONT  -  Returns current display contrast setting in W0.
+;
+;     DISP_CONTUP  -  Increments display contrast setting, returns result.
+;
+;     DISP_CONTDOWN  -  Decrements display contrast setting, returns result.
+;
+;     DISP_CONT_OFF  -  Lowest possible contrast, doesn't change setting.
+;
+;     DISP_CONT_ON  -  Restore contrast to current setting, undoes DISP_CONT_OFF
+;
+;     DISP_SAVE  -  Save peristent settings in non-volatile memory.
+;
+;     DISP_CLEAR  -  Clear display, reset character position to top left.
+;
+;     DISP_CLEARTO  -  Clear to right to column in W0.  Left at W0+1.
+;
+;     DISP_POS  -  Set character position to column W0 and line W1.  Top left is
+;       0,0.
+;
+;     DISP_CHAR  -  Write character in low byte of W0.
+;
+;     DISP_CRLF  -  Send carriage return and line feed.  Goes to start of next
+;       line down.
+;
+;     DISP_DIGIT  -  Write digit for 0-35 value in W0.
+;
+;     DISP_INT  -  Write 16 bit integer in W0, formatting rules in W1.
+;
+;     DISP_INT16U  -  Write W0 as unsigned decimal, field width in W1.
+;
+;     DISP_INT16S  -  Write W0 as signed decimal, field width in W1.
+;
+;     DISP_INT16H  -  Write W0 as unsigned hexadecimal, field width in W1.
+;
+;     DISP_INT32H  -  Write W1:W0 as unsigned hexadecimal, field width in W2.
+;
+;     DISP_INT16O  -  Write W0 as unsigned octal, field width in W1.
+;
+;     DISP_INT16B  -  Write W0 as unsigned binary, field width in W1.
+;
+;     DISP_INT32FX  -  Write 32 bit fixed point value in decimal.
+;       W1:W0  -  Fixed point value.
+;       W2     -  Minimum 0-31 field width, 0 for free form.
+;       W3     -  Fraction digits right of decimal point.  Flag bits:
+;                    8 - Number is signed.
+;                    9 - Write decimal point even if no digits to right.
+;                   10 - Don't write zero if only digit left of point.
+;                   11 - Fill field with leading zeros, not blanks.
+;
+;     DISP_ISTRING  -  Write string from immediately after call in program
+;       memory.  Use ISTRING macro.
+;
+;     EVENTS_CLEAR  -  Clear all pending events.
+;
+;
+;   Subroutines intended for calling by C.
+;
+;     void disp_string (               //write string to display
+;       const char *);                 //null-terminated string to write
+;
+;     machine_intu_t                   //EVENT_xxx_K event ID
+;     event_wait (                     //wait for next event or timeout
+;       machine_intu_t);               //max time to wait, units of EVWAITMS_K ms
+;
+;     machine_intu_t                   //EVENT_xxx_K event ID
+;     event_check_lr (                 //check for special left/right buttons hold event
+;       machine_intu_t);               //last event received
+;
+;
+;   Configuration settings
+;
+;     RESET_LINE, string
+;
+;       Name of the /OUTBIT line that resets the display processor.  Asserting
+;       the line causes the display processor to be held in reset.
+;
+;       If this constant does not exist or is the empty string, then no hardware
+;       line is used to reset the display processor.  The display processor is
+;       assumed to be running and ready to communicate over the serial port when
+;       DISP_START is called.  The display processor will be initialized using
+;       only communication over the serial port.  This is slightly less reliable
+;       than using a hardware line.
+;
+/include "qq2.ins.dspic"
+
+/const   reset_line = ""     ;name of OUTBIT line to reset display processor
+
+/include "(cog)src/dspic/disp.ins.dspic"
+
+.end

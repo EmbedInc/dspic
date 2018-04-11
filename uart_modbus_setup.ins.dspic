@@ -1,0 +1,18 @@
+;   Define global symbols and possibly additional build-time setup required by
+;   the UART_MODBUS subsystem.  This file is intended to be included from the
+;   main include file of a project with a UART module using the UART_MODBUS
+;   include file.
+;
+
+;   Bits within the word returned by UART_GET.  The low 8 bits is the data byte,
+;   and the upper 8 bits are flags.  All flags are 0 when a data byte is
+;   received normally without any exception or unusual conditions.  The flag
+;   bits are:
+;
+/const   umodbus_rx_err integer = 15 ;hard error (overrun, framing, etc) before char
+/const   umodbus_rx_perr integer = 14 ;parity error, data returned as received
+/const   umodbus_rx_pack integer = 13 ;start of packet break, no character returned
+
+.equiv   umodbus_rx_err, [v umodbus_rx_err]
+.equiv   umodbus_rx_perr, [v umodbus_rx_perr]
+.equiv   umodbus_rx_pack, [v umodbus_rx_pack]

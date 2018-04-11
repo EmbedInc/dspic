@@ -1,0 +1,81 @@
+;   ***************************************************************
+;   * Copyright (C) 2016, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Procedural interface to the SPI bus.  The following routines are exported:
+;
+;     SPI_INIT  -  Intended to be called during module initialization, before
+;       system initialization.
+;
+;     SPI_LOCK  -  Acquire exclusive lock on the SPI bus.  Callers may only
+;       perform SPI bus operations or assert any slave select lines when they
+;       are holding the lock on the bus.
+;
+;     SPI_UNLOCK  -  Release the exclusive lock on the SPI bus.  Other tasks may
+;       now acquire the lock.  All slave selects must be de-asserted before
+;       calling this routine.
+;
+;     SPI_BYTE  -  Transfers the byte in the low 8 bits of W0 onto the SPI bus.
+;       The received byte is returned in W0.
+;
+;     SPI_WRITE  -  Writes the byte in the low 8 bits of W0 onto the SPI bus.
+;       The received byte is discarded.
+;
+;     SPI_READ  -  Writes a 0 byte to the SPI bus.  The received byte is
+;       returned in W0.
+;
+;   Note that the actual routine names may have additional characters in them,
+;   as set by the NAME constant, below.  For example, if NAME is set to "xyz"
+;   then "spi_init" is actually "spi_xyz_init".  By default, NAME is set to the
+;   empty string, which results in the names shown above.
+;
+;   The actual code is in a library include file.  This module mostly sets
+;   preprocessor constants to modify how the library code is configured.  The
+;   configuration constants are:
+;
+;     NAME, string
+;
+;       Unique name for the exported symbols.  May be the empty string.  This
+;       string is immediately appended to "SPI" in each exported symbol name.
+;       For example, the routine SPI_BYTE will be called SPI_XYZ_BYTE when NAME
+;       is set to "xyz".  This mechanism is intended for supporting multiple SPI
+;       busses in a system.  This would generally be the empty string when only
+;       one SPI is used.  Default is the empty string.
+;
+;     UN, integer
+;
+;       The hardware number of the SPI to control in this module.  Usually the
+;       first SPI is called SPI1, the second SPI2, etc.  This value is the 1
+;       or 2 in these names.  Default is 1.
+;
+;     MAXFREQ, real
+;
+;       The maximum allowed clock rate, in Hz.  Clock dividers will be selected
+;       to get as close as possible to this frequency without exceeding it.  The
+;       constant SPIFREQ will be set to the actual resulting frequency.  The
+;       default is 1 MHz.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   name    string = "" ;unique name for exported symbols, may be empty
+/const   un      integer = 1 ;1-N number of the peripheral handled by this module
+/const   maxfreq real = 10e6 ;desired maximum SPI bus clock rate
+
+/include "(cog)src/dspic/spi.ins.dspic"
+         .end

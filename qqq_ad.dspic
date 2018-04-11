@@ -1,0 +1,232 @@
+;   ***************************************************************
+;   * Copyright (C) 2017, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part, and regardless of whether other information is  *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   A/D driver.  The A/D is run continually to sequence thru all the analog
+;   input channels.  For each channel, the raw A/D reading can be passed thru
+;   low pass filters, a offset optionally added, then the high 16 bits of the
+;   result multiplied by a scale factor to yield the final value in user units.
+;
+;   Global configuration constants:
+;
+;     ADBITS
+;
+;       Number of bits in a A/D result word.  This must be one of the choices
+;       available from the native hardware.  The default is the highest
+;       available value, which is usually 12.
+;
+;     ADPER
+;
+;       The A/D conversion period in seconds.  The next channel is converted
+;       every this many seconds.  The default is 10 us.
+;
+;     ADREFV
+;
+;       The A/D positive reference voltage.  This is AVdd when no explicit
+;       reference is used, or the explicit reference voltage.  This value is
+;       required.  There is no default.
+;
+;     ADVREF
+;
+;       Bool constant that indicates a external reference voltage is used for
+;       the high end of the A/D range.  The reference voltage must be supplied
+;       to the VREF+ pin when ADVREF is set to TRUE.  When FALSE, it is assumed
+;       that AVdd is the positive reference voltage.  The default is FALSE.
+;
+;     MINTAD
+;
+;       The minimum allowed A/D clock tick time (Tad) in seconds.  This value
+;       is found in the A/D section of the electrical specifications in the
+;       datasheet.  This value is required.  There is no default.
+;
+;     ADTIMER
+;
+;       The number of the system timer to use to trigger the periodic A/D
+;       conversions.  Usually only certain timers can trigger the A/D.  Check
+;       the datasheet.  The default is 3 (timer 3 will be used).
+;
+;   In addition to the global A/D configuration, configuration is also required
+;   per A/D channel.  Each channel is configured by setting pre-defined
+;   variables to specific values, then calling the preprocessor subroutine
+;   CONFIGURE_CHANNEL.  This also resets the configuration variables to default
+;   or benign values in preperation for configuring the next channel.
+;
+;   The variables used by CONFIGURE_CHANNEL are:
+;
+;     AD_PNAME
+;
+;       The name of the analog input pin as defined by the /INANA command for
+;       that pin.  It is a error if this name does not match the name supplied
+;       to a /INANA command.
+;
+;     AD_VNAME
+;
+;       The name of the global variable for the final result from this channel.
+;       This variable will be a 16 bit integer.  Its units and whether it is
+;       signed or not depend on other configuration values.  The default is the
+;       analog input pin name (AD_PNAME value).
+;
+;     AD_UNITS
+;
+;       Units of the final converted result, expressed in Volts.  For example,
+;       if the final result is to be in millivolts, then this value must be
+;       0.001.  The default is 0.001 (final value will be in millivolts).
+;
+;     AD_SIGNED
+;
+;       Bool value indicating that the final result will be signed, not
+;       unsigned.  Signed results have the range -32768 to +32767, whereas the
+;       unsigned range is 0 to 65535.  The default is FALSE (unsigned).
+;
+;     AD_R1
+;     AD_R2
+;     AD_V2
+;     AD_R3
+;     AD_V3
+;
+;       These values define the scaling and offseting of the analog signal fed
+;       into the A/D input.  The electrical interface is generalized to:
+;
+;                                   V3
+;                                   |
+;                                   \
+;                                   / R3
+;                                   \
+;                                   /
+;                             R1    |
+;                      Vin --/\/\---*-------> A/D input
+;                                   |
+;                                   \
+;                                   / R2
+;                                   \
+;                                   /
+;                                   |
+;                                   V2
+;
+;       The R values are in units of Ohms, and the V values in Volts.  The
+;       default is that R1 is 0, and R2 and R3 infinite.  In other words, the
+;       default is that the measured voltage (Vin) is directly driving the
+;       A/D input.  V2 defaults to 0 (ground), and V3 to ADREFV.  Note that
+;       when R2 and R3 are infinite, the values of V2 and V3 are irrelevant.
+;
+;       Values for R2 and R3 of 0 indicate the resistor is not there (is
+;       infinite).
+;
+;     AD_FILTBITSx
+;
+;       A series of single-pole low pass filters are applied to the raw A/D
+;       values for each channel.  There can be a arbitrary number of such
+;       filter poles per channel, including none.  These constants define the
+;       number of poles per channel, and their characteristics.
+;
+;       Unlike the other AD_xxx configuration parameters, these are not
+;       variables that are previously created.  These are integer constants that
+;       must be created as needed.  The existance of one of these constants
+;       indicates the existance of the corresponding filter pole.  The
+;       CONFIGURE_CHANNEL subroutine deletes all these constants in preperation
+;       for configuring the next analog input channel.
+;
+;       The X in AD_FILTBITSx is the 1-N sequential number of the filter pole.
+;       One filter pole is implemented for each sequential constant that exists
+;       and is non-zero.  Negative values are not allowed.  The first constant
+;       in the 1-N sequence that does not exists or is set to 0 indicates the
+;       end of the cascaded filters.  The default is therefore to apply no
+;       filtering to the A/D signal for this channel.
+;
+;       The algorithm for each filter pole is:
+;
+;         FILT <-- FILT + FF(NEW - FILT)
+;
+;       where FILT is the persistent filter state, NEW is the new input value
+;       the filter is being updated with, and FF is the "filter fraction".  FF
+;       controls the heaviness of the filter.  FF = 0 results in a infinitely
+;       heavy filter since the filter value never changes regardless of the
+;       input.  FF = 1 is no filter at all since the output just follows the
+;       input instantaneously.  Useful values of FF are between 0 and 1.
+;
+;       At run time, the multiply by FF is implemented as a right shift of N
+;       bits.  FF is therefore 1 / 2^N.  The AD_FILTBITSx constant is the number
+;       of bits to shift right, not the FF value directly.
+;
+;       The FILT persistent state is 32 bits with the A/D result left justified
+;       in bit 30 with bit 31 being a sign bit.  This leaves 31 minus the number
+;       of A/D bits as bits available to shift into without any loss.  For
+;       example, with a 12 bit A/D, there are 19 fraction bits available.  If
+;       all the AD_FILTBITSx values for a channel add up to 19 or less, then no
+;       data will be lost.
+;
+;       For example, the configuration
+;
+;         AD_FILTBITS1 = 4
+;         AD_FILTBITS2 = 5
+;
+;       results in the overall filter algorithm for the channel of
+;
+;         FILT1 <-- FILT1 + (NEW - FILT1)/16
+;         FILT2 <-- FILT2 + (FILT1 - FILT2)/32
+;
+;       FILT2 is then considered the final filtered result.
+;
+;   The interrupt routine in AD2.INS.DSPIC uses the fast register save area.
+;   This means no other interrupts can use it (use PUSH.S and POP.S).
+;
+/include "qq2.ins.dspic"
+
+//******************************************************************************
+//
+//   Configuration constants.
+//
+/block
+  /var local ii integer      ;scratch integer
+  /var local r real          ;scratch floating point
+
+  //**************************
+  //
+  //   Configure the A/D system as a whole.
+  //
+  /const adbits integer = 12 ;number of bits in A/D result
+  /const adper real = 10e-6  ;A/D conversion period, seconds
+  /const adrefv real = 3.3   ;positive A/D reference, Volts
+  /const advref bool = false ;no explicit external reference voltage used
+  /const mintad real = 200e-9 ;min allowed A/D clock time (Tad), seconds
+  /const adtimer integer = 3 ;use timer 3 to trigger the A/D conversions
+
+  //**************************
+  //
+  //   Configure the individual input channels.
+  //
+  /include "(cog)src/dspic/ad1.ins.dspic"
+
+  //
+  //   Template configuration for one A/D input channel.
+  //
+  /set ad_pname ""           ;analog input pin name
+  /set ad_vname ""           ;global result variable name
+  /set ad_units 0.001        ;result in units of mV
+  /set ad_signed false       ;result is unsigned
+  /set ad_r1 0
+  /set ad_r2 0
+  /set ad_v2 0
+  /set ad_r3 0
+  /set ad_v3 adrefv
+  /const ad_filtbits1 integer = 8 ;configure low pass filter
+  /const ad_filtbits2 integer = 8
+  /call configure_channel
+
+  /endblock
+
+/include "(cog)src/dspic/ad2.ins.dspic"
+
+.end

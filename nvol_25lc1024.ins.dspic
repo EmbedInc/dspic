@@ -1,0 +1,756 @@
+;   ***************************************************************
+;   * Copyright (C) 2016, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Fixed "library" part of the NVOLB module, which presents a byte interface to
+;   a non-volatile memory.  See the comments in QQQ_NVOLB.DSPIC for a definition
+;   of the exported interface.
+;
+;   This version is for one or more external 25LC1024 EEPROM communicating over
+;   SPI.  Each such EEPROM contains 128k 8-bit bytes.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.  The constants that define choices are set in the
+;   parent file that includes this one.  See the comments in the parent file, or
+;   QQQ_NVOLB.DSPIC for details.  The constants defined here represent external
+;   realities that we do not have a choice over.
+;
+/const   log2each integer = 17 ;log2 bytes in each EEPROM
+/const   log2pagesz integer = 8 ;log2 bytes in one write page
+;
+;   Make sure the application-settable constants exists.  Create those that do
+;   not exist and set them to their defaults.
+;
+/if [not [exist "sspin"]] then
+  /show "  Name of EEPROM slave-select pin not defined"
+         .error  "SSPIN"
+         .end
+  /stop
+  /endif
+
+/if [not [exist "busname"]] then
+  /const busname string = ""
+  /endif
+
+/if [not [exist "ndevs"]] then
+  /const ndevs integer = 1
+  /endif
+
+/if [not [exist "autoflush"]] then
+  /const autoflush bool = false
+  /endif
+
+/if [not [exist "autoflush_sec"]] then
+  /const autoflush_sec real = 1.0
+  /endif
+
+/if [not [exist "nvol_shortrw"]] then
+  /const nvol_shortrw bool = false
+  /endif
+;
+;   Derived constants.
+;
+/if [= busname ""]
+  /then                      ;no unique name for SPI routines
+    /const uname string = ""
+  /else                      ;SPI routines have unique name added
+    /const uname string = [str "_" busname]
+  /endif
+
+/const   byeach  integer = [exp 2 log2each] ;bytes in each EEPROM
+/const   bytotal integer = [* byeach ndevs] ;total bytes in all EEPROMs
+/if [not [exist "nvbytes"]]
+  /then
+    /const nvbytes integer = bytotal
+  /else
+    /if [<> nvbytes bytotal] then
+      /show "  NVBYTES set to incorrect value, must be " nbytes
+         .error  "NVBYTES"
+         .end
+      /stop
+      /endif
+  /endif
+
+/const   pagesz  integer = [exp 2 log2pagesz] ;write page size in bytes
+/const   pgmask  integer = [shiftl [~ 0] log2pagesz] ;mask of page within address
+/const   pgmaskl integer = [and pgmask 16#FFFF] ;low word of mask, high all 1s
+/const   ofmask  integer = [~ pgmask] ;mask of offset into page
+/const   chmask  integer = [shiftl [~ 0] log2each] ;mask of chip within address
+/const   chmaskh integer = [shiftr chmask 16] ;high word of mask, low is 0
+
+/if [> autoflush_sec 65.535] then
+  /show "  AUTOFLUSH_SEC more than the maximum allowed 65.535 seconds."
+         .error  "AUTOFLUSH_SEC"
+         .end
+  /stop
+  /endif
+/const   autoflms integer = [rnd [* autoflush_sec 1000]] ;auto flush time, ms
+
+;*******************************************************************************
+;
+;   Local state.
+;
+.section .ram_nvolb, bss
+
+alloc    cabofs, 4           ;address of start of cached data
+alloc    cache,  [v pagesz], 2 ;cache for one write page of data
+
+/if autoflush then
+alloc    last1ms             ;last 1 ms clock value current with
+alloc    flushms             ;ms until do automatic flush
+  /endif
+;
+;   Local state in near RAM.
+;
+.section .near_nvolb, bss, near
+
+alloc    flags               ;individual flag bits
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_cache, 0        ;block of data is cached in RAM
+.equiv   flg_dirty, 1        ;RAM cached data was changed from that in nvol storage
+.equiv   flg_lock, 2         ;NVOL routines in use by a task
+
+
+.section .code_nvolb, code
+;*******************************************************************************
+;
+;   Subroutine NVOL_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  nvol[chars uname]_init, regf0
+
+         clr     flags       ;init all local flags to off
+
+/if autoflush then
+         mov     tick1ms, w0
+         mov     w0, last1ms
+  /endif
+
+         leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro LOCK
+//
+//
+//   Acquire the exclusive lock for accessing the NVOL state in this module.  If
+//   the lock is already held, then then TASK_YIELD_SAVE will be called until
+//   the lock is available.
+//
+/macro lock
+[lab retry]:                 ;back here to check the lock again
+         btss    flags, #flg_lock ;the lock is locked ?
+         jump    [lab lock]  ;no, it's available
+         gcall   task_yield_save ;yes, give other tasks a chance to run
+         jump    [lab retry] ;go back and check the lock again
+
+[lab lock]:                  ;the lock is available
+         bset    flags, #flg_lock ;acquire the lock
+  /endmac
+
+;*******************************************************************************
+;
+;   Macro UNLOCK
+;
+;   Release the lock acquired with LOCK.
+;
+.macro unlock
+         bclr    flags, #flg_lock ;release the lock on the NVOL state
+  .endm
+
+;*******************************************************************************
+;
+;   Local subroutine SLAVE_SELECT_ON
+;
+;   Assert the slave select line to the EEPROM containing the address in CABOFS.
+;
+/if [= ndevs 1]
+  /then                      ;only a single EEPROM is being used
+         locsub  slave_select_on
+         set_[chars sspin]_on ;assert the single slave select
+         leaverest
+  /else                      ;multiple EEPROM are being used
+         locsub  slave_select_on, regf0 | regf1
+
+         mov     cabofs+2, w0 ;get high word of address
+         lsr     w0, #[- log2each 16], w0 ;make 0-N chip number
+         cp      w0, #[- ndevs 1] ;compare to max allowed chip number
+         bra     gtu, selon_leave ;out of range ?
+
+         mul.uu  w0, #2, w0  ;times instructions per table entry
+         add     w0, #1, w0  ;plus instructions offset to first table entry
+         rcall   w0          ;call selected table entry
+         bra     selon_leave
+//
+//   Write the table that is called into depending on which chip is to be
+//   selected.  Note that the number of instruction words in each table entry
+//   and the number of instructions from the RCALL to the first table entry
+//   are hard-coded in the immediately preceeding instructions.
+//
+    /loop with ii from 1 to ndevs ;once for each table entry
+         set_[chars sspin][v ii]_on
+         return
+      /endloop
+
+selon_leave:
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Local subroutine SLAVE_SELECT_OFF
+;
+;   De-assert the slave select line to the EEPROM containing the address in
+;   CABOFS.
+;
+/if [= ndevs 1]
+  /then                      ;only a single EEPROM is being used
+         locsub  slave_select_off
+         set_[chars sspin]_off ;de-assert the single slave select
+         leaverest
+  /else                      ;multiple EEPROM are being used
+         locsub  slave_select_off, regf0 | regf1
+
+         mov     cabofs+2, w0 ;get high word of address
+         lsr     w0, #[- log2each 16], w0 ;make 0-N chip number
+         cp      w0, #[- ndevs 1] ;compare to max allowed chip number
+         bra     gtu, seloff_leave ;out of range ?
+
+         mul.uu  w0, #2, w0  ;times instructions per table entry
+         add     w0, #1, w0  ;plus instructions offset to first table entry
+         rcall   w0          ;call selected table entry
+         bra     seloff_leave
+//
+//   Write the table that is called into depending on which chip is to be
+//   selected.  Note that the number of instruction words in each table entry
+//   and the number of instructions from the RCALL to the first table entry
+//   are hard-coded in the immediately preceeding instructions.
+//
+    /loop with ii from 1 to ndevs ;once for each table entry
+         set_[chars sspin][v ii]_off
+         return
+      /endloop
+
+seloff_leave:
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Local subroutine LOAD_CACHE
+;
+;   Read the block of non-volatile memory containing the non-volatile byte with
+;   address in W2:W1 into the cache.  This is a low level routine that reads the
+;   block and sets CABOFS and the flags accordingly.  The caller must ensure
+;   that the requested byte is within the non-volatile memory and that it is OK
+;   for the cache to be overwritten.
+;
+;   The lock must be held when this routine is called.
+;
+         locsub  load_cache, regf0 | regf1 | regf2
+
+         mov     #[and pgmask 16#FFFF], w0 ;mask in only the page number
+         and     w1, w0, w1
+         mov     #[shiftr pgmask 16], w0
+         and     w2, w0, w2
+
+         mov     w1, cabofs+0 ;indicate address of first byte in the cache
+         mov     w2, cabofs+2
+;
+;   Read the page from the EEPROM into the cache.  Register usage:
+;
+;     W0  -  Data byte.
+;
+;     W1  -  Number of bytes left to do.
+;
+;     W2  -  Pointer to where to write the next byte in the cache.
+;
+         gcall   spi[chars uname]_lock ;acquire lock on SPI bus
+         mcall   slave_select_on ;assert slave select
+
+         mov     #3, w0      ;send READ command opcode
+         gcall   spi[chars uname]_write
+
+         mov     cabofs+2, w0 ;send 24 bit starting address to read from
+         gcall   spi[chars uname]_write ;high address byte
+         mov     cabofs+0, w0
+         swap    w0
+         gcall   spi[chars uname]_write ;middle address byte
+         swap    w0
+         gcall   spi[chars uname]_write ;low address byte
+
+         mov     #[v pagesz], w1 ;init number of bytes left to do
+         mov     #cache, w2  ;init pointer to where to write next byte
+lc_byte:                     ;back here to read and save each new byte
+         gcall   spi[chars uname]_read ;get the byte into W0
+         mov.b   w0, [w2++]  ;write byte into cache, advance write pointer
+         sub     #1, w1      ;count one less byte left to do
+         bra     nz, lc_byte ;back to do next byte
+
+         mcall   slave_select_off ;deassert the EEPROM slave select
+         gcall   spi[chars uname]_unlock ;release lock on SPI bus
+
+         bset    flags, #flg_cache ;the cache contains valid data
+         bclr    flags, #flg_dirty ;the data has not been altered
+
+         gcall   task_yield_save ;give other tasks a chance to run
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine NVWAIT
+;
+;   Wait for the last write or erase operation to complete.  The local NVOL lock
+;   must be held, but the lock on the SPI bus must not be held.  This routine
+;   will acquire and release the SPI lock to do each check, then let other tasks
+;   run with the lock released between checks.
+;
+         locsub  nvwait, regf0
+
+wait_check:                  ;wait for EEPROM done doing the erase or write
+         gcall   task_yield_save ;give other tasks a chance to run
+
+         gcall   spi[chars uname]_lock ;acquire lock on SPI bus
+         mcall   slave_select_on ;assert slave select
+         mov     #5, w0      ;send WRSR command
+         gcall   spi[chars uname]_write
+         gcall   spi[chars uname]_read ;read status register into W0
+         mcall   slave_select_off ;deassert slave select
+         gcall   spi[chars uname]_unlock ;release lock on SPI bus
+
+         btsc    w0, #0      ;EEPROM operation not in process ?
+         jump    wait_check  ;still in process, back to wait some more
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine WRCACHE
+;
+;   Unconditionally write the data in the cache to the EEPROM.  The caller must
+;   ensure that:
+;
+;     1  -  The local NVOL lock is being held.
+;
+;     2  -  The cache contains valid data.
+;
+;     3  -  Data in the cache has been altered since it was read.
+;
+         locsub  wrcache, regf0 | regf1 | regf2
+;
+;   Send the WREN command to the EEPROM.  This is required to enable writing in
+;   the next command.
+;
+         gcall   spi[chars uname]_lock ;acquire lock on SPI bus
+
+         mcall   slave_select_on ;assert slave select
+         mov     #6, w0      ;send WREN command opcode
+         gcall   spi[chars uname]_write
+         mcall   slave_select_off ;deassert the EEPROM slave select
+;
+;   Send a WRITE command with data for the entire page in the cache.
+;
+;   Register usage in this section:
+;
+;     W0  -  Data byte.
+;
+;     W1  -  Number of bytes left to do.
+;
+;     W2  -  Pointer to where to read next byte from.
+;
+         mov     #[v pagesz], w1 ;init number of bytes left to do
+         mov     #cache, w2  ;init pointer to where to read next byte from
+         minwait 55e-9, 3    ;guarantee minimum slave select off time
+
+         mov     #2, w0      ;get WRITE command opcode
+         mcall   slave_select_on ;assert slave select
+         gcall   spi[chars uname]_write ;send WRITE opcode
+
+         mov     cabofs+2, w0 ;send 24 bit starting address to write to
+         gcall   spi[chars uname]_write ;high address byte
+         mov     cabofs+0, w0
+         swap    w0
+         gcall   spi[chars uname]_write ;middle address byte
+         swap    w0
+         gcall   spi[chars uname]_write ;low address byte
+
+wc_byte:                     ;back here to do each new byte
+         mov.b   [w2++], w0  ;fetch this byte from the cache, advance pointer
+         gcall   spi[chars uname]_write ;send it to the EEPROM
+         sub     #1, w1      ;count one less byte left to do
+         bra     nz, wc_byte ;back to do next byte
+
+         mcall   slave_select_off ;deassert slave select, starts the actual write
+         gcall   spi[chars uname]_unlock ;release lock on SPI bus
+;
+;   Update state to the data has been written.
+;
+         bclr    flags, #flg_dirty ;no unwritten changed data now in the cache
+
+         mcall   nvwait      ;wait for EEPROM done performing the write
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_FLUSH
+;
+;   Write any cached and changed non-volatile data to the physical non-volatile
+;   memory.  Writes performed with NVOL_WRITE may be cached transparently to
+;   the caller.  The new data will be returned by NVOL_READ whether it is cached
+;   or not.  However, the new data will not survive a power down unless it is
+;   physically written to the non-volatile memory.  The only way to guarantee
+;   that is to call this routine.
+;
+;   Any physical writes to non-volatile memory are guaranteed to have completed
+;   when this routine returns.
+;
+;   No physical write is performed if no data is cached, or the cached data has
+;   not been changed since it was read from the EEPROM.
+;
+         glbsubd nvol[chars uname]_flush ;public entry point
+
+         btss    flags, #flg_dirty ;data in cache has been changed ?
+         jump    nvfl_leave  ;no, nothing to do
+
+         lock                ;acquire the internal lock
+         mcall   wrcache     ;write the cached data to the EEPROM
+         unlock              ;release the lock
+
+nvfl_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine GET_POINTER
+;
+;   Return W3 pointing to the cached copy of the non-volatile byte addressed by
+;   W2:W1.  Data is read into the cache as necessary, first flushing old data
+;   to the EEPROM, as necessary.
+;
+;   The caller must ensure that the address in W2:W1 is valid, and must be
+;   holding the internal lock.
+;
+         glbsub  get_pointer, regf0
+
+         btss    flags, #flg_cache ;there is data in the cache ?
+         jump    gp_rdcache  ;no
+
+         mov     cabofs+0, w0 ;compare cache address low words
+         xor     w1, w0, w3
+         mov     #[v pgmaskl], w0 ;get mask of page number
+         and     w3, w0, w3  ;mask in only page number mismatch bits
+
+         mov     cabofs+2, w0 ;compare cache address high words
+         xor     w2, w0, w0
+         ior     w0, w3, w0  ;make combined mismatch indication
+         bra     z, gp_incache ;the addressed byte is in the cache ?
+;
+;   The requested byte is not in the cache.
+;
+         btss    flags, #flg_dirty ;data in the cache was changed ?
+         jump    gp_rdcache  ;no, clear to overwrite the cache
+         mcall   wrcache     ;write the changed data in cache back to EEPROM
+
+gp_rdcache:                  ;read the page with the requested byte into cache
+         mcall   load_cache  ;read the page with the addressed byte into the cache
+;
+;   The requested byte is in the cache.
+;
+gp_incache:
+         mov     #[v ofmask], w0 ;make address offset into cache
+         and     w1, w0, w0
+         mov     #cache, w3  ;get start of cache address
+         add     w3, w0, w3  ;make address in cache of the requested byte
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_READ
+;
+;   Read the non-volatile byte at the address in W2:W1 into W0.  Results are
+;   undefined when W2:W1 contains a address past the end of the non-volatile
+;   memory.  W2:W1 is incremented by one.  Successive calls to this routine
+;   therefore return successive non-volatile bytes.
+;
+         glbsub  nvol[chars uname]_read, regf3
+;
+;   Validate the address.  Return 0 if the address is invalid.
+;
+         mov     #[and nvbytes 16#FFFF], w0 ;compare address to first invalid
+         cp      w1, w0
+         mov     #[shiftr nvbytes 16], w0
+         cpb     w2, w0
+         mov     #0, w0      ;get data value for case of invalid address
+         bra     geu, rd_leave ;invalid address ?
+;
+;   Make sure the byte is in the cache, then read it from the cache.
+;
+         lock                ;acquire the lock
+         mcall   get_pointer ;point W3 to the byte in the cache
+         ze      [w3], w0    ;fetch the byte and expand it into all of W0
+         unlock              ;release the lock
+
+rd_leave:                    ;common exit point, W0 contains the returned byte value
+         add     #1, w1      ;increment the nvol byte address for next time
+         addc    #0, w2
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_WRITE
+;
+;   Write the byte in the low bits of W0 to the non-volatile memory at the
+;   address in W2:W1.  Nothing is done if the address is invalid.
+;
+;   W2:W1 is incremented by one.  Successive calls to this routine therefore
+;   write successive bytes to the non-volatile memory.
+;
+         glbsub  nvol[chars uname]_write, regf3
+;
+;   Validate the address.  Skip doing anything if the address is invalid.
+;
+         mov     #[and nvbytes 16#FFFF], w3 ;compare address to first invalid
+         cp      w1, w3
+         mov     #[shiftr nvbytes 16], w3
+         cpb     w2, w3
+         mov     #0, w3      ;get data value for case of invalid address
+         bra     geu, wr_leave ;invalid address ?
+;
+;   The non-volatile byte address in W2:W1 is valid.
+;
+         lock                ;acquire the lock
+/if autoflush then
+         mov     #[v autoflms], w3 ;reset to full time until auto flush
+         mov     w3, flushms
+  /endif
+
+         mcall   get_pointer ;point W3 to the byte in the cache
+         cp.b    w0, [w3]    ;compare the new value to the existing value
+         bra     z, wr_dwrite ;the value isn't being changed, nothing more to do ?
+
+         mov.b   w0, [w3]    ;write the new value into the cache
+         bset    flags, #flg_dirty ;indicate data in the cache has been changed
+
+wr_dwrite:                   ;done doing the write
+         unlock              ;release the lock
+
+wr_leave:                    ;common exit point
+         add     #1, w1      ;increment the nvol byte address for next time
+         addc    #0, w2
+         leaverest
+
+;*******************************************************************************
+;
+;   Layered routines to read and write whole 16 bit words.
+;
+         glbsub  nvol[chars uname]_readw, regf3
+         mcall   nvol[chars uname]_read ;read the low byte
+         mov     w0, w3      ;save it in W3
+         mcall   nvol[chars uname]_read ;read the high byte
+         sl      w0, #8, w0  ;move it into place
+         ior     w0, w3, w0  ;merge in the low byte
+         leaverest
+
+         glbsub  nvol[chars uname]_writew
+         mcall   nvol[chars uname]_write ;write the low byte
+         swap    w0
+         mcall   nvol[chars uname]_write ;write the high byte
+         swap    w0
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_ERASE
+;
+;   Erase the entire non-volatile memory.  All bits will be set to 1.
+;
+         glbsub  nvol[chars uname]_erase, regf0 | regf1
+         lock                ;acquire the local NVOL lock
+
+         mov     #0, w1      ;init number of chip to erase next
+er_chip:                     ;back here to erase the next chip
+         sl      w1, #[- log2each 16], w0 ;make high word of chip start address
+         mov     w0, cabofs+2 ;set address to one contained in this chip
+;
+;   Send the WREN command to the EEPROM.  This is required to enable writing or
+;   erasing for the next command.
+;
+         gcall   spi[chars uname]_lock ;acquire lock on SPI bus
+
+         mcall   slave_select_on ;assert slave select
+         mov     #6, w0      ;send WREN command opcode
+         gcall   spi[chars uname]_write
+         mcall   slave_select_off ;deassert the EEPROM slave select
+;
+;   Send CE (chip erase) instruction.
+;
+         minwait 55e-9, 0    ;guarantee minimum slave select off time
+
+         mcall   slave_select_on ;assert slave select
+         mov     #0xC7, w0   ;send CE command opcode
+         gcall   spi[chars uname]_write
+         mcall   slave_select_off ;deassert the EEPROM slave select
+
+         gcall   spi[chars uname]_unlock ;release lock on the SPI bus
+         mcall   nvwait      ;wait for erase to complete
+;
+;   Advance to next chip.
+;
+         add     #1, w1      ;make 0-N number of next chip
+         cp      w1, #[- ndevs 1] ;compare to max valid chip number
+         bra     leu, er_chip ;back to erase this new chip
+;
+;   Set up the cache state as if page 0 has been read in.  This saves actually
+;   reading page 0 later if that is the next address range requested.  Having
+;   page 0 in the cache is no worse than a empty cache if some other page is
+;   requested next.  Since erase is not done in normal operation, we assume that
+;   taking a little extra time now is of no consequence.  In any case, this
+;   extra time is miniscule compared to the erase time of even one chip.
+;
+         mov     #[v pagesz], w0 ;init number of bytes left to write
+         mov     #cache, w1  ;init pointer to where to write next byte
+er_cache:                    ;back here to write each new cache byte
+         setm.b  [w1++]      ;set this cache byte to FFh
+         sub     #1, w0      ;count one less byte left to do
+         bra     nz, er_cache ;back to do next cache byte
+
+         mov     #0, w0      ;indicate address of first byte in the cache
+         mov     w0, cabofs+0
+         mov     w0, cabofs+2
+
+         bset    flags, #flg_cache ;the cache contains valid data
+         bclr    flags, #flg_dirty ;the cached data has not been changed
+
+         unlock              ;release the local NVOL lock
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_UPDATE
+;
+;   Peform a automatic flush, as appropriate.  This routine is intended to be
+;   called occasionally by the application.  The exact timing between calls does
+;   not need to be carefully controlled, but it should be called "often"
+;   relative to the automatic flush time.  This routine only exists when
+;   automatic flushing (AUTOFLUSH = TRUE) is enabled.
+;
+/if autoflush then
+         glbsub  nvol[chars uname]_update, regf0 | regf1
+
+         mov     tick1ms, w0 ;get the live clock
+         mov     last1ms, w1 ;get last clock value current with
+         mov     w0, last1ms ;update clock value will now be current with
+
+         sub     w0, w1, w0  ;make elapsed ms since last time
+         mov     flushms, w1 ;get ms until do automatic flush
+         sub     w1, w0, w1  ;update to new elapsed ms
+         skip_geu            ;didn't just wrap ?
+         mov     #0, w1      ;did wrap, replace result with 0
+         mov     w1, flushms ;update ms until do flush
+
+         btss    flags, #flg_dirty ;there is data to flush ?
+         jump    upd_leave   ;no, nothing to do
+;
+;   This section is run with the lock held.
+;
+         lock                ;acquire the exclusive lock
+         btss    flags, #flg_dirty ;there is still data to flush ?
+         jump    upd_dflush  ;no
+         mov     flushms, w0 ;get ms until auto flush
+         cp0     w0
+         bra     nz, upd_dflush ;not time to do flush now ?
+
+         mcall   wrcache     ;do the flush
+
+upd_dflush:                  ;done doing the flush, if any
+         unlock
+;
+;   No longer holding the lock.
+;
+upd_leave:
+         leaverest
+  /endif
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//
+//   Create the short-address read/write routines if this is specifically
+//   enabled.  There are not created by default since addresses are more than 16
+//   bits wide.  These routines only address the first 65536 bytes of
+//   non-volatile memory.
+//
+/if nvol_shortrw then        ;create the short address routines ?
+
+;*******************
+;
+;   Subroutine NVOL_SREAD.
+;
+         glbsub  nvol[chars uname]_sread, regf2 | regf3
+
+         mov     #0, w2      ;set high 16 bits of 32 bit address
+
+         lock                ;acquire the lock
+         mcall   get_pointer ;point W3 to the byte in the cache
+         ze      [w3], w0    ;fetch the byte and expand it into all of W0
+         unlock              ;release the lock
+
+         add     #1, w1      ;increment the address
+
+         leaverest
+
+;*******************
+;
+;   Subroutine NVOL_SREADW
+;
+         glbsub  nvol[chars uname]_sreadw, regf2
+
+         mcall   nvol[chars uname]_sread ;get low byte into W2
+         mov     w0, w2
+         mcall   nvol[chars uname]_sread ;get high byte into W0
+         sl      w0, #8, w0  ;move the high byte into position
+         ior     w0, w2, w0  ;merge the two bytes together
+
+         leaverest
+
+;*******************
+;
+;   Subroutine NVOL_SWRITE
+;
+         glbsub  nvol[chars uname]_swrite, regf2
+
+         mov     #0, w2      ;set high 16 bits of 32 bit address
+         mcall   nvol[chars uname]_write
+
+         leaverest
+
+;*******************
+;
+;   Subroutine NVOL_SWRITEW
+;
+         glbsub  nvol[chars uname]_swritew
+
+         mcall   nvol[chars uname]_swrite ;write the low byte
+         swap    w0          ;move the high byte into position
+         mcall   nvol[chars uname]_swrite ;write the high byte
+         swap    w0          ;restore W0
+
+         leaverest
+
+  /endif                     ;end of create short address routines

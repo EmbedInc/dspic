@@ -1,0 +1,25 @@
+;   ***************************************************************
+;   * Copyright (C) 2015, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Define global symbols and possibly additional build-time setup required by
+;   the TRACE library file.  This file is intended to be included from the main
+;   include file of a project using the TRACE library module.
+;
+/flag    tracearm            ;trace system armed awating trigger
+/flag    tracefull           ;all samples after trigger collected, trace frozen
+/flag    tracetrig           ;trace system trigger has occurred
+/flag    traceoff            ;temporarily inhibits changing trace data
+/flag    tracesent           ;full trace has been sent to host

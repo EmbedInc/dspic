@@ -1,0 +1,686 @@
+;   NVOLB routines that drive a 24AA32A, 24LC32A or compatible EEPROM.
+;
+;   This EEPROM contains 4096 bytes and uses a IIC interface.  The IIC bus is
+;   accessed via the standard Embed IIC interface, as exported by the
+;   QQQ_IIC.DSPIC template module, for example.
+;
+;   The Embed multi-tasking system is assumed to be in use.  See the
+;   QQQ_TASK.DSPIC template module.
+;
+;   These routines export the standard Embed byte-level non-volatile memory
+;   procedural interface.  See the QQQ_NVOLB.DSPIC template module for a
+;   description of this interface.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.  The constants that define choices are set in the
+;   parent file that includes this one.  See the comments in the parent file, or
+;   QQQ_NVOLB.DSPIC for details.  The constants defined here represent external
+;   realities that we do not have a choice over.
+;
+/block
+  /var local ii integer
+  /var local b bool
+  /var local s string
+
+  /if [not [exist "autoflush"]] then
+    /const autoflush bool = false
+    /endif
+  /if [not [exist "name"]] then
+    /const name = ""
+    /endif
+  /if [not [exist "busname"]] then
+    /const busname = ""
+    /endif
+  /if [not [exist "eetype"]] then
+    /const eetype = "24AA32A" ;default EEPROM type name
+    /endif
+  /if [not [exist "devadr"]] then
+    /const devadr integer = 2#1010000
+    /endif
+  //
+  //   Determine configuration from the EEPROM type name.
+  //
+  /set b False               ;init to not a valid EEPROM type.
+  /if [or [= eetype "24AA32A"] [= eetype "24LC32A"]] then
+    /set b True              ;indicate EEPROM type is valid
+    /const log2size integer = 12 ;Log2 bytes in whole EEPROM
+    /const log2pagesz integer = 5 ;Log2 bytes write page size
+    /const writems integer = 5 ;max write time, milliseconds
+    /endif
+  /if [not b] then
+    /show "  EEPROM type """ eetype """ is invalid."
+         .error  "EETYPE"
+         .end
+    /stop
+    /endif
+  //
+  //   Verify or set NVBYTES (EEPROM size in bytes).
+  //
+  /set ii [exp 2 log2size]   ;make EEPROM size, bytes
+  /if [exist "nvbytes"]
+    /then
+      /if [<> nvbytes ii] then
+        /show "  EEPROM size of " nvbytes " is wrong, should be " ii
+         .error  "NVBYTES"
+         .end
+        /stop
+        /endif
+    /else
+      /const nvbytes integer = ii
+    /endif
+
+  /if [exist "mnvbytes"] then
+    /if [> mnvbytes nvbytes] then
+      /show "  " mnvbytes " non-volatile bytes not available, " nvbytes " max"
+         .error  "MNVBYTES"
+         .end
+      /stop
+      /endif
+    /endif
+  //
+  //   Other derived constants.
+  //
+  /const adrmask integer = [- nvbytes 1] ;mask for valid address bits
+  /const pagesize integer = [exp 2 log2pagesz] ;bytes per write page
+  /const ofsmask integer = [- pagesize 1] ;mask for adr offset within page
+  /const pagemask integer = [~ ofsmask] ;adr mask for start of page
+
+  /if [= busname ""]
+    /then
+      /const bname string = ""
+    /else
+      /const bname string = [str "_" busname]
+    /endif
+  /if [= name ""]
+    /then
+      /const uname string = ""
+    /else
+      /const uname string = [str "_" name]
+    /endif
+
+  /set s ""
+  /set s [str s "Configured for " eetype " EEPROM over IIC"]
+  /set s [str s ", " nvbytes " bytes"]
+  /set s [str s ", " pagesize " byte cache"]
+  /show "  " s
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.  These are all local.
+;
+.section .ram_nvol[chars uname], bss
+
+alloc    pageadr             ;address of first byte in page cache
+alloc    pagecache, [v pagesize], 1 ;local cache of one write page
+;
+;   Local state in near RAM.
+;
+.section .near_nvol[chars uname], bss, near
+
+alloc    flags               ;individual flag bits
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_cache, 0        ;page cache contains valid data
+.equiv   flg_dirty, 1        ;cached data was changed from that in nvol storage
+.equiv   flg_lock, 2         ;NVOL routines in use by a task
+
+
+.section .code_nvol[chars uname], code
+;*******************************************************************************
+;
+;   Subroutine NVOL_INIT
+;
+;   Initialize the hardware and state managed by this module.
+;
+         glbsub  nvol[chars uname]_init
+
+         clr     flags       ;init all local flags to off
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine LOCK
+;
+;   Acquire the exclusive lock for accessing the EEPROM.  TASK_YIELD_SAVE is
+;   called repeatedly until the lock is available.
+;
+;   This routine should not be called directly.  Use the LOCK and UNLOCK macros
+;   to acquire and release the lock.
+;
+         locsub  lock
+
+lock_retry:                  ;back here to test the lock again
+         btss    flags, #flg_lock ;the lock is locked ?
+         jump    lock_avail  ;no, the lock is available
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    lock_retry  ;back and check the lock again
+
+lock_avail:                  ;the lock is available (not locked)
+         bset    flags, #flg_lock ;acquire the lock
+
+         leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macros LOCK and UNLOCK
+//
+//   The code below should use these macros to acquire and release the lock.
+//   This allows some optimizations as apposed to calling subroutines.
+//
+/macro lock
+         mcall   lock        ;acquire the exclusive lock on the EEPROM
+  /endmac
+
+/macro unlock
+         bclr    flags, #flg_lock ;release the lock on the EEPROM
+  /endmac
+
+;*******************************************************************************
+;
+;   Local subroutine SET_ADR
+;
+;   This routine starts a write sequence to the address in W1.  This is the
+;   first step in doing a read or write.  To do a write, continue by sending the
+;   data bytes to write.  To do a read, do a bus start without first doing a
+;   stop, then do a read sequence.
+;
+;   This routine sets Z to indicate failure.  The device is given enough time to
+;   complete a previously started write sequence.  If the device still does not
+;   respond after that, this routine returns with Z set.  When a write sequence
+;   with address bytes was successfully started, this routine returns with Z
+;   cleared.
+;
+;   It is the caller's responsibility to ensure the W1 contains a valid address
+;   for the device.
+;
+;   The caller should be holding the lock.
+;
+         locsub  set_adr, regf0 | regf2 | regf3
+;
+;   Send the bus start and address byte.  Retry until ACKed, but abort on
+;   timeout.
+;
+         mov     tick1ms, w2 ;init clock value up to date with
+         mov     #[+ writems 2], w3 ;init number of ticks before timeout
+
+sadr_try:                    ;try to start write sequence
+         mov     #[v devadr], w0 ;pass IIC slave address
+         gcall   iic[chars bname]_start_put ;send bus start and adr byte
+         skip_nflag iicack   ;device didn't ACK ?
+         jump    sadr_dadr   ;did ACK, address byte sent successfully
+         ;
+         ;   The device did not ACK the address byte.
+         ;
+         gcall   iic[chars bname]_stop ;end the bus sequence
+
+         mov     tick1ms, w0 ;get the current clock value
+         cp      w0, w2      ;compare to last value current with
+         bra     z, sadr_retry ;no new tick this time ?
+         add     #1, w2      ;update clock value now current with
+         sub     #1, w3      ;count one less tick before timeout
+         bra     nz, sadr_retry ;not timed out yet ?
+sadr_fail:                   ;return indicating failure
+         bset    Sr, #Z      ;set Z flag to indicate failure
+         jump    sadr_leave
+
+sadr_retry:
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    sadr_try    ;back and try to start write sequence again
+;
+;   The address byte has been sent and was ACKed by the device.
+;
+sadr_dadr:
+         lsr     w1, #8, w0  ;send the high address byte
+         gcall   iic[chars bname]_put
+         bra     z, sadr_retry ;byte write failed ?
+         skip_flag iicack
+         jump    sadr_retry  ;didn't get ACK ?
+
+         mov     w1, w0      ;send the low address byte
+         gcall   iic[chars bname]_put
+         bra     z, sadr_retry ;byte write failed ?
+         skip_flag iicack
+         jump    sadr_retry  ;didn't get ACK ?
+
+         bclr    Sr, #Z      ;indicate success
+
+sadr_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine PAGE_READ
+;
+;   Read the page containing the address in W1 into PAGECACHE.  If the device
+;   does not respond after enough time to complete a write, then the cache is
+;   loaded with all FFh bytes and the CACHE flag bit is cleared.  Any previous
+;   data in the cache is lost.
+;
+;   It is the caller's responsibility to ensure that W1 contains a valid
+;   address.
+;
+;   The caller should be holding the lock.
+;
+         locsub  page_read, regf0 | regf1 | regf2 | regf3
+;
+;   Send a write sequence just to set the address.  This sequence is not ended
+;   with a bus stop.
+;
+         mov     #[v pagemask], w0 ;make start of page address in W1
+         and     w1, w0, w1
+         mov     w1, pageadr ;save starting address of the page
+
+pgrd_retry:                  ;back here to try again after error
+         mcall   set_adr     ;set the address in the device
+         bra     z, pgrd_fail ;device failed to respond ?
+;
+;   Do a read sequence immediately following without a bus stop.  The address
+;   in the device is still set by the write sequence, but no write takes place
+;   without the bus stop.
+;
+         mov     #[or devadr 16#8000], w0 ;IIC adr, indicate repeated start
+         gcall   iic[chars bname]_start_get ;start read sequence
+         bra     z, pgrd_err ;error ?
+         skip_flag iicack    ;device ACKed the address byte ?
+         jump    pgrd_fail   ;no, abort
+         ;
+         ;   The read sequence has been started and the device has ACKed the
+         ;   address byte.  It will now return sequential bytes starting at the
+         ;   address that was previously set.
+         ;
+         mov     #[v pagesize], w2 ;init number of bytes left to read
+         mov     #pagecache, w3 ;init pointer of where to write the next byte
+pgrd_rdbyte:                 ;back here to read each new byte
+         gcall   iic[chars bname]_get ;get this byte into W0
+         mov.b   w0, [w3++]  ;stuff byte into page cache, advance write pointer
+         sub     #1, w2      ;count one less byte left to do
+         bra     z, pgrd_drd ;done reading all the bytes ?
+         gcall   iic[chars bname]_ack ;ACK the received byte
+         bra     z, pgrd_err ;error ?
+         jump    pgrd_rdbyte ;back to do next byte
+pgrd_drd:                    ;done reading all the bytes
+         gcall   iic[chars bname]_nack ;NACK this last byte
+         gcall   iic[chars bname]_stop ;end the bus sequence
+;
+;   All the bytes were read normally.
+;
+         bset    flags, #flg_cache ;the cache now contains valid data
+         bclr    flags, #flg_dirty ;no changes to cached data since last read
+         jump    pgrd_leave
+;
+;   A error has occurred.  The entire read sequence will be re-tried.
+;
+pgrd_err:
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    pgrd_retry  ;go back and try again
+;
+;   Clear the cache to all FF bytes and return with failure.
+;
+pgrd_fail:
+         gcall   iic[chars bname]_stop ;end the bus sequence
+
+         mov     #0xFF, w0   ;set the data to write to each byte
+         mov     #[v pagesize], w2 ;init number of bytes left to write
+         mov     #pagecache, w3 ;init pointer of where to write the next byte
+pgrd_wrbyte:                 ;back here to write each new byte
+         mov.b   w0, [w3++]  ;write byte, advance pointer
+         sub     #1, w2      ;count one less byte left to do
+         bra     nz, pgrd_wrbyte ;back to do next byte
+
+         bclr    flags, #flg_cache ;indicate the cache does not contain valid data
+         bclr    flags, #flg_dirty
+
+pgrd_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine PAGE_WRITE
+;
+;   Write the data in the page cache PAGECACHE to the device.  PAGEADR must
+;   contain the byte address of the start of the page.
+;
+;   The caller should be holding the lock.
+;
+         locsub  page_write, regf0 | regf1 | regf2
+;
+;   Start the write sequence.  This includes sending the address bytes.
+;
+pgwr_retry:                  ;back here to try again after error
+         mov     pageadr, w1 ;get the address of the first byte to write
+         mcall   set_adr     ;start write sequence with address bytes
+         bra     z, pgwr_stop ;device didn't respond, do stop sequence and quit ?
+;
+;   Send the data bytes.
+;
+         mov     #pagecache, w1 ;init pointer where to get next byte from
+         mov     #[v pagesize], w2 ;init number of bytes left to do
+pgwr_byte:                   ;back here to write each new byte
+         mov.b   [w1++], w0  ;get this data byte, advance pointer
+         gcall   iic[chars bname]_put ;write it to the device
+         bra     z, pgwr_err ;something went wrong trying to write the byte ?
+         skip_flag iicack    ;got ACK as expected ?
+         jump    pgwr_stop   ;no, abort
+         sub     #1, w2      ;count one less byte left to do
+         bra     nz, pgwr_byte ;back to do next byte
+
+         bclr    flags, #flg_dirty ;page cache and device have same data
+;
+;   End the IIC sequence and leave.
+;
+pgwr_stop:
+         gcall   iic[chars bname]_stop ;end the IIC sequence
+         leaverest
+
+pgwr_err:                    ;error occurred, try again
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    pgwr_retry  ;go back and try everything again
+
+;*******************************************************************************
+;
+;   Local subroutine BYTE_READ
+;
+;   Read the non-volatile byte at W2:W1 into W0.  0 is returned for addresses
+;   past the physical memory.  W2:W1 is incremented by one, whether valid or
+;   not.
+;
+;   The caller should be holding the lock.
+;
+         locsub  byte_read, regf3
+;
+;   Return 0 if the address is invalid.
+;
+         mov     #0, w0      ;get value to return in case adr is invalid
+         cp0     w2
+         bra     nz, byr_leave ;high address word invalid ?
+
+         mov     #[- nvbytes 1], w3 ;get last valid low address word value
+         cp      w1, w3
+         bra     gtu, byr_leave ;address is out of range ?
+;
+;   Make sure the byte is in the cache.
+;
+         btss    flags, #flg_cache ;there is valid data in the cache ?
+         jump    byr_rdcache ;no, go read this page into the cache
+
+         mov     #[v pagemask], w0 ;make page start address in W0
+         and     w1, w0, w0
+         mov     pageadr, w3 ;get the cached page start address
+         cp      w3, w0
+         bra     z, byr_cache ;desired page is already in the cache ?
+         ;
+         ;   The cache contains a different page.
+         ;
+         btss    flags, #flg_dirty ;cached data was changed ?
+         jump    byr_rdcache ;no, just overwrite cache with new page
+         mcall   page_write  ;write the old data to the device
+
+byr_rdcache:                 ;read the page into the cache
+         mcall   page_read   ;read the new page into the cache
+
+byr_cache:                   ;the page containing the addressed byte is in the cache
+;
+;   Read the byte from the cache.
+;
+         mov     #[v ofsmask], w3 ;make offset of the byte within its page
+         and     w1, w3, w3
+         mov     #pagecache, w0 ;add it to page start address
+         add     w3, w0, w3
+         ze      [w3], w0    ;fetch the byte into W0
+
+byr_leave:
+         add     #1, w1      ;increment the address to the next byte
+         addc    #0, w2
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine BYTE_WRITE
+;
+;   Write the byte in W0 to the non-volatile address in W2:W1.  Nothing is done
+;   if the address is invalid.  W2:W1 is incremented by one whether the address
+;   is valid or not.
+;
+;   The caller should be holding the lock.
+;
+         locsub  byte_write, regf3 | regf4
+;
+;   Abort if the address is invalid.
+;
+         cp0     w2
+         bra     nz, byw_leave ;high address word invalid ?
+
+         mov     #[- nvbytes 1], w3 ;get last valid low address word value
+         cp      w1, w3
+         bra     gtu, byw_leave ;address is out of range ?
+;
+;   Make sure the byte is in the cache.
+;
+         btss    flags, #flg_cache ;there is valid data in the cache ?
+         jump    byw_rdcache ;no, go read this page into the cache
+
+         mov     #[v pagemask], w4 ;make page start address in W4
+         and     w1, w4, w4
+         mov     pageadr, w3 ;get the cached page start address
+         cp      w3, w4
+         bra     z, byw_cache ;desired page is already in the cache ?
+         ;
+         ;   The cache contains a different page.
+         ;
+         btss    flags, #flg_dirty ;cached data was changed ?
+         jump    byw_rdcache ;no, just overwrite cache with new page
+         mcall   page_write  ;write the old data to the device
+
+byw_rdcache:                 ;read the page into the cache
+         mcall   page_read   ;read the new page into the cache
+
+byw_cache:                   ;the page containing the addressed byte is in the cache
+;
+;   Write the byte to the cache.  The DIRTY flag is set if this changes the
+;   byte.
+;
+         mov     #[v ofsmask], w3 ;make offset of the byte within its page
+         and     w1, w3, w3
+         mov     #pagecache, w4 ;add it to page start address
+         add     w3, w4, w3
+         ze      [w3], w4    ;fetch the byte into W4
+         cp.b    w0, w4
+         bra     z, byw_leave ;the byte is not being changed ?
+
+         mov.b   w0, [w3]    ;write the new byte value into the cache
+         bset    flags, #flg_dirty ;indicate cached data has been changed
+
+byw_leave:
+         add     #1, w1      ;increment the address to the next byte
+         addc    #0, w2
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_FLUSH
+;
+;   Ensure that any cached data is physically written to the device.  This
+;   routine does not return until the device is done performing any write.
+;
+         glbsub  nvol[chars uname]_flush, regf0 | regf1 | regf2
+
+         lock                ;acquire exclusive lock on the EEPROM
+
+         btss    flags, #flg_dirty ;there is unwritten data in the cache ?
+         jump    flu_leave   ;no, nothing to do
+;
+;   Write the cached data to the device, then wait for the device to finish the
+;   write.
+;
+         mcall   page_write  ;send cached data to device, start the actual write
+
+         mov     tick1ms, w1 ;init clock value up to date with
+         mov     #[+ writems 2], w2 ;init number of ticks before timeout
+
+flu_wait:                    ;back here to check again for write done
+         gcall   task_yield_save ;give other tasks a chance to run
+         mov     #[v devadr], w0 ;pass IIC slave address
+         gcall   iic[chars bname]_start_get ;start new IIC read sequence
+         gcall   iic[chars bname]_stop ;end the new sequence
+         skip_nflag iicack   ;device didn't ACK, still busy ?
+         jump    flu_leave   ;no, done physically doing the write
+
+flu_chtick:                  ;back here to check for another clock tick
+         mov     tick1ms, w0 ;get current clock value
+         cp      w1, w0
+         bra     z, flu_wait ;no new tick ?
+         ;
+         ;   New clock tick.
+         ;
+         sub     #1, w2      ;one less tick before timeout
+         bra     z, flu_leave ;timeout expired, quit ?
+         add     #1, w1      ;update clock value now current with
+         jump    flu_chtick  ;back to check for another tick
+
+flu_leave:
+         unlock              ;release lock on the EEPROM
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_READ
+;
+;   Read the non-volatile byte at W2:W1 into W0.  W2:W1 is incremented by 1.
+;
+         glbsub  nvol[chars uname]_read
+
+         lock
+         mcall   byte_read   ;do the read
+         unlock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_READW
+;
+;   Read the non-volatile word at W2:W1 into W0.  W2:W1 is incremented by 2.
+;
+         glbsub  nvol[chars uname]_readw, regf3
+
+         lock
+         mcall   byte_read   ;read the low byte into W3
+         mov     w0, w3
+         mcall   byte_read   ;read the high byte into W0
+         sl      w0, #8, w0  ;move the high byte into position
+         ior     w0, w3, w0  ;assemble the word in W0
+         unlock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_SREAD
+;
+;   Read the non-volatile byte at W1 into W0.  W1 will be incremented by 1.
+;
+         glbsub  nvol[chars uname]_sread, regf2
+
+         lock
+         mov     #0, w2
+         mcall   byte_read   ;do the read
+         unlock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_SREADW
+;
+;   Read the non-volatile word at W1 into W0.  W1 will be incremented by 2.
+;
+         glbsub  nvol[chars uname]_sreadw, regf2 | regf3
+
+         lock
+         mov     #0, w2
+         mcall   byte_read   ;read the low byte into W3
+         mov     w0, w3
+
+         mov     #0, w2
+         mcall   byte_read   ;read the high byte into W0
+
+         sl      w0, #8, w0  ;move the high byte into position
+         ior     w0, w3, w0  ;assemble the word in W0
+         unlock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_WRITE
+;
+;   Write the byte in W0 to the non-volatile memory at address W2:W1.  W2:W1
+;   will be incremented by 1.
+;
+         glbsub  nvol[chars uname]_write
+
+         lock
+         mcall   byte_write  ;do the write
+         unlock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_WRITEW
+;
+;   Write the word in W0 to the non-volatile memory at address W2:W1.  W2:W1
+;   will be incremented by 2.
+;
+         glbsub  nvol[chars uname]_writew
+
+         lock
+         mcall   byte_write  ;write the low byte
+         swap    w0
+         mcall   byte_write  ;write the high byte
+         swap    w0
+         unlock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_SWRITE
+;
+;   Write the byte in W0 to the non-volatile memory at W1.  W1 will be
+;   incremented by 1.
+;
+         glbsub  nvol[chars uname]_swrite, regf2
+
+         lock
+         mov     #0, w2
+         mcall   byte_write  ;do the write
+         unlock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_SWRITEW
+;
+;   Write the word in W0 to the non-volatile memory at W1.  W1 will be
+;   incremented by 2.
+;
+         glbsub  nvol[chars uname]_swritew, regf2
+
+         lock
+         mov     #0, w2
+         mcall   byte_write  ;write the low byte
+         swap    w0
+
+         mov     #0, w2
+         mcall   byte_write  ;write the high byte
+         swap    w0
+         unlock
+
+         leaverest

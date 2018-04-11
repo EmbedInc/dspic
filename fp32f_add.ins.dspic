@@ -1,0 +1,196 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_add_ins"]] then
+  /const fp32f_add_ins bool = true
+
+.section .code_fp32f_add, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_ADD
+;
+;   W1:W0 <-- W1:W0 + W3:W2
+;
+         glbsub  fp32f_add, regf2 | regf3 | regf4 | regf5 | regf6
+;
+;   Check for special case of adding 0.
+;
+         ior     w3, w2, [w15]
+         bra     z, add_leave ;input value is 0, nothing to do
+;
+;   Check for special case of adding into existing 0.
+;
+         ior     w1, w0, [w15]
+         bra     nz, add_nz  ;not adding into 0 ?
+
+         mov     w2, w0
+         mov     w3, w1
+         jump    add_leave
+
+add_nz:
+;
+;   Neither number is 0.
+;
+;   Switch the numbers if necessary so that the one with the larger exponent
+;   is in W1:W0, and its exponent field is in W4.
+;
+         mov     #0x7FFF, w5
+         and     w1, w5, w4  ;get accumulator exponent field
+         and     w3, w5, w5  ;get input number exponent field
+
+         cp      w4, w5      ;compare acc exponent to input exponent
+         bra     geu, add_dflip ;already in right order, done flipping
+
+         exch    w0, w2      ;swap the two numbers
+         exch    w1, w3
+         exch    w4, w5      ;swap the exponent field values
+add_dflip:                   ;acc has number with larger exponent
+
+         sub     w4, w5, w5  ;amount to shift input right to normalize it
+         cp      w5, #17
+         bra     gtu, add_leave ;input number too small to change acc ?
+;
+;   Convert each FP value into signed fixed point 3.29 format.
+;
+         ;
+         ;   Convert W1:W0 to 3.29 signed fixed point.
+         ;
+         mov     w1, w6      ;save sign bit
+         lsr     w0, #3, w1  ;set low 13 bits of high word
+         bset    w1, #13     ;set implied 1 bit
+         sl      w0, #13, w0 ;set low word
+         btss    w6, #15     ;negative ?
+         jump    1f          ;no
+         subr    w0, #0, w0  ;negate
+         subbr   w1, #0, w1
+1:                           ;signed fixed point in W1:W0
+         ;
+         ;   Convert W3:W2 to 3.29 signed fixed point.
+         ;
+         mov     w3, w6      ;save sign bit
+         lsr     w2, #3, w3  ;set low 13 bits of high word
+         bset    w3, #13     ;set implied 1 bit
+         sl      w2, #13, w2 ;set low word
+         btss    w6, #15     ;negative ?
+         jump    1f          ;no
+         subr    w2, #0, w2  ;negate
+         subbr   w3, #0, w3
+1:                           ;signed fixed point in W3:W2
+;
+;   Shift W3:W2 right by W5 bits to normalize it to the same scale as
+;   W1:W0.
+;
+         cp      w5, #16
+         bra     geu, add_shw ;shifting a whole word or more
+         ;
+         ;   The right shift is by less than one word.
+         ;
+         mov     w3, w6      ;save original high word
+         asr     w3, w5, w3  ;make shifted high word
+         lsr     w2, w5, w2  ;set low bits of low word
+         subr    w5, #16, w5
+         sl      w6, w5, w6  ;get low word contribution from high word into place
+         ior     w6, w2, w2  ;merge to make final low word
+         jump    add_dsh     ;done with the shift
+         ;
+         ;   The right shift is by a whole word or more.
+         ;
+add_shw:
+         sub     w5, #16, w5
+         asr     w3, w5, w2  ;set low word
+         asr     w3, #15, w3 ;high word is just sign
+
+add_dsh:
+;
+;   Do the add on the fixed point values.  Check for special case of 0
+;   result.
+;
+         add     w0, w2, w0  ;add the fixed point values into W1:W2
+         addc    w1, w3, w1
+         ior     w0, w1, w2
+         bra     z, add_leave ;special case of 0 result ?
+;
+;   Convert the fixed point value back to floating point.  W4 contains the
+;   exponent field value of the resulting number assuming 3.29 fixed point
+;   format in W1:W0.
+;
+         mov     w1, w2      ;save word with the sign bit
+         btss    w1, #15     ;sign bit is set ?
+         jump    add_dmag    ;no, skip negating
+         subr    w0, #0, w0  ;negate
+         subbr   w1, #0, w1
+add_dmag:                    ;magnitude in W1:W0, sign bit in W2<15>
+
+         ff1l    w1, w3      ;find highest bit in the high word
+         bra     c, add_sigl ;all significant bits are in the low word ?
+         ;
+         ;   At least one significant bit is in the high word.  W3 contains the
+         ;   1-16 number of bits in from the left where the first significant
+         ;   bit is.
+         ;
+         sl      w1, w3, w1  ;move fraction bits from high word into mantissa pos
+         subr    w3, #16, w5
+         lsr     w0, w5, w0  ;move low word contribution into place
+         ior     w1, w0, w0  ;make final FP mantissa field in W0
+         subr    w3, #3, w3  ;exponent increment to compensate for the shift
+         jump    add_dmant   ;done computing mantissa
+         ;
+         ;   The high word of the fixed point value is 0.  All the mantissa bits
+         ;   will come from the low word, which is guaranteed not to be 0.
+         ;
+add_sigl:
+         ff1l    w0, w3      ;find most significant 1 bit in low word
+         sl      w0, w3, w0  ;make final mantissa field value in W0
+         mov     #-13, w5
+         sub     w5, w3, w3  ;exponent increment to compensate for the shift
+;
+;   Done computing the mantissa.  The final mantissa field is in W0, the high
+;   bit of W2 contains the sign of the overall number, W3 is the amount to add
+;   to the exponent field value in W4 to make the final exponent field value.
+;
+add_dmant:
+         add     w4, w3, w1  ;make the adjusted exponent field
+         btss    w1, #15     ;overflow or underflow ?
+         jump    add_dexp    ;no, done with exponent field
+         btsc    w3, #15     ;added positive, was overflow ?
+         jump    add_expun   ;added negative, was underflow ?
+         ;
+         ;   The exponent field overlowed, substitute largest possible
+         ;   magnitude.
+         ;
+         mov     #0x7FFF, w1
+         mov     #0xFFFF, w0
+         jump    add_dexp
+         ;
+         ;   The exponent field underflowed, return zero.
+         ;
+add_expun:
+         mov     #0, w1
+         mov     #0, w0
+         jump    add_leave
+;
+;   Done computing the exponent field.  The exponent and mantissa fields are all
+;   set in the floating point number in W1:W0.  Currently this contains the
+;   magnitude of the final value, with the actual sign in the high bit of W2.
+;
+add_dexp:                    ;done with exponent field
+         btsc    w2, #15     ;final sign is positive ?
+         bset    w1, #15     ;no, set output sign to negative
+
+add_leave:                   ;common exit point
+         leaverest
+
+  /endif

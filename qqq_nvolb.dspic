@@ -1,0 +1,489 @@
+;   ***************************************************************
+;   * Copyright (C) 2013, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Procedural interface to the non-volatile memory.
+;
+;   This implementation uses ?????????????????????????????
+;
+;   The non volatile memory as presented here is organized into bytes of 8 bits
+;   each.  Whole 8 bit bytes are always read or written, and each byte occupies
+;   one address.  The non-volatile bytes are at sequential addresses starting at
+;   0.
+;
+;   The following procedural interface to the non-volatile memory of this system
+;   is exported:
+;
+;     NVOL_INIT
+;
+;       Must be the first call to this module.  Normally called from the STRT
+;       module during module-level initialization.
+;
+;     NVOL_READ
+;
+;       Read the non-volatile byte at the address in W2:W1 into W0.  Results are
+;       undefined when W2:W1 contains a address past the end of the non-volatile
+;       words.  W2:W1 is incremented by one.  Successive calls to this routine
+;       therefore return successive non-volatile bytes.
+;
+;       Implementations that have less than 65536 bytes of non-volatile memory
+;       are allowed to ignore W2, including when incrementing the combined W2:W1
+;       address since valid addresses always have 0 in W2.  Applications should
+;       consider non-volatile addresses presented by this routine to be 32 bits
+;       unless it is known a specific implementation is being used.
+;
+;     NVOL_READW
+;
+;       Like NVOL_READ, but reads a whole word (two bytes) into W0.  The words
+;       are assumed to be stored in least to most significant byte order.  The
+;       address in W2:W1 is incremented by 2.
+;
+;     NVOL_WRITE
+;
+;       Write the byte in the low 8 bits of W0 to the non-volatile address in
+;       W2:W1.  W2:W1 will be incremented by one.  Successive calls to this
+;       routine therefore write to successive non-volatile bytes.  The write is
+;       not performed if W2:W1 indicates a address past the end of the
+;       non-volatile memory.
+;
+;       Data written with this routine may be cached.  Cached data is not
+;       guaranteed to be written to the physical non-volatile memory until
+;       NVOL_FLUSH is called.
+;
+;     NVOL_WRITEW
+;
+;       Like NVOL_WRITE except that it writes the whole word (2 bytes) in W0.
+;       The two bytes are written in least to most significant order.
+;
+;     NVOL_SREAD
+;     NVOL_SREADW
+;     NVOL_SWRITE
+;     NVOL_SWRITEW
+;
+;       Like the routines above except that short addresses are used.  Instead
+;       of the byte address being 32 bits wide in W2:W1, it is 16 bits wide in
+;       only W1.  By default, these routines only exist when there are 65536
+;       EEPROM bytes or less.
+;
+;       These routines always exist when the constant NVOL_SHORTRW is set to
+;       TRUE.  In that case only the first 65536 bytes of non-volatile memory
+;       can be accessed by these routines when the underlying memory is larger.
+;
+;     NVOL_FLUSH
+;
+;       Make sure any cached data is physically written to the non-volatile
+;       memory.  Some information may be locally cached in this module by
+;       NVOL_WRITE.  Until this routine is called, there is no guarantee that
+;       all data written with NVOL_WRITE is physically committed to the
+;       non-volatile memory.  However, all data written with NVOL_WRITE will be
+;       immediately reflected by NVOL_READ, whether locally cached or written to
+;       the physical memory or not.  After NVOL_FLUSH returns, all current data
+;       will be recoverable after a power down.
+;
+;     NVOL_UPDATE
+;
+;       This routine is intended to be called periodically from the main event
+;       loop.  It performs background functions.  One function is to
+;       automatically perform a flush some time after the last write.  This time
+;       is set with the constant AUTOFLUSH_SEC.
+;
+;       This routine does not need to be called at a known or regular interval,
+;       just "often" relative to the auto flush time.  It keeps track of elapsed
+;       time internally by reading the TICK1MS global variable.
+;
+;     NVOL_ERASE
+;
+;       Erase the entire non-volatile memory.  This sets all bits to 1.
+;
+;   The following preprocessor constants configure this module.  Note that some
+;   may be required:
+;
+;     MNVBYTES, integer
+;
+;       The minimum number of non-volatile bytes to use.  This constant is
+;       significant when memory can be configured different ways or used for
+;       different purposes.  For example, when a section of program memory is
+;       used to implement the non-volatile memory, then this constant must be
+;       set to indicate how much program memory to use.  At least this much will
+;       be made available, but the actual non-volatile memory could be larger
+;       due to physical constraints.  For example, program memory can usually
+;       only be erased in pages of a certain size.  The minimum number of whole
+;       erase pages will be used to implement the number of non-volatile bytes
+;       specified by NVBYTES.
+;
+;     NVBYTES, integer
+;
+;       The actual size of the non-volatile memory.  When the size can be
+;       configured, then this constant is derived from MNVBYTES and the
+;       physical constraints of the memory.  This is the case, for example, when
+;       a section of program memory is used.  If a fixed dedicated memory is
+;       used, then this constant must be set here to indicate the size of that
+;       memory.  This is the case, for example, when the internal EEPROM of the
+;       processor is used, or a external EEPROM chip.  Implementations what work
+;       with a fixed memory require this constant to be set here.  If MNVBYTES
+;       is set, then it must be less than or equal to NVBYTES.
+;
+;       When the non-volatile memory size is dictated by the underlying
+;       mechanism, then this constant need not be set here.  If it is set, it
+;       will be checked for the required value.  If not set, it will be set to
+;       the actual value.
+;
+;       One way or another this constant will be set to the non-volatile memory
+;       size available to the application after the hardware-dependent include
+;       file completes.
+;
+;     AUTOFLUSH, bool
+;
+;       TRUE enables the auto-flush mechanism, and FALSE disables it.
+;       NVOL_UPDATE will need to be called "often" relative to the auto-flush
+;       time when this setting is TRUE.  The default is FALSE.
+;
+;     AUTOFLUSH_SEC, real
+;
+;       Seconds to wait for no additional write activity before automatically
+;       performing a flush.  This value is irrelevant when AUTOFLUSH is FALSE.
+;       The default is 1 second.
+;
+;     NAME, string
+;
+;       Unique name to add to all exported symbols.  The default is the empty
+;       string, which results in the routine names as shown above.  When this
+;       constant is not the empty string, the global symbol names are changed
+;       from NVOL_xxx to NVOL_name_xxx.  For example, when NAME is "abc", then
+;       the routine to read a single byte becomes "nvol_abc_read" instead of
+;       "nvol_read".
+;
+;     NVOL_SHORTRW, bool
+;
+;       Cause the short address read/write routines to always be created, even
+;       when the non-volatile memory is larger than 65536 bytes.  In that case
+;       the short address routines only access the first 65536 bytes.  The long
+;       address routines are required for accessing the remaining non-volatile
+;       memory.
+;
+;   This module can be customized to the particular non-volatile memory
+;   available to the processor and how it is used.  Different library include
+;   files are used to support different non-volatile memory types.  Some of
+;   these include files support additional configuration constants or modify the
+;   usage of some of the constants listed above.
+;
+;   The available include files and their specific configuration constants are:
+;
+;     Include file NVOL_PROGB.INS.DSPIC
+;
+;       Uses a section of program memory.  All 3 bytes of each 24 bit program
+;       memory word are used.  Due to the size of program memory erase blocks,
+;       non_volatile memory comes in chunks of 1536 bytes.  Configuration
+;       constants are:
+;
+;       MNVBYTES
+;
+;         Must be the set to the minimum number of non-volatile memory bytes to
+;         emulate.
+;
+;       NVBYTES
+;
+;         The number of actual non-volatile bytes.  This is defined by the
+;         include file and must not be set here.  It will be MNVBYTES or more.
+;
+;       PROGSZ
+;
+;         The size of program memory in program memory address units.  Required.
+;
+;       ENDFREE
+;
+;         The number of erase blocks to not use at the end of program memory.
+;         The program memory non-volatile memory routines justify the block of
+;         program memory used to implement the non-volatile memory at the end of
+;         memory, minus the ENDFREE number.
+;
+;         The default is 1 if STARTADR is not defined.  Both ENDFREE and
+;         STARTADR may be defined, but a error results if they do not specify
+;         the same starting address.
+;
+;       STARTADR
+;
+;         The explicit program memory starting address of the non-volatile.
+;         This must be a multiple of the erase block size.
+;
+;         Both ENDFREE and STARTADR may be defined, but a error results if they
+;         do not specify the same starting address.  The default is ENDFREE = 1.
+;
+;       ERASESZ
+;
+;         The program memory erase block size in units of program memory words.
+;         The default is 512.
+;
+;       WRITESZ
+;
+;         The program memory write block size in units of program memory words.
+;         The default is 64.
+;
+;       NVMCON_ER
+;
+;         The NVMCON register value to erase one erase block.  The default is
+;         4042h.
+;
+;       NVMCON_WR
+;
+;         The NVMCON register value to write one write block.  The default is
+;         4001h.
+;
+;     Include file NVOL_EEINT.INS.DSPIC
+;
+;       Uses the internal EEPROM of the processor.  Configuration constants are:
+;
+;       MNVBYTES
+;
+;         Ignored.
+;
+;       NVBYTES
+;
+;         The internal EEPROM size in bytes.  Required.
+;
+;       USE_NVMADR
+;
+;         Boolean.  TRUE indicates that NVMADRU:NVMADR must be used to access
+;         the EEPROM address.  FALSE causes the TBLRD and TBLWR mechanism to be
+;         used to set the EEPROM address.  The default is TRUE.
+;
+;       ERASESZ
+;
+;         Erase block size in numbers of 16 bit words.  The default is 16.
+;
+;       WRITESZ
+;
+;         Write block size in numbers of 16 bit words.  The default is the
+;         ERASESZ value.
+;
+;     Include file NVOL_25LC1024.INS.DSPIC
+;
+;       External 25LC1024 EEPROM.  This EEPROM contains 131,072 bytes, and
+;       communicates over SPI.  This code assumes the SPI library routines to
+;       exist.
+;
+;       NDEVS, integer
+;
+;         Number of phyisical EEPROMs supported.  More than one EEPROM can be
+;         connected to the SPI bus to increase the overall memory size.  The
+;         default is 1.
+;
+;       SSPIN, string
+;
+;         The name of the SPI slave select pin to the EEPROM.  This pin must be
+;         defined as a output with negative polarity.  Required, no default.
+;
+;         This is the name directly when there is only a single EEPROM on the
+;         bus.  When there are multiple EEPROMs (NDEVS > 1), then this is the
+;         base name of all the slave select lines.  A number 1-NDEVS will be
+;         appended to the base name to make the name of the slave select line
+;         for a specific EEPROM.
+;
+;         For example if NDEVS is 1 and SSPIN is "abcd", then the macro
+;         "set_abcd_on" is assumed to assert the SPI slave select line to the
+;         single EEPROM.  If instead NDEVS is 3, then "set_abcd2_on" is assumed
+;         to assert the slave select line for the second of the three EEPROMs on
+;         the SPI bus.
+;
+;       BUSNAME, string
+;
+;         The extra name added to the SPI routines to use to access the EEPROM.
+;         This must match the NAME constant the SPI library routines are
+;         configured with, and may be the empty string.  The default is the
+;         empty string.
+;
+;       NVBYTES, integer
+;
+;         This value is set in the include file, and is derived from the size of
+;         each EEPROM and the number of EEPROMs.  It is permissible for this
+;         value to be set here, but then a build-time error results if the value
+;         is incorrect.
+;
+;     Include file NVOL_24xx32.INS.DSPIC
+;
+;       External 24AA32A and compatible EEPROM.  These EEPROMs communicate over
+;       IIC.  This code assumes the IIC library routines to exist.
+;
+;       EETYPE, string
+;
+;         Explicitly specifies the EEPROM type that is in use.  The supported
+;         choices and the defaults that result are:
+;
+;         24AA32A
+;
+;           NVBYTES = 4096
+;
+;         24LC32A
+;
+;           NVBYTES = 4096
+;
+;         The default is "24AA32A"
+;
+;       NVBYTES, integer
+;
+;         This value may be set to the size of the EEPROM in bytes.  If so, it
+;         must match the physical size of the EEPROM as defined by the EEPTYPE
+;         choice, above.  If not defined, it will be defined and set to the
+;         appropriate value.
+;
+;       DEVADR, integer
+;
+;         The 7-bit IIC bus address of the EEPROM device.  The default is the
+;         first or hard-wired address for the EEPROM type.
+;
+;       BUSNAME, string
+;
+;         The extra name added to the IIC routines to use to access the EEPROM.
+;         This must match the NAME constant the IIC library routines are
+;         configured with, and may be the empty string.  The default is the
+;         empty string.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration parameters.
+;
+/const   autoflush bool = False ;don't automatically flush some time after write
+/const   autoflush_sec real = 1.0 ;seconds after last write to automatically flush
+/const   name    = ""        ;unique name to add to exported symbols
+/const   nvol_shortrw bool = False ;short adr routines only when mem is small enough
+//
+//   Delete all but one of the following sections.  Each section is a template
+//   for using a different include file.  The settings unique to each include
+//   file are shown with their default values.
+
+//////////////////////////////
+//
+//   Using a section of program memory.
+//
+/const   mnvbytes integer = 1536 ;minimum number of non-volatile bytes needed
+/const   progsz  integer = 16#2C00 ;program memory size in program mem addresses
+/const   endfree integer = 1 ;erase blocks to leave free at end of prog mem
+/const   erasesz integer = 512 ;erase block size, prog mem addresses
+/const   writesz integer = 64 ;write block size, prog mem addresses
+/const   nvmcon_er integer = 16#4042 ;NVMCON value to erase one block
+/const   nvmcon_wr integer = 16#4001 ;NVMCON value to write one block
+
+/include "(cog)src/dspic/nvol_progb.ins.dspic" ;use program memory
+
+//////////////////////////////
+//
+//   Using internal EEPROM.
+//
+/const   nbbytes integer = 1024 ;EEPROM size, bytes
+/const   use_nvmadr bool = True ;adr set by NVMADRU:NVMADR, not TBLRD and TBLWR
+/const   erasesz integer = 16 ;erase block size, 16 bit words
+/const   writesz integer = erasesz ;write block size, 16 bit words
+
+/include "(cog)src/dspic/nvol_eeint.ins.dspic" ;use EEPROM internal to processor
+
+//////////////////////////////
+//
+//   Using external 25LC1024 EEPROM connected via SPI.  Multiple devices can be
+//   used to form one larger non-volatile memory.  Each device provides
+//   131,072 bytes.
+//
+/const   ndevs   integer = 1 ;number of EEPROM devices, 131,072 bytes each
+/const   sspin   = ""        ;name of SPI slave select pin(s)
+/const   busname = ""        ;unique name of SPI routines to use
+
+/include "(cog)src/dspic/nvol_25lc1024.ins.dspic" ;external SPI EEPROM
+
+//////////////////////////////
+//
+//   Using xternal 24xx32 compatible EEPROM connected via IIC.
+//
+/const   eetype  = "24AA32A" ;specific EEPROM type, 4096 bytes
+;/const   eetype = "24LC32A"  ;specific EEPROM type, 4096 bytes
+;/const   devadr integer = ?? ;EEPROM chip 7-bit IIC bus address
+/const   busname = ""        ;unique name of IIC routines to use
+
+/include "(cog)src/dspic/nvol_24xx32.ins.dspic" ;external IIC EEPROM
+
+;*******************************************************************************
+;
+;   Initial values for the non-volatile data.  The non-volatile data will be set
+;   to these values when the HEX file is programmed into the chip.
+;
+;   All the non-volatile bytes need not be defined here.  The remaining non-
+;   volatile bytes will be initialized to FFh.
+;
+;   The following macros can be used to define the initial value of the
+;   non-volatile memory:
+;
+;     [label] BYTE value
+;
+;       Defines the initial value for the next 8-bit byte.
+;
+;     [label] WORD value
+;
+;       Defines the intial value for the next 16-bit word.  The 16 bit word may
+;       be arbitrarily aligned.  The bytes are written in least to most
+;       significant order.
+;
+;     [label] FP32f fpval
+;
+;       Defines the initial value for the next four bytes.  These will represent
+;       a floating point number in Embed dsPIC fast 32 bit floating point
+;       format.  The bytes are written in least to most significant order, and
+;       may be arbitrarily aligned.
+;
+;     [label] NSTRING maxsize, "..."
+;
+;       Defines a character string.  The string format is a length byte followed
+;       by the characters of the string.  Each character takes one byte.  Since
+;       the length is limited to a single byte, this type of string can have a
+;       length of up to 255 characters.
+;
+;       MAXSIZE defines how much memory to reserve for the string.  This is the
+;       maximum number of characters the string can ever hold, regardless of how
+;       many are in the intial value string.  The second parameter (after
+;       MAXSIZE) is the initial value to set the string to.  The parameter is a
+;       preprocessor string.  The initial value comes from this string,
+;       including the length byte.  MAXSIZE is only used to determine how much
+;       memory to reserve, which will be MAXSIZE+1 bytes.  The initial value
+;       string may be omitted, in which case it defaults to the empty string.
+;
+;     [label] MNSTRING maxsize, "..."
+;
+;       Like NSTRING except that a additional maximum length byte is stored
+;       first.  In order, the bytes of this type of string are the maximum
+;       length, the current actual length, and then the data bytes.
+;
+;   In all cases, the macro invocation can be preceeded by a label name.  If so,
+;   the label is defined as the byte offset into the non-volatile memory of the
+;   first byte being defined.  The label is made global, which makes it visible
+;   outside this module.
+;
+
+;*******************************************************************************
+;
+;   Set the remaining non-volatile memory to the erased state.
+;
+/const   lused   integer = nextofs ;save number of used nvol bytes
+/block
+  /if [< nextofs nvbytes] then
+         byte    16#FF
+    /repeat
+    /endif
+  /endblock
+/show "  " lused " of " nvuser " non-volatile bytes used (" [rnd [* [/ lused nvuser] 100]] "%)"
+/if [> lused nvuser] then
+         .error  "Non-volatile memory overflow"
+         .end
+  /stop
+  /endif
+.end

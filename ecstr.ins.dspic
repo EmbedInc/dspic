@@ -1,0 +1,866 @@
+;   ***************************************************************
+;   * Copyright (C) 2013, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   EmCan byte stream handling.  This module relies on services in the EMCAN
+;   module, which implements the basic EmCan functions including the byte
+;   streams.  This module uses the byte streams interface exported by the EMCAN
+;   module to implement the byte stream command processor.  Although that is
+;   really part of EmCan, it is broken into two modules to keep the size of the
+;   individual modules down and to make maintanence easier.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+.equiv   stacksz, 128        ;command processing task stack size, bytes
+;
+;   Derived constants.
+;
+/if [not [exist "devman"]] then
+  /const devman string = ""
+  /endif
+/if [not [exist "devmod"]] then
+  /const devmod string = ""
+  /endif
+/if [not [exist "devdesc"]] then
+  /const devdesc string = ""
+  /endif
+/if [not [exist "devuse"]] then
+  /const devuse string = ""
+  /endif
+/if [not [exist "emcan_nvol_write"]] then
+  /const emcan_nvol_write string = ""
+  /endif
+/if [not [exist "emcan_nvol_read"]] then
+  /const emcan_nvol_read string = ""
+  /endif
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_ecstr, bss
+
+allocg   ecstrbuf, 256, 2    ;per-command scratch buffer
+
+;*******************
+;
+;   Local state.
+;
+alloc    stack_ecstr, stacksz, 2 ;command processing task stack
+
+
+.section .code_ecstr, code
+;*******************************************************************************
+;
+;   Subroutine ECSTR_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  ecstr_init
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_START
+;
+;   Start the EmCan byte stream processing task.
+;
+         glbsub  ecstr_start, regf13 | regf14
+
+         mov     #stacksz, w13 ;pass new task stack size
+         mov     #stack_ecstr, w14 ;pass stack start address
+         call    task_new    ;create EmCan stream processing task
+         goto    ecstr_task  ;go to execution start of the new task
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_LOCK_OUT
+;
+;   Lock the output stream for this command processing task.  The output stream
+;   must be locked by command processing routines before sending any responses.
+;
+         glbsub  ecstr_lock_out
+
+         gjump   emcan_lock
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_UNLOCK_OUT
+;
+;   Release any command output stream lock held by this command processing task.
+;
+         glbsub  ecstr_unlock_out
+
+         gjump   emcan_unlock_all
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_GET8
+;
+;   Get the next 8 bit byte from the command input stream into W0.  This routine
+;   waits indefinitely until a byte is available.  This routine may only be
+;   called from the EmCan stream processing task.  It is made external so that
+;   command processing routines can be implemented in other modules.
+;
+;   This routine will jump to ECSTR_DONE if the EmCan input stream was reset.
+;   When the stream is reset, any sequence in progress is effectively aborted,
+;   and the next received byte will be the opcode of a new command.
+;
+         glbsub  ecstr_get8
+
+         gcall   emcan_get   ;get next byte or stream reset indication
+         btsc    w0, #15     ;stream was not reset ?
+         jump    ecstr_done  ;was reset, reset our command processing logic too
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_GET16
+;
+;   Get the next two bytes from the command input stream as a 16 bit value into
+;   W0.  The bytes are assumed to be in most to least significant order.
+;
+         glbsub  ecstr_get16, regf1
+
+         mcall   ecstr_get8  ;get the high byte into W0
+         sl      w0, #8, w1  ;save it in W1 in the right position
+         mcall   ecstr_get8  ;get the low byte into W0
+         ior     w1, w0, w0  ;assemble the 16 bit word in W0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_GET24
+;
+;   Get the next three bytes from the command input stream as a 24 bit value
+;   into W1:W0.  The bytes are assumed to be in most to least significant order.
+;
+         glbsub  ecstr_get24, regf2
+
+         mcall   ecstr_get8  ;get the high byte into W1
+         mov     w0, w1
+
+         mcall   ecstr_get8
+         sl      w0, #8, w2  ;save high byte of low word
+         mcall   ecstr_get8  ;get low byte of low word
+         ior     w0, w2, w0  ;assemble the low word in W0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_GET32
+;
+;   Get the next four bytes from the command input stream as a 32 bit value into
+;   W1:W0.  The bytes are assumed to be in most to least significant order.
+;
+         glbsub  ecstr_get32
+
+         mcall   ecstr_get16 ;get the high word
+         mov     w0, w1
+         mcall   ecstr_get16 ;get the low word
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_GET_STRING
+;
+;   Read a text string from the input stream.  The next input stream byte must
+;   be the string length, followed by exactly that many bytes.  The entire
+;   string, starting with the length byte, is read into the command scratch
+;   buffer ECSTRBUF.  The maximum number of bytes written to ECSTRBUF is 256,
+;   which is the length byte plus 255 string bytes.
+;
+         glbsub  ecstr_get_string, regf0 | regf1 | regf2
+
+         mov     #ecstrbuf, w1 ;init pointer to where to write next byte
+
+         mcall   ecstr_get8  ;get number of string data bytes
+         mov.b   w0, [w1++]  ;save length as first byte in buffer
+         mov     w0, w2      ;init number of bytes left to do
+
+gstr_byte:                   ;back here each new string byte
+         cp0     w2
+         bra     z, gstr_leave ;all done ?
+         mcall   ecstr_get8  ;get this string data byte
+         mov.b   w0, [w1++]  ;write it as next byte into the buffer
+         sub     #1, w2      ;count one less byte left to do
+         jump    gstr_byte   ;back to do the next byte
+
+gstr_leave:                  ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_PUT8
+;
+;   Write the byte in the low 8 bits of W0 to the response stream for this
+;   command processing task.
+;
+         glbsub  ecstr_put8
+
+         gjump   emcan_put
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_PUT16
+;
+;   Write the 16 bit word in W0 to the response stream.  The bytes are written
+;   in most to least significant order.
+;
+         glbsub  ecstr_put16
+
+         swap    w0
+         mcall   ecstr_put8  ;send the high byte
+         swap    w0
+         mcall   ecstr_put8  ;send the low byte
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_PUT24
+;
+;   Write the low 24 bits of W1:W0 to the response stream.  The bytes are
+;   written in most to least significant order.
+;
+         glbsub  ecstr_put24
+
+         exch    w0, w1
+         mcall   ecstr_put8
+         exch    w0, w1
+
+         swap    w0
+         mcall   ecstr_put8  ;send the high byte
+         swap    w0
+         mcall   ecstr_put8  ;send the low byte
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_PUT32
+;
+;   Write the 32 bit word in W1:W0 to the response stream.  The bytes are
+;   written in most to least significant order.
+;
+         glbsub  ecstr_put32
+
+         exch    w0, w1
+         mcall   ecstr_put16 ;send the high word
+         exch    w0, w1
+         mcall   ecstr_put16 ;send the low word
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_READ_PBYTE
+;
+;   Read the next sequential byte of program memory.  The program memory word
+;   address to read from is in the low 24 bits of W2:W1.  The high byte of W2
+;   contains the 0-2 byte number within the program memory word.  The state in
+;   W2:W1 is updated to the next sequential byte.  Sequential calls to this
+;   routine will therefore return sequential bytes from program memory as long
+;   as W1 and W2 are not altered between calls.
+;
+;   The program memory byte value is returned in W0.
+;
+         glbsub  ecstr_read_pbyte
+
+         mov     w2, w0      ;set high address bits
+         and     #0x7F, w0
+         mov     w0, Tblpag
+
+         btsc    w2, #9      ;not the high byte ?
+         jump    rdpb2       ;is the high byte
+;
+;   Read either the first or second bytes.  These are both in the low word.
+;
+         tblrdl  [w1], w0    ;get both bytes
+         btsc    w2, #8      ;low byte ?
+         swap    w0          ;high byte
+         ze      w0, w0
+         add     #256, w2    ;advance to next byte next time
+         return
+;
+;   Read the high byte.
+;
+rdpb2:
+         tblrdh  [w1], w0    ;read the byte
+         add     #2, w1      ;advance to the next program memory word
+         addc    #0, w2
+         and     #0x7F, w2   ;init to read byte 0 in this new word
+         return
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_PUT_PSTRING
+;
+;   Write a string from program memory to the output stream.  The string will be
+;   sent starting with the length byte, followed by exactly that many character
+;   bytes.  The string is assumed to be in program memory in the same format.
+;   It starts in the low byte of a program memory word, which is the number of
+;   characters in the string.  Exactly that many bytes follow the length byte.
+;
+;   The address of the first program memory word of the string is passed in
+;   W2:W1.
+;
+;   The caller must be holding the output stream writing lock.
+;
+         glbsub  ecstr_put_pstring, regf0 | regf1 | regf2 | regf3
+
+         bclr    w1, #0      ;sanitize address to ensure start of prog word
+         and     #0x7F, w2
+
+         mcall   ecstr_read_pbyte ;get the length byte into W0
+         mcall   ecstr_put8  ;send it
+         cp0     w0
+         bra     z, ppstr_leave ;length is zero, nothing more to do ?
+
+         mov     w0, w3      ;init number of bytes left do
+ppstr_byte:                  ;back here each new byte
+         mcall   ecstr_read_pbyte ;get this character into W0
+         mcall   ecstr_put8  ;send it
+         sub     #1, w3      ;count one less character left to do
+         bra     nz, ppstr_byte ;back to do next byte
+
+ppstr_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_PUT_NSTRING
+;
+;   Write a string from non-volatile memory to the output stream.  The string
+;   will be sent starting with the length byte, followed by exactly that many
+;   character bytes.  The string is assumed to be in non-volatile memory
+;   starting with the storage size byte, then the current length byte, then the
+;   data bytes.  The storage size is not relevant when reading the string from
+;   the non-volatile memory, so is skipped.
+;
+;   The starting address of the string in non-volatile memory is passed in
+;   W2:W1.  This address can be FFFFFFh to indicate the string does not exist.
+;   In that case, the empty string is sent, which is simply a single zero byte.
+;
+;   The caller must be holding the output stream writing lock.
+;
+/if [= emcan_nvol_read ""]
+  /then                      ;can't read from non-volatile memory
+         glbsub  ecstr_put_nstring, regf0
+         mov     #0, w0
+         mcall   ecstr_put8  ;send the empty string
+         leaverest
+
+  /else                      ;we can read from non-volatile memory
+         glbsub  ecstr_put_nstring, regf0 | regf1 | regf2 | regf3
+;
+;   Check for invalid address.  If so, send just the zero length byte and leave.
+;
+         lsr     w1, #8, w0  ;init low byte of W0 with middle address byte
+         and     w0, w1, w0  ;AND with low byte
+         and     w0, w2, w0  ;AND with the high byte
+         and     #0xFF, w0   ;mask in just the AND of the three adr bytes
+         sub     #0xFF, w0   ;compare to all bits 1
+         bra     nz, pnstr_vadr ;at least one 0 bit, address is valid
+         ;
+         ;   The address is FFFFFFh, indicating the string does not exist.
+         ;   W0 contains 0.
+         ;
+         mcall   ecstr_put8  ;send the 0 string length byte
+         jump    pnstr_leave ;done sending the (empty) string
+;
+;   The non-volatile memory address in W2:W1 is valid.
+;
+pnstr_vadr:
+         gcall   [chars emcan_nvol_read] ;skip the storage length byte
+
+         gcall   [chars emcan_nvol_read] ;get the string length into W0
+         mcall   ecstr_put8  ;send the string length byte
+
+         mov     w0, w3      ;init number of bytes left to do
+pnstr_byte:                  ;back here each new string byte
+         cp0     w3
+         bra     z, pnstr_leave ;done all the string bytes ?
+         gcall   [chars emcan_nvol_read] ;get this string byte
+         mcall   ecstr_put8  ;send it
+         sub     #1, w3      ;count one less byte left to do
+         jump    pnstr_byte  ;back to do the next byte
+
+pnstr_leave:                 ;common exit point
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine ECSTR_WRITE_NSTRING
+;
+;   Write the string in the temporary commands buffer ECSTRBUF to non-volatile
+;   memory at the address in W2:W1.  The first byte of the temp buffer contains
+;   the number of string bytes, with that many valid bytes following.
+;
+;   The non-volatile memory start address is passed in W2:W1.  The first byte is
+;   the maximum string length, then the actual current string length, then as
+;   many bytes as indicated by the first byte.  W2:W1 may contain FFFFFFh to
+;   indicate that no non-volatile storage exists for the string.  Nothing will
+;   be done in that case.  The unit must be in configuration state for the
+;   string to be written.
+;
+/if [or [= emcan_nvol_read ""] [= emcan_nvol_write ""]]
+  /then                      ;can't access non-volatile memory
+         glbsub  ecstr_write_nstring
+         leaverest
+
+  /else                      ;we have access to non-volatile memory
+         glbsub  ecstr_write_nstring, regf0 | regf1 | regf2 | regf3 | regf4
+
+         skip_flag emcan_config ;in configuration state ?
+         jump    wstr_leave  ;no, ignore the write request
+
+         lsr     w1, #8, w0  ;init low byte of W0 with middle address byte
+         and     w0, w1, w0  ;AND with low byte
+         and     w0, w2, w0  ;AND with the high byte
+         and     #0xFF, w0   ;mask in just the AND of the three adr bytes
+         sub     #0xFF, w0   ;compare to all bits 1
+         bra     z, wstr_leave ;no non-volatile storage supplied for this string ?
+
+         gcall   [chars emcan_nvol_read] ;get maximum string length into W0
+         mov     #ecstrbuf, w3 ;init pointer to next buffer byte to read
+         ze      [w3++], w4  ;get length of the supplied string
+         cp      w4, w0      ;compare length of this string to maximum
+         skip_leu            ;string fits in nvol mem as is ?
+         mov     w0, w4      ;no, set length to maximum room in nvol memory
+
+         mov     w4, w0      ;write the new length byte
+         gcall   [chars emcan_nvol_write]
+;
+;   Register usage:
+;
+;     W0  -  Data byte.
+;
+;     W2:W1  -  Non-volatile memory address.
+;
+;     W3  -  Pointer to next string byte in the temp commands buffer.
+;
+;     W4  -  Number of bytes left to do.
+;
+wstr_byte:                   ;back here each new string byte
+         cp0     w4
+         bra     z, wstr_dbytes ;done with all the string bytes ?
+         mov.b   [w3++], w0  ;fetch this string byte from the temp buffer
+         gcall   [chars emcan_nvol_write] ;write it to the non-volatile memory
+         sub     #1, w4      ;count one less byte left to do
+         jump    wstr_byte   ;back to do the next byte
+wstr_dbytes:                 ;done with all the string bytes
+
+         gcall   emcan_wrotenv ;indicate non-volatile memory written, will flush
+
+wstr_leave:                  ;common exit point for nvol write available case
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Routine ECSTR_TASK
+;
+;   This code is run in a separate task.  The task reads the command stream,
+;   processes the commands, and possibly sends responses.
+;
+ecstr_task:                  ;task starts here
+;
+;   Return point after done executing a command.  Command routines can jump here
+;   from nested subroutines or with data on the stack.  The stack will be reset
+;   to empty before any further processing.
+;
+         glbent  ecstr_done
+         disi    #1
+         mov     #stack_ecstr, w15 ;reset the stack to empty
+         mcall   ecstr_unlock_out ;make sure this task is not holding output lock
+;
+;   Flush the output stream if there is any buffered data and there is not more
+;   data for us to immediately process.
+;
+         skip_nflag emcan_inbyte ;nothing more to process right now ?
+         jump    ecstr_dflush ;more stuff to do immediately, don't flush now
+
+         gcall   emcan_flush ;force any buffered output stream data to be sent
+
+ecstr_dflush:                ;done flushing output stream
+;
+;   Get and process the next command.
+;
+         mcall   ecstr_get8  ;get the opcode byte into W0
+
+         mov     #tbloffset(ecstr_done), w1 ;put ECSTR_DONE as return address onto stack
+         mov     w1, [w15++]
+         mov     #tblpage(ecstr_done), w1
+         mov     w1, [w15++]
+
+         mov     #tbloffset(ecstr_tbl), w1 ;get command table address into W2:W1
+         mov     #tblpage(ecstr_tbl), w2
+         sl      w0, #1, w3  ;make offset into table for this opcode
+         add     w1, w3, w1  ;make table entry address in W2:W1
+         addc    #0, w2
+         mov     w2, Tblpag  ;set high bits of program memory address to fetch
+         tblrdl  [w1], w3    ;get command routine address into W4:W3
+         tblrdh  [w1], w4
+         and     #0x7F, w4
+         ior     w3, w4, w5
+         bra     z, ecstr_done ;empty table entry, nothing to do ?
+         push    w3          ;push the dispatch address onto the stack
+         push    w4
+         return              ;jump to the address just pushed onto the stack
+
+;*******************************************************************************
+;
+;   Command CMDS
+;
+;   Sends the CMDS response, which indicates which commands are implemented.
+;
+ecscm_cmds:
+         mcall   ecstr_lock_out ;acquire exclusive lock on response stream
+
+         mov     #1, w0      ;send the CMDS opcode
+         mcall   ecstr_put8
+;
+;   Loop over all table entries, and send a byte indicating which commands are
+;   implemented every 8 table entries.  Register usage:
+;
+;     W0  -  Data byte.
+;
+;     W1  -  Number of table entries left to do.
+;
+;     W2  -  Number of entries left in the current byte.
+;
+;     W4:W3  -  Start address of next table entry.
+;
+;     W6:W5  -  Data read from table entry.
+;
+         mov     #256, w1    ;init number of table entries left to read
+         mov     #8, w2      ;init number of entries left to do in current byte
+         mov     #tbloffset(ecstr_tbl), w3 ;init W4:W3 with first table entry address
+         mov     #tblpage(ecstr_tbl), w4
+         and     #0x7F, w4
+
+cmds_entry:                  ;back here each new table entry
+         lsr.b   w0, w0      ;make new bit for this command, init to unimplememted
+         mov     w4, Tblpag  ;set high bits of address to read from
+         tblrdl  [w3], w5    ;read table entry low word
+         tblrdh  [w3], w6    ;read table entry high word
+         ior     w5, w6, w5  ;zero if this table entry is empty
+         skip_z              ;not implemented, leave bit 0 ?
+         bset    w0, #7      ;implemented, set bit for this command to 1
+
+         add     #2, w3      ;advance to address of next table entry
+         addc    #0, w4
+         sub     #1, w2      ;count one less bit left in current byte
+         bra     nz, cmds_nsend ;not time to send byte now ?
+         mcall   ecstr_put8  ;send this data byte
+         mov     #8, w2      ;reset number of bits until next send
+cmds_nsend:                  ;skip to here to not send byte this time
+
+         sub     #1, w1      ;count one less table entry
+         bra     nz, cmds_entry ;back to do next table entry
+
+         jump    ecstr_done  ;done with this command
+
+;*******************************************************************************
+;
+;   Command DEVMAN
+;
+;   Send the DEVMAN response, which provides the manufacturer name.
+;
+ecscm_devman:
+         mcall   ecstr_lock_out ;acquire exclusive lock on response stream
+
+         mov     #2, w0      ;send the DEVMAN opcode
+         mcall   ecstr_put8
+
+         mov     #tbloffset(str_devman), w1
+         mov     #tblpage(str_devman), w2
+         jump    ecstr_put_pstring ;send the string
+
+;*******************************************************************************
+;
+;   Command DEVMOD
+;
+;   Send the DEVMOD response, which provides the model name of this device.
+;
+ecscm_devmod:
+         mcall   ecstr_lock_out ;acquire exclusive lock on response stream
+
+         mov     #3, w0      ;send the DEVMOD opcode
+         mcall   ecstr_put8
+
+         mov     #tbloffset(str_devmod), w1
+         mov     #tblpage(str_devmod), w2
+         jump    ecstr_put_pstring ;send the string
+
+;*******************************************************************************
+;
+;   Command DEVDESC
+;
+;   Send the DEVDESC response, which provides the manufacturer's device
+;   description.
+;
+ecscm_devdesc:
+         mcall   ecstr_lock_out ;acquire exclusive lock on response stream
+
+         mov     #4, w0      ;send the DEVDESC opcode
+         mcall   ecstr_put8
+
+         mov     #tbloffset(str_devdesc), w1
+         mov     #tblpage(str_devdesc), w2
+         jump    ecstr_put_pstring ;send the string
+
+;*******************************************************************************
+;
+;   Command DEVUSE
+;
+;   Send the DEVUSE response, with provides the user-defined device description.
+;
+ecscm_devuse:
+         mcall   ecstr_lock_out ;acquire exclusive lock on response stream
+
+         mov     #5, w0      ;send the DEVUSE opcode
+         mcall   ecstr_put8
+
+/if [= devuse ""]
+  /then                      ;no storage for the usage string
+         mov     #0, w0      ;send the empty string
+         mcall   ecstr_put8
+         return              ;done
+
+  /else                      ;we have non-volatile address of the usage string
+         mov     #tblpage(useadr), w0 ;set high word of program memory address
+         and     #0x7F, w0
+         mov     w0, Tblpag
+         mov     #tbloffset(useadr), w0 ;get low word of program memory address
+         tblrdl  [w0], w1    ;read the non-volatile mem address into W2:W1
+         tblrdh  [w0], w2
+         jump    ecstr_put_nstring ;send the string, then done with command
+  /endif
+
+;*******************************************************************************
+;
+;   Command PORTDESC firstport nports
+;
+;   Send a PORTDESC response for every defined port in the range from FIRSTPORT
+;   to LASTPORT.
+;
+ecscm_portdesc:
+         mcall   ecstr_get16 ;init current port number in W14
+         mov     w0, w14
+         mcall   ecstr_get16 ;init number of ports left to do in W11
+         mov     w0, w11
+
+prtdesc_port:                ;back here each new port
+         gcall   emcan_nports ;get number of ports in W0
+         cp      w14, w0
+         skip_ltu            ;the port number in W14 is within range ?
+         return              ;no, all done
+
+         mov     #6, w0      ;send PORTDESC response opcode
+         mcall   ecstr_put8
+         mov     w14, w0     ;send the port number
+         mcall   ecstr_put16
+         gcall   emcan_port_desc ;point W13:W12 to port description string
+         mov     w12, w1     ;pass string address in W2:W1
+         mov     w13, w2
+         mcall   ecstr_put_pstring ;send the string
+
+         add     #1, w14     ;advance to next port number
+         sub     #1, w11     ;count one less port left to do
+         bra     nz, prtdesc_port ;back to do the next port
+         return              ;done with all the requested ports
+
+;*******************************************************************************
+;
+;   Command PORTUSE firstport nports
+;
+;   Send a PORTUSE response for every defined port in the range from FIRSTPORT
+;   to LASTPORT.
+;
+ecscm_portuse:
+         mcall   ecstr_get16 ;init current port number in W14
+         mov     w0, w14
+         mcall   ecstr_get16 ;init number of ports left to do in W11
+         mov     w0, w11
+
+prtuse_port:                 ;back here each new port
+         gcall   emcan_nports ;get number of ports in W0
+         cp      w14, w0
+         skip_ltu            ;the port number in W14 is within range ?
+         return              ;no, all done
+
+         mov     #7, w0      ;send PORTUSE response opcode
+         mcall   ecstr_put8
+         mov     w14, w0     ;send the port number
+         mcall   ecstr_put16
+         gcall   emcan_port_useadr ;get nvol address of usage string into W2:W1
+         mcall   ecstr_put_nstring ;send the string
+
+         add     #1, w14     ;advance to next port number
+         sub     #1, w11     ;count one less port left to do
+         bra     nz, prtuse_port ;back to do the next port
+         return              ;done with all the requested ports
+
+;*******************************************************************************
+;
+;   Command SETDUSE n string
+;
+;   Set the non-volatile device usage description string.  This command is
+;   ignored if no non-volatile storage is provided for the usage string, or if
+;   the unit is not in configuration state.
+;
+ecscm_setduse:
+/if [= devuse ""]
+  /then                      ;no storage for the usage string
+         jump    ecstr_get_string ;read the string and end the command
+
+  /else                      ;storage for the device usage string exists
+         mcall   ecstr_get_string ;read the string into the temp buffer
+
+         mov     #tblpage(useadr), w0 ;set high word of program memory address
+         and     #0x7F, w0
+         mov     w0, Tblpag
+         mov     #tbloffset(useadr), w0 ;get low word of program memory address
+         tblrdl  [w0], w1    ;read the non-volatile mem address into W2:W1
+         tblrdh  [w0], w2
+
+         jump    ecstr_write_nstring ;read string, write to nvol mem, end the command
+  /endif
+
+;*******************************************************************************
+;
+;   Command SETPUSE port n string
+;
+;   Set the non-volatile usage description string of a port.  This command is
+;   ignored if the port is not implemented, no non-volatile storate is provided
+;   for the string, or the unit is not in configuration state.
+;
+ecscm_setpuse:
+         mcall   ecstr_get16 ;get the port number into W14
+         mov     w0, w14
+         mcall   ecstr_get_string ;read the string into the temp commands buffer
+
+         gcall   emcan_nports ;get number of implemented ports into W0
+         cp      w14, w0
+         skip_ltu            ;this port number is within range ?
+         return              ;no, nothing more to do
+
+         gcall   emcan_port_useadr ;get nvol usage string adr into W2:W1
+         jump    ecstr_write_nstring ;write the string and end the command
+
+;*******************************************************************************
+;
+;   Constants in program memory.
+;
+str_devman pgstring [v devman] ;manufacturer name
+str_devmod pgstring [v devmod] ;model name
+str_devdesc pgstring [v devdesc] ;device description
+
+/if [<> devuse ""] then
+useadr:  .pword  [chars devuse] ;usage string nvol address
+  /endif
+
+;*******************************************************************************
+;
+;   Commands dispatch table.  There is one table entry for each possible 0 - 255
+;   command opcode.  Each table entry uses one program memory word (24 bits),
+;   and contains the address of the command processing routine for that opcode.
+;
+;   Only the table entries for the EmCan reserved commands are in this file.  It
+;   is intended that the application-specific entries immediately follow the
+;   include directive to this file, and thereby define the rest of the table.
+;
+ecstr_tbl:
+         .pword  ecstr_done  ;0 - NOP, command explicitly ignored
+         .pword  ecscm_cmds  ;1 - CMDS, indicate which commands are implemented
+         .pword  ecscm_devman ;2 - DEVMAN, send manufacturer name
+         .pword  ecscm_devmod ;3 - DEVMOD, send model name
+         .pword  ecscm_devdesc ;4 - DEVDESC, send product description
+         .pword  ecscm_devuse ;5 - DEVUSE, send user description of device
+         .pword  ecscm_portdesc ;6 - PORTDESC, send description of range of ports
+         .pword  ecscm_portuse ;7 - PORTUSE, send user description of range of ports
+         .pword  ecscm_setduse ;8 - SETDUSE, set device usage description string
+         .pword  ecscm_setpuse ;9 - SETPUSE, set usage string for a port
+         .pword  emcan_sync  ;10 - SYNC, indicate start of next response
+         .pword  0           ;11
+         .pword  0           ;12
+         .pword  0           ;13
+         .pword  0           ;14
+         .pword  0           ;15
+         .pword  0           ;16
+         .pword  0           ;17
+         .pword  0           ;18
+         .pword  0           ;19
+         .pword  0           ;20
+         .pword  0           ;21
+         .pword  0           ;22
+         .pword  0           ;23
+         .pword  0           ;24
+         .pword  0           ;25
+         .pword  0           ;26
+         .pword  0           ;27
+         .pword  0           ;28
+         .pword  0           ;29
+         .pword  0           ;30
+         .pword  0           ;31
+         .pword  0           ;32
+         .pword  0           ;33
+         .pword  0           ;34
+         .pword  0           ;35
+         .pword  0           ;36
+         .pword  0           ;37
+         .pword  0           ;38
+         .pword  0           ;39
+         .pword  0           ;40
+         .pword  0           ;41
+         .pword  0           ;42
+         .pword  0           ;43
+         .pword  0           ;44
+         .pword  0           ;45
+         .pword  0           ;46
+         .pword  0           ;47
+         .pword  0           ;48
+         .pword  0           ;49
+         .pword  0           ;50
+         .pword  0           ;51
+         .pword  0           ;52
+         .pword  0           ;53
+         .pword  0           ;54
+         .pword  0           ;55
+         .pword  0           ;56
+         .pword  0           ;57
+         .pword  0           ;58
+         .pword  0           ;59
+         .pword  0           ;60
+         .pword  0           ;61
+         .pword  0           ;62
+         .pword  0           ;63

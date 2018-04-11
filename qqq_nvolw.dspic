@@ -1,0 +1,171 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   The non volatile memory as presented here is organized into words of 16 bits
+;   each.  Whole 16 bit words are always read or written, and each word occupies
+;   one address.  The non-volatile words are at sequential addresses starting at
+;   0.
+;
+;   The following procedural interface to the non-volatile memory of this system
+;   is exported:
+;
+;     NVOL_INIT
+;
+;       Must be the first call to this module.  Normally called from the STRT
+;       module during module-level initialization.
+;
+;     NVOL_READ
+;
+;       Read the non-volatile word at the address in W1 into W0.  Results are
+;       undefined when W1 contains a address past the end of the non-volatile
+;       words.  W1 is incremented by one.  Successive calls to this routine
+;       therefore return successive non-volatile words.
+;
+;     NVOL_WRITE
+;
+;       Write the word in W0 to the non-volatile address in W1.  W1 will be
+;       incremented by one.  Successive calls to this routine therefore write to
+;       successive non-volatile words.  The write is not performed if W1
+;       indicates a address past the end of the non-volatile memory.
+;
+;       Data written with this routine may be cached.  Cached data is not
+;       guaranteed to be written to the physical non-volatile memory until
+;       NVOL_FLUSH is called.
+;
+;     NVOL_FLUSH
+;
+;       Make sure any cached data is physically written to the non-volatile
+;       memory.  Some information may be locally cached in this module by
+;       NVOL_WRITE.  Until this routine is called, there is no guarantee that
+;       all data written with NVOL_WRITE is physically committed to the
+;       non-volatile memory.  However, all data written with NVOL_WRITE will be
+;       immediately reflected by NVOL_READ, whether locally cached or written to
+;       the physical memory or not.  After NVOL_FLUSH returns, all current data
+;       will be recoverable after a power down.
+;
+;   This module can be customized to the particular non-volatile memory
+;   available to the processor and how it is used.  Different libray include
+;   files are available for various implementations.  These include files are:
+;
+;     NVOL_PROGW.INS.DSPIC
+;
+;       Uses a section of program memory.  Only the low 16 bits of each 24 bit
+;       program memory word is used.  This is faster than using every byte, but
+;       uses the memory less efficiently.  Due to the size of program memory
+;       erase blocks, non-volatile memory comes in chunks of 512 words.
+;
+;   The following preprocessor constants configure this module.  Note that some
+;   may be required:
+;
+;     NAME, string
+;
+;       Unique name for the exported symbols.  May be the empty string.  This
+;       string is inserted after "NVOL_" in each exported symbol name.  For
+;       example, the routine NVOL_READ will be called NVOL_XYZ_READ when NAME is
+;       set to "xyz".  This mechanism is intended for supporting multiple NVOL
+;       subystems.  This would generally be the empty string when only one
+;       non-volatile memory system is used.  Default is the empty string.
+;
+;     NVWORDS, integer
+;
+;       This is either the minimum number of non-volatile bytes to present to
+;       the application, or the actual size of the non-volatile memory.
+;       Depending on the implementation therefore, this constant either tells
+;       the remaining code how much memory to emulate or how much is actually
+;       available.  In cases where the routines have a choice as to how much
+;       non-volatile memory to emulate, this becomes the minimum guaranteed
+;       value.  The actual value may then be higher, depending on block sizes
+;       of the memory architecture and the like.  In either case, this
+;       constant is always required.
+;
+;     PROGSZ, integer
+;
+;       The size of program memory in program memory address units.  This
+;       constant is only required when non-volatile memory is emulated by using
+;       program memory.
+;
+;     ENDFREE, integer
+;
+;       Only used when implementing the non-volatile memory by using blocks of
+;       program memory.  This is the number of erase blocks to not use at the
+;       end of program memory.  The program memory non-volatile memory routines
+;       justify the block of program memory used to the end of memory minus the
+;       ENDFREE number.  The default is 0.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration parameters.
+;
+/const   name    string = "" ;unique name for exported symbols, may be empty
+/const   nvwords integer = 512 ;number of non-volatile words to emulate
+/const   progsz  integer = 16#2C00 ;program memory size in program mem addresses
+/const   endfree integer = 0 ;erase blocks to leave free after NVOL area
+
+/include "(cog)src/dspic/nvol_progw.ins.dspic"
+
+;*******************************************************************************
+;
+;   Initial values for the non-volatile data.  The non-volatile data will be set
+;   to these values when the HEX file is programmed into the chip.
+;
+;   All the non-volatile words need not be defined here.  The remaining non-
+;   volatile words will be initialized to FFFFh.
+;
+;   Use the WORD and FP32F macros (details in the NVOL_PROG.INS.DSPIC include
+;   file) to define the non-volatile initial values.  Briefly, the macros are:
+;
+;     [label] WORD value
+;
+;       Defines the next 16 bit word.
+;
+;     [label] FP32F fpval
+;
+;       Defines the next two 16 bit words as a floating point value in Embed
+;       dsPIC fast floating point format.  The least significant word is written
+;       first.
+;
+;   In either case, the macro invocation can be preceeded by a label name.  In
+;   that case, the label is defined as the word offset into the non-volatile
+;   memory of the first word being defined, and the label is made global so that
+;   it is visible outside this module.
+;
+.section .code_nvol_data, code, address([chars "0x" [int stadr "base 16 usin"]])
+
+nvol:                        ;start of non-volatile data in program memory
+
+;
+;   Use the various macros described above to define initial values for
+;   non-volatile memory words as desired.
+;
+
+;*******************
+;
+;   Set the initial value of the remaining non-volatile memory words to FFFFh.
+;
+/const   lused   integer = nextofs ;save number of used nvol words
+
+/block
+  /if [< nextofs nvolnw] then
+         word    16#FFFF
+    /repeat
+    /endif
+  /endblock
+
+/show "  " lused " of " nvolnw " non-volatile words used (" [rnd [* [/ lused nvolnw] 100]] "%)"
+
+.end

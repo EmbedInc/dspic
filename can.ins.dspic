@@ -1,0 +1,692 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   CAN bus interface routines.  This version drives the original dsPIC 30F CAN
+;   peripheral described in the 30F Family Reference Manual chapter 23.
+;
+;   The exported routines are briefly listed here.  See the header comments of
+;   each routine for details.
+;
+;     CAN_INIT  -  One-time module initialization.  Must be first call after
+;       reset.
+;
+;     CAN_START  -  Sets up the CAN hardware ready for use, and also starts the
+;       CAN receiving thread.
+;
+;     CAN_SEND_INIT  -  Initialize the pending transmit frame state.  Must be
+;       first call for sending any new CAN frame.  W0 contains flags that
+;       indicate standard versus extended and data versus remote request frame.
+;
+;     CAN_SEND_ID  -  Sets the frame ID in the pending transmit frame state.
+;
+;     CAN_SEND_DAT  -  Adds a data byte to the pending transmit frame state.
+;
+;     CAN_SEND  -  Sends the frame described by the current transmit frame
+;       state.
+;
+;   The following global flags must be defined before this file:
+;
+;     FLAG_CANIN  -  Automatically set by the CAN receiving task in this module
+;       whenever a new CAN frame is received.  The CAN frame data will be in the
+;       global CANIN_xxx variables.  This state is only valid when FLAG_CANIN is
+;       set.  New received CAN frames will be held and will not overwrite the
+;       CANIN_xxx state until FLAG_CANIN is cleared.  This flag must be cleared
+;       by application code outside this file when done with the CANIN_xxx state
+;       for the current frame to allow new CAN frames to be received.
+;
+;     FLAG_CANIN_EXT  -  Indicates the current received CAN frame is in extended
+;       format (29 bit ID) as apposed to standard format (11 bit ID).  This flag
+;       is read-only outside this file, and is only valid while FLAG_CANIN is
+;       set.
+;
+;     FLAG_CANIN_RTR  -  Indicates the current received CAN frame is a remote
+;       request as apposed to a data frame.  This flag is read-only outside this
+;       file, and is only valid while FLAG_CANIN is set.
+;
+;     FLAG_CANSEND  -  Part of the mutex mechanism to guarantee a single task at
+;       a time is building and sending a CAN frame.  Managed in this module, but
+;       may be examined by external code to see if the CAN sending mechanism is
+;       currently acquired by another task and therefore whether CAN_SEND_INIT
+;       will stall for a while if called immediately.
+;
+;   The following values can be defined before this file is included:
+;
+;     BITRATE  -  Preprocessor constant, type REAL.  The desired CAN bit rate in
+;       bits per second.  Default = 500 Kbits/second.
+;
+;     CANIN_CALLBACK  -  Preprocessor constant, type STRING.  Name of routine to
+;       call from internal CAN thread when a CAN frame is received.  No routine
+;       is called when this constant is blank.  Default = blank (no received CAN
+;       frame callback routine).
+;
+;     CALLBACK_EXTERN  -  Preprocessor constant, type BOOL.  Indicates that the
+;       callback routine named in CANIN_CALLBACK is external to this module.
+;       The default is TRUE (is external).  This constant must be created and
+;       set to FALSE if the callback routine is local to prevent the code in
+;       this file from generating a EXTERN reference to it, which will produce
+;       a assembler error.
+;
+;     DEBUG_CANCFG  -  Preprocessor constant, type BOOL.  TRUE causes detailed
+;       information to be shown about the automatic CAN bit timing
+;       configuration calculations.  The default is FALSE, which just shows the
+;       final result.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/if [not [exist "bitrate"]] then
+  /const bitrate real = 500e3 ;CAN bus bit rate, Hz
+  /endif
+/if [not [exist "canin_callback"]]
+  /then
+    /const canin_callback = "" ;name of routine to call when CAN frame received
+  /else
+    /if [not [exist "callback_extern"]] then
+      /const callback_extern bool = true ;default to callback routine is external
+      /endif
+  /endif
+/if [not [exist "debug_cancfg"]] then
+  /const debug_cancfg bool = false ;default to not show config select details
+  /endif
+
+.equiv   stacksz, 128        ;CAN receiving task stack size
+/const   fcanclk real = freq_inst ;clock to CAN module, bit rate generator input
+;
+;   Derived constants.
+;
+/call can_timing [v bitrate] ;compute CAN bit timing setup
+
+
+/if [<> canin_callback ""] then
+  /show "  CAN received frame callback routine: " canin_callback
+  /endif
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_can, bss
+         ;
+         ;   Received CAN frame buffer.
+         ;
+allocg   canin_id, 4         ;11 or 29 bit frame ID
+allocg   canin_ndat, 2       ;number of data bytes, always 0-8
+allocg   canin_dat, 0, 2     ;start of data bytes
+allocg   canin_d0, 1         ;symbols for individual data bytes
+allocg   canin_d1, 1
+allocg   canin_d2, 1
+allocg   canin_d3, 1
+allocg   canin_d4, 1
+allocg   canin_d5, 1
+allocg   canin_d6, 1
+allocg   canin_d7, 1
+
+;*******************
+;
+;   Local state.
+;
+alloc    stack_can, stacksz, 2 ;CAN receiving task stack
+         ;
+         ;   Info about the transmit frame being built.
+         ;
+alloc    wr_id,  4, 2        ;frame ID, either 11 (standard) or 29 (extended) bits
+alloc    wr_ndat, 2          ;0-8 number of data bytes
+alloc    wr_dat0, 1, 2       ;the data bytes
+alloc    wr_dat1, 1
+alloc    wr_dat2, 1
+alloc    wr_dat3, 1
+alloc    wr_dat4, 1
+alloc    wr_dat5, 1
+alloc    wr_dat6, 1
+alloc    wr_dat7, 1
+
+.section .near_can, bss, near
+
+alloc    canflags, 2         ;local flag bits, use FLG_xxx bit numbers
+;
+;   Symbols for the local flags.  These symbols are bit numbers within CANFLAGS.
+;
+.equiv   flg_ext, 0          ;frame being built is extended, not standard
+.equiv   flg_rtr, 1          ;frame being built is a remote request, not data
+
+
+.section .code_can, code
+;*******************************************************************************
+;
+;   Subroutine CAN_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  can_init, regf0
+
+         clr     canflags    ;init all local flags to 0
+         clrflag canin       ;reset to no CAN input frame available
+         clrflag cansend     ;no task has CAN sending facility acquired
+
+         mov     #0b0001100100000000, w0 ;disable the CAN module
+                 ;  0--------------- disable CAN capture
+                 ;  -X-------------- unused
+                 ;  --0------------- continue module operation in idle mode
+                 ;  ---1------------ abort all pending transmissions
+                 ;  ----1----------- CAN clock is Fcy (not 4 Fcy)
+                 ;  -----001-------- request CAN module be disabled
+                 ;  --------XXX----- actual operation mode, read only
+                 ;  -----------X---- unused
+                 ;  ------------XXX- interrupt condition code, read only
+                 ;  ---------------X unused
+         mov     w0, C1ctrl
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CAN_START
+;
+;   Set up the CAN hardware for operation and start the CAN frames receiving
+;   thread.
+;
+         glbsub  can_start, regf0 | regf13 | regf14
+;
+;   Set the CAN module to configuration mode.
+;
+         mov     #0b0000110000000000, w0
+                 ;  0--------------- disable CAN capture
+                 ;  -X-------------- unused
+                 ;  --0------------- continue module operation in idle mode
+                 ;  ---0------------ don't abort all pending transmissions
+                 ;  ----1----------- CAN clock is Fcy (not 4 Fcy)
+                 ;  -----100-------- request CAN module into configuration mode
+                 ;  --------XXX----- actual operation mode, read only
+                 ;  -----------X---- unused
+                 ;  ------------XXX- interrupt condition code, read only
+                 ;  ---------------X unused
+         mov     w0, C1ctrl  ;request CAN module in configuration mode
+
+cfg_loop:                    ;back here until actually in configuration mode
+         mov     C1ctrl, w0  ;read current operation mode
+         lsr     w0, #5, w0  ;move op mode into low 3 bits
+         and     #7, w0      ;mask in only the op mode field
+         sub     #0b100, w0  ;compare to desired op mode
+         bra     z, cfg_set  ;in desired op mode ?
+         gcall   task_yield_save ;no, give other tasks a chance to run
+         jump    cfg_loop    ;back to try again
+cfg_set:                     ;CAN module is now in configuration mode
+;
+;   Perform general CAN module setup.
+;
+         mov     #0b0000000000000000 | [- bdiv 1], w0
+                 ;  XXXXXXXX-------- unused
+                 ;  --------00------ select synchronization jump width of 1
+                 ;  ----------XXXXXX bit rate divider, merged in above
+         mov     w0, C1cfg1  ;set synch jump width and bit rate divider
+
+/var new ii integer
+/set ii 2#0000000010000000
+                 ;  X--------------- unused
+                 ;  -0-------------- CAN activity will not wake processor
+                 ;  --XXX----------- unused
+                 ;  -----XXX-------- TQ in phase 2, merged in below
+                 ;  --------1------- phase 2 length is exactly as programmed
+                 ;  ---------0------ bus state is sampled once at the sample point
+                 ;  ----------XXX--- TQ in phase 1, merged in below
+                 ;  -------------XXX TQ in prop segment, merged in below
+/set ii [or ii [shiftl [- tqph2 1] 8]] ;merge in phase 2 length
+/set ii [or ii [shiftl [- tqph1 1] 3]] ;merge in phase 1 length
+/set ii [or ii [- tqprop 1]] ;merge in propagation segment length
+         mov     #[v ii], w0
+         mov     w0, C1cfg2
+/del ii
+
+         mov     #0b0000000000000000, w0
+                 ;  XXXXXXXX-------- unused
+                 ;  --------0------- reset buffer full condition, if any
+                 ;  ---------XXX---- unused
+                 ;  ------------X--- read-only status bit
+                 ;  -------------0-- buffer 0 overflow not write to buffer 1
+                 ;  --------------0- jump table offset select (not used)
+                 ;  ---------------X read-only status bit
+         mov     w0, C1rx0con ;configure receive buffer 0
+;
+;   We will only use receive buffer 0, which has mask 0 and filters 0 and 1
+;   associated with it.  Since we receive all valid CAN frames, the mask will be
+;   set to all zeros.  In that case the filters don't matter, but will be set to
+;   all zeros anyway.
+;
+;   Since receive buffer 0 has priority over receive buffer 1, nothing will ever
+;   be received into buffer 1 since every frame matches the buffer 0 rules.  We
+;   therefore don't bother to set up the receive buffer 1 masks and filters.
+;
+         ;
+         ;   Set mask 0.
+         ;
+         mov     #0b0000000000000001, w0
+                 ;  XXX------------- unused
+                 ;  ---00000000000-- SID<10:0> mask
+                 ;  --------------X- unused
+                 ;  ---------------1 match STD or EXT frames according to each filter
+         mov     w0, C1rxm0sid
+         clr     C1rxm0eidh
+         clr     C1rxm0eidl
+         ;
+         ;   Set filter 0 for standard frames.
+         ;
+         mov     #0b0000000000000000, w0
+                 ;  XXX------------- unused
+                 ;  ---00000000000-- SID<10:0>
+                 ;  --------------X- unused
+                 ;  ---------------0 this filter works with standard frames
+         mov     w0, C1rxf0sid
+         clr     C1rxf0eidh
+         clr     C1rxf0eidl
+         ;
+         ;   Set filter 1 for extended frames.
+         ;
+         mov     #0b0000000000000001, w0
+                 ;  XXX------------- unused
+                 ;  ---00000000000-- SID<10:0>
+                 ;  --------------X- unused
+                 ;  ---------------1 this filter works with extended frames
+         mov     w0, C1rxf1sid
+         clr     C1rxf1eidh
+         clr     C1rxf1eidl
+;
+;   Set the CAN module to normal operating mode.
+;
+         mov     #0b0000100000000000, w0
+                 ;  0--------------- disable CAN capture
+                 ;  -X-------------- unused
+                 ;  --0------------- continue module operation in idle mode
+                 ;  ---0------------ don't abort all pending transmissions
+                 ;  ----1----------- CAN clock is Fcy (not 4 Fcy)
+                 ;  -----000-------- request CAN module in normal operating mode
+                 ;  --------XXX----- actual operation mode, read only
+                 ;  -----------X---- unused
+                 ;  ------------XXX- interrupt condition code, read only
+                 ;  ---------------X unused
+         mov     w0, C1ctrl  ;request CAN module in configuration mode
+
+op_loop:                     ;back here until CAN module in normal operating mode
+         mov     C1ctrl, w0  ;read current operation mode
+         lsr     w0, #5, w0  ;move op mode into low 3 bits
+         and     #7, w0      ;mask in only the op mode field
+         bra     z, op_set   ;in desired op mode ?
+         gcall   task_yield_save ;no, give other tasks a chance to run
+         jump    op_loop
+op_set:                      ;CAN module is now in normal operating mode
+;
+;   Start the CAN frames receiving task.
+;
+         mov     #stacksz, w13 ;pass new task stack size
+         mov     #stack_can, w14 ;pass stack start address
+         call    task_new    ;create CAN frames receiving task
+         goto    can_task    ;go to execution start of the new task
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CAN_SEND_INIT
+;
+;   Init the transmit frame state.  W0 contains flag bits indicating the type of
+;   frame:
+;
+;     Bit 0  -  0 = standard frame, 11 bit ID
+;               1 = extended frame, 29 bit ID
+;
+;     Bit 1  -  0 = data frame
+;               1 = remote request frame
+;
+;   The transmit state frame has a interlock so that only one task at a time can
+;   attempt to send a frame.  This routine waits for the transmit frame state to
+;   be available, then locks it.  Since this routine must always be called each
+;   new CAN frame transmitted, the caller has exclusive access to the transmit
+;   state until it is released by CAN_SEND.
+;
+         glbsub  can_send_init, regf0
+;
+;   Wait for the CAN transmit state to be available.
+;
+sin_wait:
+         skip_flag cansend   ;sending state is in use ?
+         jump    sin_avail   ;no, go grab it
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    sin_wait    ;back to check for in use again
+sin_avail:                   ;CAN sending state is available
+         setflag cansend     ;indicate sending state is now in use
+;
+;   Get the flags from W0 and init the rest of the CAN frame info to zeros.
+;
+         bclr    canflags, #flg_ext ;init to standard frame
+         btsc    w0, #0      ;really is standard frame ?
+         bset    canflags, #flg_ext ;no, indicate extended frame
+
+         bclr    canflags, #flg_rtr ;init to data frame
+         btsc    w0, #1      ;really is data frame ?
+         bset    canflags, #flg_rtr ;no, indicate remote request
+
+         mov     #0, w0
+         mov     w0, wr_id+0 ;init frame ID to 0
+         mov     w0, wr_id+2
+         mov     w0, wr_ndat ;init number of data bytes to 0
+         mov     w0, wr_dat0+0 ;init all the data bytes to 0
+         mov     w0, wr_dat0+2
+         mov     w0, wr_dat0+4
+         mov     w0, wr_dat0+6
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CAN_SEND_ID
+;
+;   Set the ID of the transmit frame state.  If this is a standard frame, then
+;   the ID is in the low 11 bits of W0.  If this is a extended frame, then the
+;   ID is in the low 29 bits of W1:W0.
+;
+         glbsub  can_send_id, regf0 | regf1
+
+         btsc    canflags, #flg_ext ;standard frame ?
+         jump    sid_ext     ;extended frame
+;
+;   Setting 11 bit standard frame ID.
+;
+         mov     #0x7FF, w1  ;mask for 11 bit frame ID
+         and     w0, w1, w0  ;mask in only the valid frame ID bits
+         mov     w0, wr_id   ;save the frame ID
+         jump    sid_leave
+;
+;   Setting 29 bit extended frame ID.
+;
+sid_ext:
+         mov     w0, wr_id+0 ;save low 16 bits of the ID
+         mov     #0x1FFF, w0 ;get mask for remaining high bits
+         and     w1, w0, w1  ;mask in only the valid frame ID bits
+         mov     w1, wr_id+2 ;save high bits of the ID
+
+sid_leave:                   ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CAN_SEND_DAT
+;
+;   Add the byte in the low 8 bits of W0 as the next data byte in the transmit
+;   frame state.  Data bytes beyond what the CAN frame can contain are ignored.
+;
+         glbsub  can_send_dat, regf1 | regf2
+
+         btsc    canflags, #flg_rtr ;data frame, not remote request ?
+         jump    sdat_leave  ;remote request, can't take data bytes
+
+         mov     wr_ndat, w1 ;get number of data bytes already stored
+         cp      w1, #8      ;compare to max allowed
+         bra     geu, sdat_leave ;no room for another data byte ?
+
+         mov     #wr_dat0, w2 ;get address of first data byte
+         add     w2, w1, w2  ;make address of where to write this data byte
+         mov.b   w0, [w2]    ;stuff this data byte into transmit frame save area
+         add     #1, w1      ;update number of data bytes stored
+         mov     w1, wr_ndat
+
+sdat_leave:                  ;common exit point
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CAN_SEND_DAT16
+;
+;   Add the 16 bits in W0 as the next two data bytes of the CAN frame being
+;   built for transmission.  The bytes will be written into the CAN frame in
+;   most to least significant order.
+;
+         glbsub  can_send_dat16
+
+         swap    w0
+         mcall   can_send_dat ;write the high byte
+         swap    w0
+         mcall   can_send_dat ;write the low byte
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CAN_SEND
+;
+;   Send the frame stored in the current transmit frame state.  This routine
+;   returns when the transmission has been initiated.  The actual transmission
+;   may not occur until later, and may fail.  However, after this call the
+;   information about the frame will have been transferred into the hardware and
+;   the lock on the software transmit frame state released.
+;
+         glbsub  can_send, regf0 | regf1 | regf2
+;
+;   Wait for the previous frame to be sent, and the transmit buffer therefore
+;   available to write a new frame into.
+;
+snd_wait:
+         btss    C1tx0con, #Txreq ;transmit buffer still in use ?
+         jump    snd_avail   ;no
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    snd_wait    ;back to check transmit buffer available again
+snd_avail:                   ;transmit buffer is available
+;
+;   Write the data bytes into the hardware transmit buffer.  All 8 bytes (4
+;   words) are copied whether really needed or not.
+;
+         mov     wr_dat0+0, w0
+         mov     w0, C1tx0b1
+         mov     wr_dat0+2, w0
+         mov     w0, C1tx0b2
+         mov     wr_dat0+4, w0
+         mov     w0, C1tx0b3
+         mov     wr_dat0+6, w0
+         mov     w0, C1tx0b4
+;
+;   Fill in the frame ID and the flags.
+;
+         btsc    canflags, #flg_ext ;standard frame ?
+         jump    snd_ext     ;extended frame
+         ;
+         ;   This is a standard frame (11 bit ID).
+         ;
+         mov     wr_id, w1   ;get the 11 bit frame ID
+         lsr     w1, #6, w0  ;get high 5 bits into W0 low bits
+         sl      w0, #11, w0 ;move high 5 bits into position for HW reg
+         sl      w1, #10, w1 ;get low 6 bits into position for HW
+         lsr     w1, #8, w1
+         btsc    canflags, #flg_rtr ;data frame ?
+         bset    w1, #Srr    ;remote request frame, set bit accordingly
+         ior     w0, w1, w0  ;assemble final HW register value
+         mov     w0, C1tx0sid ;write it to the hardware register
+
+         mov     wr_ndat, w0 ;get number of data bytes (0-8)
+         sl      w0, #3, w0  ;move into position for hardware register
+         btsc    canflags, #flg_rtr ;data frame ?
+         bset    w0, #Txrtr  ;remote request frame, set bit accordingly
+         mov     w0, C1tx0dlc
+
+         jump    snd_doneid  ;done with frame ID and related
+         ;
+         ;   This is a extended frame (29 bit ID).  The 18 hardware extended ID
+         ;   bits are the low part of the whole 29 bit ID, with the 11 bit
+         ;   standard ID field used to hold the high part.
+         ;
+snd_ext:
+         mov     wr_id+2, w1 ;get high frame ID bits
+         sl      w1, #3, w0  ;position high 5 bits into place for HW
+         mov     #0xF800, w2 ;mask in just these bits
+         and     w0, w2, w0
+         mov     #0x00FC, w2
+         and     w1, w2, w1  ;maks in hardware SID<5:0> bits
+         btsc    canflags, #flg_rtr ;data frame ?
+         bset    w1, #Srr    ;remote request frame, set bit accordingly
+         bset    w1, #Txide  ;set bit for extended frame
+         ior     w0, w1, w0  ;assemble final SID register value
+         mov     w0, C1tx0sid ;write it to the hardware register
+
+         mov     wr_id+2, w0 ;get high frame ID bits
+         sl      w0, #14, w0 ;get hardware EID<17:16> into position
+         mov     wr_id+0, w1 ;get low frame ID bits
+         mov     #0xC000, w2
+         and     w1, w2, w2  ;mask in EID<15:14>
+         lsr     w2, #2, w2  ;move EID<15:14> into position for HW
+         ior     w0, w2, w0  ;merge into word being assembled
+         lsr     w1, #6, w1  ;move EID<13:6> into HW position
+         mov     #0x00FF, w2
+         and     w1, w2, w2  ;mask in only EID<13:6>
+         ior     w0, w2, w0  ;assemble final EID register value
+         mov     w0, C1tx0eid ;write it to the hardware
+
+         mov     wr_id+0, w1 ;get low bits of frame ID
+         sl      w1, #10, w0 ;move EID<5:0> into DLC register position
+         btsc    canflags, #flg_rtr ;data frame ?
+         bset    w0, #Txrtr  ;remote request frame, set bit accordingly
+         mov     wr_ndat, w1 ;get 0-8 number of data bytes
+         sl      w1, #3, w1  ;move into position for the hardware
+         ior     w0, w1, w0  ;assemble final DLC register value
+         mov     w0, C1tx0dlc ;write it to the hardware
+
+snd_doneid:                  ;done writing frame ID and related info
+;
+;   All the data about this frame has been loaded into the hardware transmit
+;   registers.  Now set up the frame for transmission.
+;
+         bset    C1tx0con, #Txreq ;tell hardware to transmit when possible
+         clrflag cansend     ;release lock on the CAN transmit state
+
+         leaverest
+
+;*******************************************************************************
+;
+;   CAN frames receiving task.
+;
+can_task:                    ;task execution start point
+
+cant_loop:                   ;back here after done processing each new frame
+;
+;   Wait for the next CAN frame to be received.
+;
+cant_wframe:
+         gcall   task_yield  ;give other tasks a chance to run
+         btss    C1rx0con, #Rxful ;the receive buffer is full ?
+         jump    cant_wframe ;no, go back and check again
+;
+;   Read the CAN frame information into the registers and release the hardware
+;   to receive the next frame.  The registers will be set:
+;
+;     W1:W0  -  Frame ID, 11 or 29 bits
+;
+;     W2  -  Flags word, bit 0 EXT, bit 1 RRQ
+;
+;     W3  -  Number of data bytes, always 0-8
+;
+;     W4  -  Data bytes 1:0
+;     W5  -  Data bytes 3:2
+;     W6  -  Data bytes 5:4
+;     W7  -  Data bytes 7:6
+;
+         mov     #0, w2      ;init flags to standard data frame
+         btsc    C1rx0con, #Rxrtrro ;really is data frame ?
+         bset    w2, #1      ;is remote request, set flag bit accordingly
+
+         btsc    C1rx0sid, #Rxide ;this is a standard frame ?
+         jump    cant_ext    ;is extended frame
+         ;
+         ;   Get ID of standard frame.
+         ;
+         mov     #0, w1      ;set high 16 bits of the frame ID
+         mov     C1rx0sid, w0 ;get register with the 11 frame ID bits
+         lsr     w0, #2, w0  ;move the frame ID into the LSB
+         jump    cant_did    ;done getting frame ID into W1:W0
+         ;
+         ;   Get ID of extended frame.
+         ;
+cant_ext:
+         bset    w2, #0      ;set flag to indicate this is extended frame
+         mov     C1rx0sid, w1 ;get register with upper 11 frame ID bits
+         lsr     w1, #2, w1  ;get just the ID bits in proper position
+         sl      w1, #2, w1
+         mov     C1rx0eid, w8 ;get EID<17:6>
+         lsr     w8, #10, w9 ;extract EID<17:16>
+         ior     w1, w9, w1  ;merge into high word of final ID
+         sl      w8, #6, w0  ;put EID<15:6> in final place
+         mov     C1rx0dlc, w8 ;get register with EID<5:0>
+         lsr     w8, #10, w8 ;move EID<5:0> into place
+         ior     w0, w8, w0  ;merge them into final ID
+cant_did:                    ;done getting frame ID into W1:W0
+         ;
+         ;   Get the number of data bytes and the data bytes.  All the data
+         ;   bytes are always saved in W4-W7 whether used or not, since this is
+         ;   actually less work than looping over the exact number of data
+         ;   bytes.
+         ;
+         mov     C1rx0dlc, w3 ;get register with the number of data bytes
+         and     #0b1111, w3 ;mask in just the number of data bytes field
+         mov     C1rx0b1, w4 ;get the words containing the data bytes
+         mov     C1rx0b2, w5
+         mov     C1rx0b3, w6
+         mov     C1rx0b4, w7
+
+         bclr    C1rx0con, #Rxful ;release the receive buffer
+;
+;   The complete CAN frame information has been read into W0-W7, and the
+;   hardware buffer has been released to be able to receive the next CAN
+;   frame.
+;
+;   Now wait for the software received CAN frame buffer to be unused, then
+;   write the received CAN frame to it.
+;
+cant_rbuf:
+         skip_flag canin     ;software buffer still in use ?
+         jump    cant_rbufrdy ;no, done waiting
+         gcall   task_yield  ;give other tasks a chance to run
+         jump    cant_rbuf   ;back to check the software buffer again
+cant_rbufrdy:                ;the software receive buffer is ready for new frame
+
+         clrflag canin_ext   ;init to standard frame
+         btsc    w2, #0      ;really is standard frame ?
+         setflag canin_ext   ;extended frame
+
+         clrflag canin_rtr   ;init to data frame
+         btsc    w2, #1      ;really is data frame
+         setflag canin_rtr   ;remote request frame
+
+         mov     w0, canin_id+0 ;set frame ID
+         mov     w1, canin_id+2
+         mov     w3, canin_ndat ;set number of data bytes
+         mov     w4, canin_dat+0
+         mov     w5, canin_dat+2
+         mov     w6, canin_dat+4
+         mov     w7, canin_dat+6
+
+         setflag canin       ;indicate a new received CAN frame available
+;
+;   Call the callback routine if this is enabled.  The preprocessor constant or
+;   variable CANIN_CALLBACK is set to the name of the routine to call from this
+;   task when a new CAN frame is received.  If no routine is to be called, then
+;   CANIN_CALLBACK is the empty string.
+;
+/if [<> canin_callback ""] then ;callback enabled ?
+         gcall   [chars canin_callback] ;call received CAN frame callback routine
+  /endif
+
+         jump    cant_loop   ;back to get next CAN frame

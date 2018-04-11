@@ -1,0 +1,56 @@
+;   ***************************************************************
+;   * Copyright (C) 2005, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Routines for byte-addressing program memory.
+;
+;   Native program memory is addressed in 16 bit words, except that the high
+;   byte of odd words does not exist.  This means there are two addresses for
+;   every three bytes.
+;
+;   These routines use the native address for the low byte of each 16 bit word.
+;   This allows using the existing facilities for getting and computing program
+;   memory addresses.
+;
+;   This works directly for the low byte of the low 16 bits, and the upper byte.
+;   The only exception is the high byte of the low 16 bits.  To indicate that
+;   byte, the high bit of the 32 bit address is set.  Program memory addresses
+;   are only 24 bits wide, so the high 8 bits of a 32 bit word holding a program
+;   memory address are otherwise unused.  The routines here use them as
+;   additional flags, although only the high bit of these is currently defined.
+;
+;   Most of these routines expect the program memory byte address as described
+;   above to be in W13:W12.
+;
+;   The exported routines are:
+;
+;     PGBYTE_READ
+;
+;       Reads the program memory byte at the address in W13:W12 into W0.
+;       W13:W12 is advanced to the next byte.
+;
+;     PGBYTE_ADR_INC
+;
+;       Advance the program memory byte address in W13:W12 by one byte.
+;
+;     PGBYTE_ADR_ADD
+;
+;       Add the unsigned byte offset in W0 to the program memory byte address
+;       in W13:W12.
+;
+/include "qq2.ins.dspic"
+/include "(cog)src/dspic/pgbyte.ins.dspic"
+
+.end

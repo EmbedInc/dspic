@@ -1,0 +1,112 @@
+;   Define global symbols and possibly additional build-time setup required by
+;   the DISP library file.  This file is intended to be included from the main
+;   include file of a project using the DISP library module.
+;
+/const   evwaitms integer = 100 ;EVENT_WAIT timeout units, milliseconds
+;
+;   Event IDs.  These each indicate one asynchronous event.
+;
+/const   event_none integer = 0 ;timeout before any event
+/const   event_left_press integer = 1 ;left button pressed
+/const   event_left_release integer = 2 ;left button released
+/const   event_right_press integer = 3 ;right button pressed
+/const   event_right_release integer = 4 ;right button released
+/const   event_up_press integer = 5 ;up button pressed
+/const   event_up_release integer = 6 ;up button released
+/const   event_down_press integer = 7 ;down button pressed
+/const   event_down_release integer = 8 ;down button released
+/const   event_mid_press integer = 9 ;middle button pressed
+/const   event_mid_release integer = 10 ;middle button released
+/const   event_onoff_press integer = 11 ;on/off button pressed
+/const   event_onoff_release integer = 12 ;on/off button released
+/const   event_leftright integer = 13 ;left/right buttons held together
+;
+;   Special characters understood by the user interface display.
+;
+/const   char_bell_k integer = 7 ;emits short tone
+/const   char_back_k integer = 8 ;moves one character position left
+/const   char_cr_k integer = 13 ;moves to start of current line
+/const   char_lf_k integer = 10 ;moves down one line
+/const   char_left_k integer = 128 ;left-pointing triangle character
+/const   char_right_k integer = 129 ;right-pointing triangle character
+/const   char_up_k integer = 130 ;up-pointing triangle character
+/const   char_down_k integer = 131 ;down-pointing triangle character
+/const   char_block_k integer = 255 ;solid block character
+
+/const   crlf    string = [str [char char_cr_k] [char char_lf_k]] ;CR-LF string
+;
+;   Derived constants.
+;
+/const   evwaithz integer = [rnd [/ 1000 evwaitms]] ;EVENT_WAIT timeout ticks per sec
+;
+;   Global flags.
+;
+/flag    disp                ;display is ready, no errors
+
+/flag    butt_left           ;LEFT button is pressed
+/flag    butt_right          ;RIGHT button is pressed
+/flag    butt_up             ;UP button is pressed
+/flag    butt_down           ;DOWN button is pressed
+/flag    butt_mid            ;middle button is pressed
+/flag    butt_onoff          ;on/off button is pressed
+
+/flag    bpress_left         ;LEFT button pressed event
+/flag    bpress_right        ;RIGHT button pressed event
+/flag    bpress_up           ;UP button pressed event
+/flag    bpress_down         ;DOWN button pressed event
+/flag    bpress_mid          ;middle button pressed event
+/flag    bpress_onoff        ;on/off button pressed event
+
+/flag    brel_left           ;LEFT button released event
+/flag    brel_right          ;RIGHT button released event
+/flag    brel_up             ;UP button released event
+/flag    brel_down           ;DOWN button released event
+/flag    brel_mid            ;middle button released event
+/flag    brel_onoff          ;on/off button released event
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro ISTRING str1, str1, ... strN
+//
+//   Write the concatenation of the string representation of all arguments to
+//   the display.
+//
+/macro istring
+  /var local str string      ;the accumulated string to write
+  /var local ii integer      ;scratch integers and loop counters
+  /var local jj integer
+  /var local pbyte_nbytes integer = 0 ;number of bytes in curr prog mem word
+  /var local pbyte_word integer = 16#FFFFFF ;current prog mem word value
+//
+//   Build the string STR from the concatenation of all the macro arguments.
+//
+  /set ii 1                  ;init number of next argument
+  /loop                      ;accumulate the string from the macro arguments
+    /if [not [exist ii arg]] then ;exhausted all macro arguments ?
+      /quit
+      /endif
+    /set str [str str [arg ii]] ;add this argument to end of string
+    /set ii [+ ii 1]         ;update number of next argument
+    /endloop
+//
+//   Get the string length into II.  Abort if there are no characters to write.
+//
+  /set ii [slen str]         ;number of characters in the string
+  /if [<= ii 0] then         ;no string to write ?
+    /quitmac
+    /endif
+//
+//   Write the call to the subroutine.
+//
+         call    disp_istring
+//
+//   Write the string in program memory following the call.  The first byte is
+//   the number of string characters - 1, which is then followed by the string
+//   characters.
+//
+         pbyte   [- ii 1]    ;string length byte
+  /loop with jj from 1 to ii ;scan the string
+         pbyte   [ccode [sindx jj str]] ;write this string byte
+    /endloop
+  /call pbyte_finish         ;write last partially filled word, if any
+  /endmac

@@ -1,0 +1,276 @@
+;   ***************************************************************
+;   * Copyright (C) 2005, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;
+;                             *** NOTE ***
+;   Not for use in new designs.  This file is only here to support existing
+;   firmware.  Use the newer and more flexible BLINK module instead.
+;                             ************
+;
+;
+;   Canned code for the STAT module.  See the header comments in the
+;   QQQ_STAT.DSPIC file for a description of the possible configuration
+;   parameters.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/if [not [exist "name"]] then
+  /const name string = "ledstat"
+  /endif
+
+/if [not [exist "nstbits"]] then
+  /const nstbits integer = 48
+  /endif
+;
+;   Derived constants.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /const npattw integer = [div [+ nstbits 23] 24] ;N prog mem words per pattern
+  /set r [/ 1000 nstbits]    ;ms ticks per display pattern slice
+  /const add1ms integer = [rnd [/ 65536 r]] ;accumulator increment per ms
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_stat, bss
+
+
+;*******************
+;
+;   Local state.
+;
+alloc    lastclock           ;last 1 ms clock value updated to
+alloc    accslice            ;overflows when time for next display slice
+alloc    slice               ;0-N current display slice number
+alloc    pattn               ;0-N number of pattern being displayed
+
+.section .code_stat, code
+;*******************************************************************************
+;
+;   Subroutine STAT_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  stat_init, regf0
+
+         mov     tick1ms, w0
+         mov     w0, lastclock ;init last clock value current with
+         mov     #65535, w0
+         mov     w0, accslice ;force slice update next STAT_UPDATE
+         mov     w0, pattn   ;init current pattern number to invalid
+         mov     #[- nstbits 1], w0
+         mov     w0, slice   ;first update will start at start of pattern
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine STAT_UPDATE
+;
+;   This routine is intended to be called periodically by the main event loop.
+;   It determines the current system state, where it is within the current
+;   display pattern, and updates the display accordingly.
+;
+;   Timing for the display is derived here from the global TICK1MS clock
+;   variable.  This routine need not be called with any particular timing.
+;   Since elapsed time is detected in whole ms, calling it faster than that has
+;   no benefit, although it does no harm other than to take more excution
+;   cycles.  Calling it less often than that will not cause time to be lost, but
+;   will cause the display to be updated in bursts so as to appear to "stutter"
+;   if too slow.  Roughly calling this routine every 1 to 5 ms is recommended.
+;
+         glbsub  stat_update, regf0 | regf1 | regf2 | regf3
+
+stupd_recheck:               ;back here after a clock tick was processed
+         mov     lastclock, w0 ;get last clock value updated to
+         mov     tick1ms, w1 ;get the current clock
+         cp      w0, w1
+         bra     z, stupd_leave ;no new tick, nothing more to do ?
+;
+;   A new clock tick has occurred.
+;
+         add     #1, w0      ;update last clock value we are now current with
+         mov     w0, lastclock
+
+         mov     accslice, w0 ;update slice time accumulator to this new tick
+         mov     #[v add1ms], w1
+         add     w0, w1, w0
+         mov     w0, accslice
+         bra     nc, stupd_recheck ;no new display slice this tick ?
+         ;
+         ;   Advance to next display slice.
+         ;
+         mov     slice, w0   ;get the current 0-N slice number
+         add     #1, w0      ;increment it
+         mov     #[- nstbits 1], w1 ;get max slice number
+         cp      w0, w1
+         skip_leu            ;still within valid range ?
+         mov     #0, w0      ;no, wrap back to 0
+         mov     w0, slice
+;
+;   The display will be updated.
+;
+;   Determine the pattern to display.
+;
+         pattnum             ;set W0 to the 0-N number of pattern to display
+;
+;   W0 contains the 0-N number of the pattern to display.
+;
+         mov     pattn, w1   ;get number of pattern currently displaying
+         mov     w0, pattn   ;update number of pattern to display now
+         cp      w0, w1      ;compare new pattern to previous
+         bra     z, stupd_hpatsl ;same pattern as last time ?
+         ;
+         ;   The display pattern has changed.  Reset to displaying the start of
+         ;   the pattern.
+         ;
+         mov     #0, w0
+         mov     w0, slice   ;set to first slice in pattern
+         mov     w0, accslice ;set to start of this slice
+
+stupd_hpatsl:                ;PATTN and SLICE all set
+;
+;   Update the display.  PATTN is the number of the pattern to display, and
+;   SLICE is the 0-N slice to display within the pattern.
+;
+         ;
+         ;   Init W3:W2 to point to the start of the patterns table in program
+         ;   memory.
+         ;
+         mov     #tbloffset(tbl_patt), w2 ;init W3:W2 pointing to start of table
+         mov     #tblpage(tbl_patt), w3
+         and     #0xFF, w3
+         ;
+         ;   Update W3:W2 to point to the start of the selected pattern.
+         ;
+         mov     pattn, w0   ;get 0-N pattern number
+         mov     #[* npattw 2], w1 ;get program memory addresses per pattern
+         mul.uu  w0, w1, w0  ;make address offset for start of pattern
+         add     w2, w0, w2  ;make start address of this pattern
+         addc    w3, w1, w3
+         ;
+         ;   Skip over whole program memory words of the pattern to point W3:W2
+         ;   to the program memory word containing the bit to display.
+         ;
+         mov     slice, w0   ;get 0-N slice number within this pattern
+stupd_pwslice:               ;back here to skip whole prog mem words
+         cp      w0, #24     ;compare to number of bits in a prog mem word
+         bra     ltu, stupd_dpwslice ;done finding prog mem word of this slice ?
+         sub     #24, w0     ;no, make 0-N number of bit within next word
+         add     #2, w2      ;update address to next word
+         addc    #0, w3
+         jump    stupd_pwslice ;back to check slice within word again
+stupd_dpwslice:              ;W0 is 0-N bit within word at W3:W2
+         ;
+         ;   W3:W2 is the address of the whole program memory word that contains
+         ;   the bit to display.  W0 is the 0-23 number of the bit within that
+         ;   word.
+         ;
+         mov     w3, Tblpag  ;set high bits of prog mem address to read from
+         cp      w0, #16
+         bra     geu, stupd_hword ;bit is in the high word ?
+         tblrdl  [w2], w1    ;no, read the low word
+         jump    stupd_hbits ;have bit pattern
+stupd_hword:                 ;the bit is in the high word
+         tblrdh  [w2], w1    ;read the high word
+         sub     #16, w0     ;make bit number within this part of the word
+stupd_hbits:
+         ;
+         ;   W0 is the 0-N number of the bit within W1 to display.
+         ;
+         lsr     w1, w0, w1  ;move the selected bit into LSB of W1
+         btsc    w1, #0      ;bit is off ?
+         jump    stupd_don   ;no, the bit is on
+
+         set_ledstat_off     ;display off this slice
+         jump    stupd_recheck
+
+stupd_don:                   ;display on this slice
+         set_ledstat_on
+         jump    stupd_recheck
+
+stupd_leave:
+         leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro PATTERN patt
+//
+//   Create the table entry for one status display pattern.  PATT must be a
+//   sequence of "*" and "-" characters.  "*" lights the LED for that time slice
+//   and "-" makes it dark.  There must be exactly NSTBITS characters in PATT.
+//
+//   Patterns are displayed from left to right with a complete sequence lasting
+//   one second.
+//
+//   This macro will emit .PWORD directives to define the data for the pattern
+//   in program memory.
+//
+/macro pattern
+  /var local patt string = [qstr [arg 1]] ;get the pattern string
+  /var local ind integer = 1 ;1-N index into pattern string
+  /var local pchar string    ;single character extracted from PATT
+  /var local word integer    ;current program memory word being built
+  /var local nbits integer   ;number of bits set within program memory word
+  /var local ii integer      ;scratch integer
+
+  /set nbits 0               ;init to no bits set in current word
+  /set word 16#FFFFFF        ;init bits in current program memory word
+  /loop                      ;back here each new bit in the pattern
+    /if [> ind nstbits] then ;done all bits ?
+      /quit
+      /endif
+
+    /set pchar [sindx ind patt] ;get the pattern character for this bit
+    /set ind [+ ind 1]       ;update PATT index for next time
+    /if [not [or [= pchar "*"] [= pchar "-"]]] then
+      /show 'Invalid character "' patt '" in display pattern'
+         .error  "Patt char"
+         .end
+      /stop
+      /endif
+
+    /if [= pchar "-"] then   ;set this bit to off ?
+      /set ii [shiftl 1 nbits] ;make mask for this bit within word
+      /set ii [~ ii]         ;make AND mask for turning off this bit
+      /set word [and word ii] ;apply the mask to turn off this bit within word
+      /endif
+
+    /set nbits [+ nbits 1]   ;count one more bit done in current word
+    /if [>= nbits 24] then   ;have a whole word to write out ?
+         .pword  0x[chars [int word "fw 6 lz base 16 usin"]]
+      /set nbits 0           ;reset to start of new word
+      /set word 16#FFFFFF    ;reset word to all bits on
+      /endif
+    /endloop                 ;back to do next input pattern bit
+
+  /if [> nbits 0] then       ;there are unwritten bits in WORD ?
+         .pword  0x[chars [int word "fw 6 lz base 16 usin"]]
+    /endif
+  /endmac

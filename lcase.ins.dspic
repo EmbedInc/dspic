@@ -1,0 +1,9345 @@
+.ifndef  A10m
+.ifdef A10M
+         .equiv  A10m, A10M
+  .endif
+.endif
+.ifndef  Abat
+.ifdef ABAT
+         .equiv  Abat, ABAT
+  .endif
+.endif
+.ifndef  Abaud
+.ifdef ABAUD
+         .equiv  Abaud, ABAUD
+  .endif
+.endif
+.ifndef  Accahh
+.ifdef ACCAHH
+         .equiv  Accahh, ACCAHH
+  .endif
+.endif
+.ifndef  Accahl
+.ifdef ACCAHL
+         .equiv  Accahl, ACCAHL
+  .endif
+.endif
+.ifndef  Accalh
+.ifdef ACCALH
+         .equiv  Accalh, ACCALH
+  .endif
+.endif
+.ifndef  Accall
+.ifdef ACCALL
+         .equiv  Accall, ACCALL
+  .endif
+.endif
+.ifndef  Accaul
+.ifdef ACCAUL
+         .equiv  Accaul, ACCAUL
+  .endif
+.endif
+.ifndef  Accbhh
+.ifdef ACCBHH
+         .equiv  Accbhh, ACCBHH
+  .endif
+.endif
+.ifndef  Accbhl
+.ifdef ACCBHL
+         .equiv  Accbhl, ACCBHL
+  .endif
+.endif
+.ifndef  Accblh
+.ifdef ACCBLH
+         .equiv  Accblh, ACCBLH
+  .endif
+.endif
+.ifndef  Accbll
+.ifdef ACCBLL
+         .equiv  Accbll, ACCBLL
+  .endif
+.endif
+.ifndef  Accbul
+.ifdef ACCBUL
+         .equiv  Accbul, ACCBUL
+  .endif
+.endif
+.ifndef  Accsat
+.ifdef ACCSAT
+         .equiv  Accsat, ACCSAT
+  .endif
+.endif
+.ifndef  Ackdt
+.ifdef ACKDT
+         .equiv  Ackdt, ACKDT
+  .endif
+.endif
+.ifndef  Acken
+.ifdef ACKEN
+         .equiv  Acken, ACKEN
+  .endif
+.endif
+.ifndef  Ackstat
+.ifdef ACKSTAT
+         .equiv  Ackstat, ACKSTAT
+  .endif
+.endif
+.ifndef  Aclkcon
+.ifdef ACLKCON
+         .equiv  Aclkcon, ACLKCON
+  .endif
+.endif
+.ifndef  Adcbuf0h
+.ifdef ADCBUF0H
+         .equiv  Adcbuf0h, ADCBUF0H
+  .endif
+.endif
+.ifndef  Adcbuf0l
+.ifdef ADCBUF0L
+         .equiv  Adcbuf0l, ADCBUF0L
+  .endif
+.endif
+.ifndef  Adcbuf1h
+.ifdef ADCBUF1H
+         .equiv  Adcbuf1h, ADCBUF1H
+  .endif
+.endif
+.ifndef  Adcbuf1l
+.ifdef ADCBUF1L
+         .equiv  Adcbuf1l, ADCBUF1L
+  .endif
+.endif
+.ifndef  Adcbuf2h
+.ifdef ADCBUF2H
+         .equiv  Adcbuf2h, ADCBUF2H
+  .endif
+.endif
+.ifndef  Adcbuf2l
+.ifdef ADCBUF2L
+         .equiv  Adcbuf2l, ADCBUF2L
+  .endif
+.endif
+.ifndef  Adcbuf3h
+.ifdef ADCBUF3H
+         .equiv  Adcbuf3h, ADCBUF3H
+  .endif
+.endif
+.ifndef  Adcbuf3l
+.ifdef ADCBUF3L
+         .equiv  Adcbuf3l, ADCBUF3L
+  .endif
+.endif
+.ifndef  Adcbuf4h
+.ifdef ADCBUF4H
+         .equiv  Adcbuf4h, ADCBUF4H
+  .endif
+.endif
+.ifndef  Adcbuf4l
+.ifdef ADCBUF4L
+         .equiv  Adcbuf4l, ADCBUF4L
+  .endif
+.endif
+.ifndef  Adcbuf5h
+.ifdef ADCBUF5H
+         .equiv  Adcbuf5h, ADCBUF5H
+  .endif
+.endif
+.ifndef  Adcbuf5l
+.ifdef ADCBUF5L
+         .equiv  Adcbuf5l, ADCBUF5L
+  .endif
+.endif
+.ifndef  Adcbuf6h
+.ifdef ADCBUF6H
+         .equiv  Adcbuf6h, ADCBUF6H
+  .endif
+.endif
+.ifndef  Adcbuf6l
+.ifdef ADCBUF6L
+         .equiv  Adcbuf6l, ADCBUF6L
+  .endif
+.endif
+.ifndef  Adcbuf7h
+.ifdef ADCBUF7H
+         .equiv  Adcbuf7h, ADCBUF7H
+  .endif
+.endif
+.ifndef  Adcbuf7l
+.ifdef ADCBUF7L
+         .equiv  Adcbuf7l, ADCBUF7L
+  .endif
+.endif
+.ifndef  Adcbuf8h
+.ifdef ADCBUF8H
+         .equiv  Adcbuf8h, ADCBUF8H
+  .endif
+.endif
+.ifndef  Adcbuf8l
+.ifdef ADCBUF8L
+         .equiv  Adcbuf8l, ADCBUF8L
+  .endif
+.endif
+.ifndef  Adcbuf9h
+.ifdef ADCBUF9H
+         .equiv  Adcbuf9h, ADCBUF9H
+  .endif
+.endif
+.ifndef  Adcbuf9l
+.ifdef ADCBUF9L
+         .equiv  Adcbuf9l, ADCBUF9L
+  .endif
+.endif
+.ifndef  Adcbufah
+.ifdef ADCBUFAH
+         .equiv  Adcbufah, ADCBUFAH
+  .endif
+.endif
+.ifndef  Adcbufal
+.ifdef ADCBUFAL
+         .equiv  Adcbufal, ADCBUFAL
+  .endif
+.endif
+.ifndef  Adcbufbh
+.ifdef ADCBUFBH
+         .equiv  Adcbufbh, ADCBUFBH
+  .endif
+.endif
+.ifndef  Adcbufbl
+.ifdef ADCBUFBL
+         .equiv  Adcbufbl, ADCBUFBL
+  .endif
+.endif
+.ifndef  Adcbufch
+.ifdef ADCBUFCH
+         .equiv  Adcbufch, ADCBUFCH
+  .endif
+.endif
+.ifndef  Adcbufcl
+.ifdef ADCBUFCL
+         .equiv  Adcbufcl, ADCBUFCL
+  .endif
+.endif
+.ifndef  Adcbufdh
+.ifdef ADCBUFDH
+         .equiv  Adcbufdh, ADCBUFDH
+  .endif
+.endif
+.ifndef  Adcbufdl
+.ifdef ADCBUFDL
+         .equiv  Adcbufdl, ADCBUFDL
+  .endif
+.endif
+.ifndef  Adcbufeh
+.ifdef ADCBUFEH
+         .equiv  Adcbufeh, ADCBUFEH
+  .endif
+.endif
+.ifndef  Adcbufel
+.ifdef ADCBUFEL
+         .equiv  Adcbufel, ADCBUFEL
+  .endif
+.endif
+.ifndef  Adcbuffh
+.ifdef ADCBUFFH
+         .equiv  Adcbuffh, ADCBUFFH
+  .endif
+.endif
+.ifndef  Adcbuffl
+.ifdef ADCBUFFL
+         .equiv  Adcbuffl, ADCBUFFL
+  .endif
+.endif
+.ifndef  Adchsh
+.ifdef ADCHSH
+         .equiv  Adchsh, ADCHSH
+  .endif
+.endif
+.ifndef  Adchsl
+.ifdef ADCHSL
+         .equiv  Adchsl, ADCHSL
+  .endif
+.endif
+.ifndef  Adcmd
+.ifdef ADCMD
+         .equiv  Adcmd, ADCMD
+  .endif
+.endif
+.ifndef  Adcon1h
+.ifdef ADCON1H
+         .equiv  Adcon1h, ADCON1H
+  .endif
+.endif
+.ifndef  Adcon1l
+.ifdef ADCON1L
+         .equiv  Adcon1l, ADCON1L
+  .endif
+.endif
+.ifndef  Adcon2h
+.ifdef ADCON2H
+         .equiv  Adcon2h, ADCON2H
+  .endif
+.endif
+.ifndef  Adcon2l
+.ifdef ADCON2L
+         .equiv  Adcon2l, ADCON2L
+  .endif
+.endif
+.ifndef  Adcon3h
+.ifdef ADCON3H
+         .equiv  Adcon3h, ADCON3H
+  .endif
+.endif
+.ifndef  Adcon3l
+.ifdef ADCON3L
+         .equiv  Adcon3l, ADCON3L
+  .endif
+.endif
+.ifndef  Adcs0
+.ifdef ADCS0
+         .equiv  Adcs0, ADCS0
+  .endif
+.endif
+.ifndef  Adcs1
+.ifdef ADCS1
+         .equiv  Adcs1, ADCS1
+  .endif
+.endif
+.ifndef  Adcs2
+.ifdef ADCS2
+         .equiv  Adcs2, ADCS2
+  .endif
+.endif
+.ifndef  Adcs3
+.ifdef ADCS3
+         .equiv  Adcs3, ADCS3
+  .endif
+.endif
+.ifndef  Adcs4
+.ifdef ADCS4
+         .equiv  Adcs4, ADCS4
+  .endif
+.endif
+.ifndef  Adcs5
+.ifdef ADCS5
+         .equiv  Adcs5, ADCS5
+  .endif
+.endif
+.ifndef  Adcsslh
+.ifdef ADCSSLH
+         .equiv  Adcsslh, ADCSSLH
+  .endif
+.endif
+.ifndef  Adcssll
+.ifdef ADCSSLL
+         .equiv  Adcssll, ADCSSLL
+  .endif
+.endif
+.ifndef  Add10
+.ifdef ADD10
+         .equiv  Add10, ADD10
+  .endif
+.endif
+.ifndef  Adden
+.ifdef ADDEN
+         .equiv  Adden, ADDEN
+  .endif
+.endif
+.ifndef  Addrerr
+.ifdef ADDRERR
+         .equiv  Addrerr, ADDRERR
+  .endif
+.endif
+.ifndef  Adie
+.ifdef ADIE
+         .equiv  Adie, ADIE
+  .endif
+.endif
+.ifndef  Adif
+.ifdef ADIF
+         .equiv  Adif, ADIF
+  .endif
+.endif
+.ifndef  Ad1ie
+.ifdef AD1IE
+         .equiv  Ad1ie, AD1IE
+  .endif
+.endif
+.ifndef  Ad1if
+.ifdef AD1IF
+         .equiv  Ad1if, AD1IF
+  .endif
+.endif
+.ifndef  Ad2ie
+.ifdef AD2IE
+         .equiv  Ad2ie, AD2IE
+  .endif
+.endif
+.ifndef  Ad2if
+.ifdef AD2IF
+         .equiv  Ad2if, AD2IF
+  .endif
+.endif
+.ifndef  Adip0
+.ifdef ADIP0
+         .equiv  Adip0, ADIP0
+  .endif
+.endif
+.ifndef  Adip1
+.ifdef ADIP1
+         .equiv  Adip1, ADIP1
+  .endif
+.endif
+.ifndef  Adip2
+.ifdef ADIP2
+         .equiv  Adip2, ADIP2
+  .endif
+.endif
+.ifndef  Adon
+.ifdef ADON
+         .equiv  Adon, ADON
+  .endif
+.endif
+.ifndef  Adpcfg
+.ifdef ADPCFG
+         .equiv  Adpcfg, ADPCFG
+  .endif
+.endif
+.ifndef  Adpcfgh
+.ifdef ADPCFGH
+         .equiv  Adpcfgh, ADPCFGH
+  .endif
+.endif
+.ifndef  Adpcfgl
+.ifdef ADPCFGL
+         .equiv  Adpcfgl, ADPCFGL
+  .endif
+.endif
+.ifndef  Adrc
+.ifdef ADRC
+         .equiv  Adrc, ADRC
+  .endif
+.endif
+.ifndef  Adsidl
+.ifdef ADSIDL
+         .equiv  Adsidl, ADSIDL
+  .endif
+.endif
+.ifndef  Altio
+.ifdef ALTIO
+         .equiv  Altio, ALTIO
+  .endif
+.endif
+.ifndef  Altivt
+.ifdef ALTIVT
+         .equiv  Altivt, ALTIVT
+  .endif
+.endif
+.ifndef  Alts
+.ifdef ALTS
+         .equiv  Alts, ALTS
+  .endif
+.endif
+.ifndef  Asam
+.ifdef ASAM
+         .equiv  Asam, ASAM
+  .endif
+.endif
+.ifndef  Bcl
+.ifdef BCL
+         .equiv  Bcl, BCL
+  .endif
+.endif
+.ifndef  Bgst
+.ifdef BGST
+         .equiv  Bgst, BGST
+  .endif
+.endif
+.ifndef  Bor
+.ifdef BOR
+         .equiv  Bor, BOR
+  .endif
+.endif
+.ifndef  Borv_20
+.ifdef BORV_20
+         .equiv  Borv_20, BORV_20
+  .endif
+.endif
+.ifndef  Borv_27
+.ifdef BORV_27
+         .equiv  Borv_27, BORV_27
+  .endif
+.endif
+.ifndef  Borv_42
+.ifdef BORV_42
+         .equiv  Borv_42, BORV_42
+  .endif
+.endif
+.ifndef  Borv_45
+.ifdef BORV_45
+         .equiv  Borv_45, BORV_45
+  .endif
+.endif
+.ifndef  Bren
+.ifdef BREN
+         .equiv  Bren, BREN
+  .endif
+.endif
+.ifndef  Brp0
+.ifdef BRP0
+         .equiv  Brp0, BRP0
+  .endif
+.endif
+.ifndef  Brp1
+.ifdef BRP1
+         .equiv  Brp1, BRP1
+  .endif
+.endif
+.ifndef  Brp2
+.ifdef BRP2
+         .equiv  Brp2, BRP2
+  .endif
+.endif
+.ifndef  Brp3
+.ifdef BRP3
+         .equiv  Brp3, BRP3
+  .endif
+.endif
+.ifndef  Brp4
+.ifdef BRP4
+         .equiv  Brp4, BRP4
+  .endif
+.endif
+.ifndef  Brp5
+.ifdef BRP5
+         .equiv  Brp5, BRP5
+  .endif
+.endif
+.ifndef  Bufm
+.ifdef BUFM
+         .equiv  Bufm, BUFM
+  .endif
+.endif
+.ifndef  Bufs
+.ifdef BUFS
+         .equiv  Bufs, BUFS
+  .endif
+.endif
+.ifndef  C1cfg1h
+.ifdef C1CFG1H
+         .equiv  C1cfg1h, C1CFG1H
+  .endif
+.endif
+.ifndef  C1cfg1l
+.ifdef C1CFG1L
+         .equiv  C1cfg1l, C1CFG1L
+  .endif
+.endif
+.ifndef  C1cfg2h
+.ifdef C1CFG2H
+         .equiv  C1cfg2h, C1CFG2H
+  .endif
+.endif
+.ifndef  C1cfg2l
+.ifdef C1CFG2L
+         .equiv  C1cfg2l, C1CFG2L
+  .endif
+.endif
+.ifndef  C1ctrlh
+.ifdef C1CTRLH
+         .equiv  C1ctrlh, C1CTRLH
+  .endif
+.endif
+.ifndef  C1ctrll
+.ifdef C1CTRLL
+         .equiv  C1ctrll, C1CTRLL
+  .endif
+.endif
+.ifndef  C1ech
+.ifdef C1ECH
+         .equiv  C1ech, C1ECH
+  .endif
+.endif
+.ifndef  C1ecl
+.ifdef C1ECL
+         .equiv  C1ecl, C1ECL
+  .endif
+.endif
+.ifndef  C1ie
+.ifdef C1IE
+         .equiv  C1ie, C1IE
+  .endif
+.endif
+.ifndef  C1if
+.ifdef C1IF
+         .equiv  C1if, C1IF
+  .endif
+.endif
+.ifndef  C1inteh
+.ifdef C1INTEH
+         .equiv  C1inteh, C1INTEH
+  .endif
+.endif
+.ifndef  C1intel
+.ifdef C1INTEL
+         .equiv  C1intel, C1INTEL
+  .endif
+.endif
+.ifndef  C1intfh
+.ifdef C1INTFH
+         .equiv  C1intfh, C1INTFH
+  .endif
+.endif
+.ifndef  C1intfl
+.ifdef C1INTFL
+         .equiv  C1intfl, C1INTFL
+  .endif
+.endif
+.ifndef  C1ip0
+.ifdef C1IP0
+         .equiv  C1ip0, C1IP0
+  .endif
+.endif
+.ifndef  C1ip1
+.ifdef C1IP1
+         .equiv  C1ip1, C1IP1
+  .endif
+.endif
+.ifndef  C1ip2
+.ifdef C1IP2
+         .equiv  C1ip2, C1IP2
+  .endif
+.endif
+.ifndef  C1md
+.ifdef C1MD
+         .equiv  C1md, C1MD
+  .endif
+.endif
+.ifndef  C1rx0b1h
+.ifdef C1RX0B1H
+         .equiv  C1rx0b1h, C1RX0B1H
+  .endif
+.endif
+.ifndef  C1rx0b1l
+.ifdef C1RX0B1L
+         .equiv  C1rx0b1l, C1RX0B1L
+  .endif
+.endif
+.ifndef  C1rx0b2h
+.ifdef C1RX0B2H
+         .equiv  C1rx0b2h, C1RX0B2H
+  .endif
+.endif
+.ifndef  C1rx0b2l
+.ifdef C1RX0B2L
+         .equiv  C1rx0b2l, C1RX0B2L
+  .endif
+.endif
+.ifndef  C1rx0b3h
+.ifdef C1RX0B3H
+         .equiv  C1rx0b3h, C1RX0B3H
+  .endif
+.endif
+.ifndef  C1rx0b3l
+.ifdef C1RX0B3L
+         .equiv  C1rx0b3l, C1RX0B3L
+  .endif
+.endif
+.ifndef  C1rx0b4h
+.ifdef C1RX0B4H
+         .equiv  C1rx0b4h, C1RX0B4H
+  .endif
+.endif
+.ifndef  C1rx0b4l
+.ifdef C1RX0B4L
+         .equiv  C1rx0b4l, C1RX0B4L
+  .endif
+.endif
+.ifndef  C1rx0conh
+.ifdef C1RX0CONH
+         .equiv  C1rx0conh, C1RX0CONH
+  .endif
+.endif
+.ifndef  C1rx0conl
+.ifdef C1RX0CONL
+         .equiv  C1rx0conl, C1RX0CONL
+  .endif
+.endif
+.ifndef  C1rx0eidh
+.ifdef C1RX0EIDH
+         .equiv  C1rx0eidh, C1RX0EIDH
+  .endif
+.endif
+.ifndef  C1rx0eidl
+.ifdef C1RX0EIDL
+         .equiv  C1rx0eidl, C1RX0EIDL
+  .endif
+.endif
+.ifndef  C1rx0sidh
+.ifdef C1RX0SIDH
+         .equiv  C1rx0sidh, C1RX0SIDH
+  .endif
+.endif
+.ifndef  C1rx0sidl
+.ifdef C1RX0SIDL
+         .equiv  C1rx0sidl, C1RX0SIDL
+  .endif
+.endif
+.ifndef  C1rx1b1h
+.ifdef C1RX1B1H
+         .equiv  C1rx1b1h, C1RX1B1H
+  .endif
+.endif
+.ifndef  C1rx1b1l
+.ifdef C1RX1B1L
+         .equiv  C1rx1b1l, C1RX1B1L
+  .endif
+.endif
+.ifndef  C1rx1b2h
+.ifdef C1RX1B2H
+         .equiv  C1rx1b2h, C1RX1B2H
+  .endif
+.endif
+.ifndef  C1rx1b2l
+.ifdef C1RX1B2L
+         .equiv  C1rx1b2l, C1RX1B2L
+  .endif
+.endif
+.ifndef  C1rx1b3h
+.ifdef C1RX1B3H
+         .equiv  C1rx1b3h, C1RX1B3H
+  .endif
+.endif
+.ifndef  C1rx1b3l
+.ifdef C1RX1B3L
+         .equiv  C1rx1b3l, C1RX1B3L
+  .endif
+.endif
+.ifndef  C1rx1b4h
+.ifdef C1RX1B4H
+         .equiv  C1rx1b4h, C1RX1B4H
+  .endif
+.endif
+.ifndef  C1rx1b4l
+.ifdef C1RX1B4L
+         .equiv  C1rx1b4l, C1RX1B4L
+  .endif
+.endif
+.ifndef  C1rx1conh
+.ifdef C1RX1CONH
+         .equiv  C1rx1conh, C1RX1CONH
+  .endif
+.endif
+.ifndef  C1rx1conl
+.ifdef C1RX1CONL
+         .equiv  C1rx1conl, C1RX1CONL
+  .endif
+.endif
+.ifndef  C1rx1eidh
+.ifdef C1RX1EIDH
+         .equiv  C1rx1eidh, C1RX1EIDH
+  .endif
+.endif
+.ifndef  C1rx1eidl
+.ifdef C1RX1EIDL
+         .equiv  C1rx1eidl, C1RX1EIDL
+  .endif
+.endif
+.ifndef  C1rx1sidh
+.ifdef C1RX1SIDH
+         .equiv  C1rx1sidh, C1RX1SIDH
+  .endif
+.endif
+.ifndef  C1rx1sidl
+.ifdef C1RX1SIDL
+         .equiv  C1rx1sidl, C1RX1SIDL
+  .endif
+.endif
+.ifndef  C1rxf0eidh
+.ifdef C1RXF0EIDH
+         .equiv  C1rxf0eidh, C1RXF0EIDH
+  .endif
+.endif
+.ifndef  C1rxf0eidl
+.ifdef C1RXF0EIDL
+         .equiv  C1rxf0eidl, C1RXF0EIDL
+  .endif
+.endif
+.ifndef  C1rxf0sidh
+.ifdef C1RXF0SIDH
+         .equiv  C1rxf0sidh, C1RXF0SIDH
+  .endif
+.endif
+.ifndef  C1rxf0sidl
+.ifdef C1RXF0SIDL
+         .equiv  C1rxf0sidl, C1RXF0SIDL
+  .endif
+.endif
+.ifndef  C1rxf1eidh
+.ifdef C1RXF1EIDH
+         .equiv  C1rxf1eidh, C1RXF1EIDH
+  .endif
+.endif
+.ifndef  C1rxf1eidl
+.ifdef C1RXF1EIDL
+         .equiv  C1rxf1eidl, C1RXF1EIDL
+  .endif
+.endif
+.ifndef  C1rxf1sidh
+.ifdef C1RXF1SIDH
+         .equiv  C1rxf1sidh, C1RXF1SIDH
+  .endif
+.endif
+.ifndef  C1rxf1sidl
+.ifdef C1RXF1SIDL
+         .equiv  C1rxf1sidl, C1RXF1SIDL
+  .endif
+.endif
+.ifndef  C1rxf2eidh
+.ifdef C1RXF2EIDH
+         .equiv  C1rxf2eidh, C1RXF2EIDH
+  .endif
+.endif
+.ifndef  C1rxf2eidl
+.ifdef C1RXF2EIDL
+         .equiv  C1rxf2eidl, C1RXF2EIDL
+  .endif
+.endif
+.ifndef  C1rxf2sidh
+.ifdef C1RXF2SIDH
+         .equiv  C1rxf2sidh, C1RXF2SIDH
+  .endif
+.endif
+.ifndef  C1rxf2sidl
+.ifdef C1RXF2SIDL
+         .equiv  C1rxf2sidl, C1RXF2SIDL
+  .endif
+.endif
+.ifndef  C1rxf3eidh
+.ifdef C1RXF3EIDH
+         .equiv  C1rxf3eidh, C1RXF3EIDH
+  .endif
+.endif
+.ifndef  C1rxf3eidl
+.ifdef C1RXF3EIDL
+         .equiv  C1rxf3eidl, C1RXF3EIDL
+  .endif
+.endif
+.ifndef  C1rxf3sidh
+.ifdef C1RXF3SIDH
+         .equiv  C1rxf3sidh, C1RXF3SIDH
+  .endif
+.endif
+.ifndef  C1rxf3sidl
+.ifdef C1RXF3SIDL
+         .equiv  C1rxf3sidl, C1RXF3SIDL
+  .endif
+.endif
+.ifndef  C1rxf4eidh
+.ifdef C1RXF4EIDH
+         .equiv  C1rxf4eidh, C1RXF4EIDH
+  .endif
+.endif
+.ifndef  C1rxf4eidl
+.ifdef C1RXF4EIDL
+         .equiv  C1rxf4eidl, C1RXF4EIDL
+  .endif
+.endif
+.ifndef  C1rxf4sidh
+.ifdef C1RXF4SIDH
+         .equiv  C1rxf4sidh, C1RXF4SIDH
+  .endif
+.endif
+.ifndef  C1rxf4sidl
+.ifdef C1RXF4SIDL
+         .equiv  C1rxf4sidl, C1RXF4SIDL
+  .endif
+.endif
+.ifndef  C1rxf5eidh
+.ifdef C1RXF5EIDH
+         .equiv  C1rxf5eidh, C1RXF5EIDH
+  .endif
+.endif
+.ifndef  C1rxf5eidl
+.ifdef C1RXF5EIDL
+         .equiv  C1rxf5eidl, C1RXF5EIDL
+  .endif
+.endif
+.ifndef  C1rxf5sidh
+.ifdef C1RXF5SIDH
+         .equiv  C1rxf5sidh, C1RXF5SIDH
+  .endif
+.endif
+.ifndef  C1rxf5sidl
+.ifdef C1RXF5SIDL
+         .equiv  C1rxf5sidl, C1RXF5SIDL
+  .endif
+.endif
+.ifndef  C1rxm0eidh
+.ifdef C1RXM0EIDH
+         .equiv  C1rxm0eidh, C1RXM0EIDH
+  .endif
+.endif
+.ifndef  C1rxm0eidl
+.ifdef C1RXM0EIDL
+         .equiv  C1rxm0eidl, C1RXM0EIDL
+  .endif
+.endif
+.ifndef  C1rxm0sidh
+.ifdef C1RXM0SIDH
+         .equiv  C1rxm0sidh, C1RXM0SIDH
+  .endif
+.endif
+.ifndef  C1rxm0sidl
+.ifdef C1RXM0SIDL
+         .equiv  C1rxm0sidl, C1RXM0SIDL
+  .endif
+.endif
+.ifndef  C1rxm1eidh
+.ifdef C1RXM1EIDH
+         .equiv  C1rxm1eidh, C1RXM1EIDH
+  .endif
+.endif
+.ifndef  C1rxm1eidl
+.ifdef C1RXM1EIDL
+         .equiv  C1rxm1eidl, C1RXM1EIDL
+  .endif
+.endif
+.ifndef  C1rxm1sidh
+.ifdef C1RXM1SIDH
+         .equiv  C1rxm1sidh, C1RXM1SIDH
+  .endif
+.endif
+.ifndef  C1rxm1sidl
+.ifdef C1RXM1SIDL
+         .equiv  C1rxm1sidl, C1RXM1SIDL
+  .endif
+.endif
+.ifndef  C1tx0b1h
+.ifdef C1TX0B1H
+         .equiv  C1tx0b1h, C1TX0B1H
+  .endif
+.endif
+.ifndef  C1tx0b1l
+.ifdef C1TX0B1L
+         .equiv  C1tx0b1l, C1TX0B1L
+  .endif
+.endif
+.ifndef  C1tx0b2h
+.ifdef C1TX0B2H
+         .equiv  C1tx0b2h, C1TX0B2H
+  .endif
+.endif
+.ifndef  C1tx0b2l
+.ifdef C1TX0B2L
+         .equiv  C1tx0b2l, C1TX0B2L
+  .endif
+.endif
+.ifndef  C1tx0b3h
+.ifdef C1TX0B3H
+         .equiv  C1tx0b3h, C1TX0B3H
+  .endif
+.endif
+.ifndef  C1tx0b3l
+.ifdef C1TX0B3L
+         .equiv  C1tx0b3l, C1TX0B3L
+  .endif
+.endif
+.ifndef  C1tx0b4h
+.ifdef C1TX0B4H
+         .equiv  C1tx0b4h, C1TX0B4H
+  .endif
+.endif
+.ifndef  C1tx0b4l
+.ifdef C1TX0B4L
+         .equiv  C1tx0b4l, C1TX0B4L
+  .endif
+.endif
+.ifndef  C1tx0conh
+.ifdef C1TX0CONH
+         .equiv  C1tx0conh, C1TX0CONH
+  .endif
+.endif
+.ifndef  C1tx0conl
+.ifdef C1TX0CONL
+         .equiv  C1tx0conl, C1TX0CONL
+  .endif
+.endif
+.ifndef  C1tx0eidh
+.ifdef C1TX0EIDH
+         .equiv  C1tx0eidh, C1TX0EIDH
+  .endif
+.endif
+.ifndef  C1tx0eidl
+.ifdef C1TX0EIDL
+         .equiv  C1tx0eidl, C1TX0EIDL
+  .endif
+.endif
+.ifndef  C1tx0sidh
+.ifdef C1TX0SIDH
+         .equiv  C1tx0sidh, C1TX0SIDH
+  .endif
+.endif
+.ifndef  C1tx0sidl
+.ifdef C1TX0SIDL
+         .equiv  C1tx0sidl, C1TX0SIDL
+  .endif
+.endif
+.ifndef  C1tx1b1h
+.ifdef C1TX1B1H
+         .equiv  C1tx1b1h, C1TX1B1H
+  .endif
+.endif
+.ifndef  C1tx1b1l
+.ifdef C1TX1B1L
+         .equiv  C1tx1b1l, C1TX1B1L
+  .endif
+.endif
+.ifndef  C1tx1b2h
+.ifdef C1TX1B2H
+         .equiv  C1tx1b2h, C1TX1B2H
+  .endif
+.endif
+.ifndef  C1tx1b2l
+.ifdef C1TX1B2L
+         .equiv  C1tx1b2l, C1TX1B2L
+  .endif
+.endif
+.ifndef  C1tx1b3h
+.ifdef C1TX1B3H
+         .equiv  C1tx1b3h, C1TX1B3H
+  .endif
+.endif
+.ifndef  C1tx1b3l
+.ifdef C1TX1B3L
+         .equiv  C1tx1b3l, C1TX1B3L
+  .endif
+.endif
+.ifndef  C1tx1b4h
+.ifdef C1TX1B4H
+         .equiv  C1tx1b4h, C1TX1B4H
+  .endif
+.endif
+.ifndef  C1tx1b4l
+.ifdef C1TX1B4L
+         .equiv  C1tx1b4l, C1TX1B4L
+  .endif
+.endif
+.ifndef  C1tx1conh
+.ifdef C1TX1CONH
+         .equiv  C1tx1conh, C1TX1CONH
+  .endif
+.endif
+.ifndef  C1tx1conl
+.ifdef C1TX1CONL
+         .equiv  C1tx1conl, C1TX1CONL
+  .endif
+.endif
+.ifndef  C1tx1eidh
+.ifdef C1TX1EIDH
+         .equiv  C1tx1eidh, C1TX1EIDH
+  .endif
+.endif
+.ifndef  C1tx1eidl
+.ifdef C1TX1EIDL
+         .equiv  C1tx1eidl, C1TX1EIDL
+  .endif
+.endif
+.ifndef  C1tx1sidh
+.ifdef C1TX1SIDH
+         .equiv  C1tx1sidh, C1TX1SIDH
+  .endif
+.endif
+.ifndef  C1tx1sidl
+.ifdef C1TX1SIDL
+         .equiv  C1tx1sidl, C1TX1SIDL
+  .endif
+.endif
+.ifndef  C1tx2b1h
+.ifdef C1TX2B1H
+         .equiv  C1tx2b1h, C1TX2B1H
+  .endif
+.endif
+.ifndef  C1tx2b1l
+.ifdef C1TX2B1L
+         .equiv  C1tx2b1l, C1TX2B1L
+  .endif
+.endif
+.ifndef  C1tx2b2h
+.ifdef C1TX2B2H
+         .equiv  C1tx2b2h, C1TX2B2H
+  .endif
+.endif
+.ifndef  C1tx2b2l
+.ifdef C1TX2B2L
+         .equiv  C1tx2b2l, C1TX2B2L
+  .endif
+.endif
+.ifndef  C1tx2b3h
+.ifdef C1TX2B3H
+         .equiv  C1tx2b3h, C1TX2B3H
+  .endif
+.endif
+.ifndef  C1tx2b3l
+.ifdef C1TX2B3L
+         .equiv  C1tx2b3l, C1TX2B3L
+  .endif
+.endif
+.ifndef  C1tx2b4h
+.ifdef C1TX2B4H
+         .equiv  C1tx2b4h, C1TX2B4H
+  .endif
+.endif
+.ifndef  C1tx2b4l
+.ifdef C1TX2B4L
+         .equiv  C1tx2b4l, C1TX2B4L
+  .endif
+.endif
+.ifndef  C1tx2conh
+.ifdef C1TX2CONH
+         .equiv  C1tx2conh, C1TX2CONH
+  .endif
+.endif
+.ifndef  C1tx2conl
+.ifdef C1TX2CONL
+         .equiv  C1tx2conl, C1TX2CONL
+  .endif
+.endif
+.ifndef  C1tx2eidh
+.ifdef C1TX2EIDH
+         .equiv  C1tx2eidh, C1TX2EIDH
+  .endif
+.endif
+.ifndef  C1tx2eidl
+.ifdef C1TX2EIDL
+         .equiv  C1tx2eidl, C1TX2EIDL
+  .endif
+.endif
+.ifndef  C1tx2sidh
+.ifdef C1TX2SIDH
+         .equiv  C1tx2sidh, C1TX2SIDH
+  .endif
+.endif
+.ifndef  C1tx2sidl
+.ifdef C1TX2SIDL
+         .equiv  C1tx2sidl, C1TX2SIDL
+  .endif
+.endif
+.ifndef  C2cfg1h
+.ifdef C2CFG1H
+         .equiv  C2cfg1h, C2CFG1H
+  .endif
+.endif
+.ifndef  C2cfg1l
+.ifdef C2CFG1L
+         .equiv  C2cfg1l, C2CFG1L
+  .endif
+.endif
+.ifndef  C2cfg2h
+.ifdef C2CFG2H
+         .equiv  C2cfg2h, C2CFG2H
+  .endif
+.endif
+.ifndef  C2cfg2l
+.ifdef C2CFG2L
+         .equiv  C2cfg2l, C2CFG2L
+  .endif
+.endif
+.ifndef  C2ctrlh
+.ifdef C2CTRLH
+         .equiv  C2ctrlh, C2CTRLH
+  .endif
+.endif
+.ifndef  C2ctrll
+.ifdef C2CTRLL
+         .equiv  C2ctrll, C2CTRLL
+  .endif
+.endif
+.ifndef  C2ech
+.ifdef C2ECH
+         .equiv  C2ech, C2ECH
+  .endif
+.endif
+.ifndef  C2ecl
+.ifdef C2ECL
+         .equiv  C2ecl, C2ECL
+  .endif
+.endif
+.ifndef  C2ie
+.ifdef C2IE
+         .equiv  C2ie, C2IE
+  .endif
+.endif
+.ifndef  C2if
+.ifdef C2IF
+         .equiv  C2if, C2IF
+  .endif
+.endif
+.ifndef  C2inteh
+.ifdef C2INTEH
+         .equiv  C2inteh, C2INTEH
+  .endif
+.endif
+.ifndef  C2intel
+.ifdef C2INTEL
+         .equiv  C2intel, C2INTEL
+  .endif
+.endif
+.ifndef  C2intfh
+.ifdef C2INTFH
+         .equiv  C2intfh, C2INTFH
+  .endif
+.endif
+.ifndef  C2intfl
+.ifdef C2INTFL
+         .equiv  C2intfl, C2INTFL
+  .endif
+.endif
+.ifndef  C2ip0
+.ifdef C2IP0
+         .equiv  C2ip0, C2IP0
+  .endif
+.endif
+.ifndef  C2ip1
+.ifdef C2IP1
+         .equiv  C2ip1, C2IP1
+  .endif
+.endif
+.ifndef  C2ip2
+.ifdef C2IP2
+         .equiv  C2ip2, C2IP2
+  .endif
+.endif
+.ifndef  C2md
+.ifdef C2MD
+         .equiv  C2md, C2MD
+  .endif
+.endif
+.ifndef  C2rx0b1h
+.ifdef C2RX0B1H
+         .equiv  C2rx0b1h, C2RX0B1H
+  .endif
+.endif
+.ifndef  C2rx0b1l
+.ifdef C2RX0B1L
+         .equiv  C2rx0b1l, C2RX0B1L
+  .endif
+.endif
+.ifndef  C2rx0b2h
+.ifdef C2RX0B2H
+         .equiv  C2rx0b2h, C2RX0B2H
+  .endif
+.endif
+.ifndef  C2rx0b2l
+.ifdef C2RX0B2L
+         .equiv  C2rx0b2l, C2RX0B2L
+  .endif
+.endif
+.ifndef  C2rx0b3h
+.ifdef C2RX0B3H
+         .equiv  C2rx0b3h, C2RX0B3H
+  .endif
+.endif
+.ifndef  C2rx0b3l
+.ifdef C2RX0B3L
+         .equiv  C2rx0b3l, C2RX0B3L
+  .endif
+.endif
+.ifndef  C2rx0b4h
+.ifdef C2RX0B4H
+         .equiv  C2rx0b4h, C2RX0B4H
+  .endif
+.endif
+.ifndef  C2rx0b4l
+.ifdef C2RX0B4L
+         .equiv  C2rx0b4l, C2RX0B4L
+  .endif
+.endif
+.ifndef  C2rx0conh
+.ifdef C2RX0CONH
+         .equiv  C2rx0conh, C2RX0CONH
+  .endif
+.endif
+.ifndef  C2rx0conl
+.ifdef C2RX0CONL
+         .equiv  C2rx0conl, C2RX0CONL
+  .endif
+.endif
+.ifndef  C2rx0eidh
+.ifdef C2RX0EIDH
+         .equiv  C2rx0eidh, C2RX0EIDH
+  .endif
+.endif
+.ifndef  C2rx0eidl
+.ifdef C2RX0EIDL
+         .equiv  C2rx0eidl, C2RX0EIDL
+  .endif
+.endif
+.ifndef  C2rx0sidh
+.ifdef C2RX0SIDH
+         .equiv  C2rx0sidh, C2RX0SIDH
+  .endif
+.endif
+.ifndef  C2rx0sidl
+.ifdef C2RX0SIDL
+         .equiv  C2rx0sidl, C2RX0SIDL
+  .endif
+.endif
+.ifndef  C2rx1b1h
+.ifdef C2RX1B1H
+         .equiv  C2rx1b1h, C2RX1B1H
+  .endif
+.endif
+.ifndef  C2rx1b1l
+.ifdef C2RX1B1L
+         .equiv  C2rx1b1l, C2RX1B1L
+  .endif
+.endif
+.ifndef  C2rx1b2h
+.ifdef C2RX1B2H
+         .equiv  C2rx1b2h, C2RX1B2H
+  .endif
+.endif
+.ifndef  C2rx1b2l
+.ifdef C2RX1B2L
+         .equiv  C2rx1b2l, C2RX1B2L
+  .endif
+.endif
+.ifndef  C2rx1b3h
+.ifdef C2RX1B3H
+         .equiv  C2rx1b3h, C2RX1B3H
+  .endif
+.endif
+.ifndef  C2rx1b3l
+.ifdef C2RX1B3L
+         .equiv  C2rx1b3l, C2RX1B3L
+  .endif
+.endif
+.ifndef  C2rx1b4h
+.ifdef C2RX1B4H
+         .equiv  C2rx1b4h, C2RX1B4H
+  .endif
+.endif
+.ifndef  C2rx1b4l
+.ifdef C2RX1B4L
+         .equiv  C2rx1b4l, C2RX1B4L
+  .endif
+.endif
+.ifndef  C2rx1conh
+.ifdef C2RX1CONH
+         .equiv  C2rx1conh, C2RX1CONH
+  .endif
+.endif
+.ifndef  C2rx1conl
+.ifdef C2RX1CONL
+         .equiv  C2rx1conl, C2RX1CONL
+  .endif
+.endif
+.ifndef  C2rx1eidh
+.ifdef C2RX1EIDH
+         .equiv  C2rx1eidh, C2RX1EIDH
+  .endif
+.endif
+.ifndef  C2rx1eidl
+.ifdef C2RX1EIDL
+         .equiv  C2rx1eidl, C2RX1EIDL
+  .endif
+.endif
+.ifndef  C2rx1sidh
+.ifdef C2RX1SIDH
+         .equiv  C2rx1sidh, C2RX1SIDH
+  .endif
+.endif
+.ifndef  C2rx1sidl
+.ifdef C2RX1SIDL
+         .equiv  C2rx1sidl, C2RX1SIDL
+  .endif
+.endif
+.ifndef  C2rxf0eidh
+.ifdef C2RXF0EIDH
+         .equiv  C2rxf0eidh, C2RXF0EIDH
+  .endif
+.endif
+.ifndef  C2rxf0eidl
+.ifdef C2RXF0EIDL
+         .equiv  C2rxf0eidl, C2RXF0EIDL
+  .endif
+.endif
+.ifndef  C2rxf0sidh
+.ifdef C2RXF0SIDH
+         .equiv  C2rxf0sidh, C2RXF0SIDH
+  .endif
+.endif
+.ifndef  C2rxf0sidl
+.ifdef C2RXF0SIDL
+         .equiv  C2rxf0sidl, C2RXF0SIDL
+  .endif
+.endif
+.ifndef  C2rxf1eidh
+.ifdef C2RXF1EIDH
+         .equiv  C2rxf1eidh, C2RXF1EIDH
+  .endif
+.endif
+.ifndef  C2rxf1eidl
+.ifdef C2RXF1EIDL
+         .equiv  C2rxf1eidl, C2RXF1EIDL
+  .endif
+.endif
+.ifndef  C2rxf1sidh
+.ifdef C2RXF1SIDH
+         .equiv  C2rxf1sidh, C2RXF1SIDH
+  .endif
+.endif
+.ifndef  C2rxf1sidl
+.ifdef C2RXF1SIDL
+         .equiv  C2rxf1sidl, C2RXF1SIDL
+  .endif
+.endif
+.ifndef  C2rxf2eidh
+.ifdef C2RXF2EIDH
+         .equiv  C2rxf2eidh, C2RXF2EIDH
+  .endif
+.endif
+.ifndef  C2rxf2eidl
+.ifdef C2RXF2EIDL
+         .equiv  C2rxf2eidl, C2RXF2EIDL
+  .endif
+.endif
+.ifndef  C2rxf2sidh
+.ifdef C2RXF2SIDH
+         .equiv  C2rxf2sidh, C2RXF2SIDH
+  .endif
+.endif
+.ifndef  C2rxf2sidl
+.ifdef C2RXF2SIDL
+         .equiv  C2rxf2sidl, C2RXF2SIDL
+  .endif
+.endif
+.ifndef  C2rxf3eidh
+.ifdef C2RXF3EIDH
+         .equiv  C2rxf3eidh, C2RXF3EIDH
+  .endif
+.endif
+.ifndef  C2rxf3eidl
+.ifdef C2RXF3EIDL
+         .equiv  C2rxf3eidl, C2RXF3EIDL
+  .endif
+.endif
+.ifndef  C2rxf3sidh
+.ifdef C2RXF3SIDH
+         .equiv  C2rxf3sidh, C2RXF3SIDH
+  .endif
+.endif
+.ifndef  C2rxf3sidl
+.ifdef C2RXF3SIDL
+         .equiv  C2rxf3sidl, C2RXF3SIDL
+  .endif
+.endif
+.ifndef  C2rxf4eidh
+.ifdef C2RXF4EIDH
+         .equiv  C2rxf4eidh, C2RXF4EIDH
+  .endif
+.endif
+.ifndef  C2rxf4eidl
+.ifdef C2RXF4EIDL
+         .equiv  C2rxf4eidl, C2RXF4EIDL
+  .endif
+.endif
+.ifndef  C2rxf4sidh
+.ifdef C2RXF4SIDH
+         .equiv  C2rxf4sidh, C2RXF4SIDH
+  .endif
+.endif
+.ifndef  C2rxf4sidl
+.ifdef C2RXF4SIDL
+         .equiv  C2rxf4sidl, C2RXF4SIDL
+  .endif
+.endif
+.ifndef  C2rxf5eidh
+.ifdef C2RXF5EIDH
+         .equiv  C2rxf5eidh, C2RXF5EIDH
+  .endif
+.endif
+.ifndef  C2rxf5eidl
+.ifdef C2RXF5EIDL
+         .equiv  C2rxf5eidl, C2RXF5EIDL
+  .endif
+.endif
+.ifndef  C2rxf5sidh
+.ifdef C2RXF5SIDH
+         .equiv  C2rxf5sidh, C2RXF5SIDH
+  .endif
+.endif
+.ifndef  C2rxf5sidl
+.ifdef C2RXF5SIDL
+         .equiv  C2rxf5sidl, C2RXF5SIDL
+  .endif
+.endif
+.ifndef  C2rxm0eidh
+.ifdef C2RXM0EIDH
+         .equiv  C2rxm0eidh, C2RXM0EIDH
+  .endif
+.endif
+.ifndef  C2rxm0eidl
+.ifdef C2RXM0EIDL
+         .equiv  C2rxm0eidl, C2RXM0EIDL
+  .endif
+.endif
+.ifndef  C2rxm0sidh
+.ifdef C2RXM0SIDH
+         .equiv  C2rxm0sidh, C2RXM0SIDH
+  .endif
+.endif
+.ifndef  C2rxm0sidl
+.ifdef C2RXM0SIDL
+         .equiv  C2rxm0sidl, C2RXM0SIDL
+  .endif
+.endif
+.ifndef  C2rxm1eidh
+.ifdef C2RXM1EIDH
+         .equiv  C2rxm1eidh, C2RXM1EIDH
+  .endif
+.endif
+.ifndef  C2rxm1eidl
+.ifdef C2RXM1EIDL
+         .equiv  C2rxm1eidl, C2RXM1EIDL
+  .endif
+.endif
+.ifndef  C2rxm1sidh
+.ifdef C2RXM1SIDH
+         .equiv  C2rxm1sidh, C2RXM1SIDH
+  .endif
+.endif
+.ifndef  C2rxm1sidl
+.ifdef C2RXM1SIDL
+         .equiv  C2rxm1sidl, C2RXM1SIDL
+  .endif
+.endif
+.ifndef  C2tx0b1h
+.ifdef C2TX0B1H
+         .equiv  C2tx0b1h, C2TX0B1H
+  .endif
+.endif
+.ifndef  C2tx0b1l
+.ifdef C2TX0B1L
+         .equiv  C2tx0b1l, C2TX0B1L
+  .endif
+.endif
+.ifndef  C2tx0b2h
+.ifdef C2TX0B2H
+         .equiv  C2tx0b2h, C2TX0B2H
+  .endif
+.endif
+.ifndef  C2tx0b2l
+.ifdef C2TX0B2L
+         .equiv  C2tx0b2l, C2TX0B2L
+  .endif
+.endif
+.ifndef  C2tx0b3h
+.ifdef C2TX0B3H
+         .equiv  C2tx0b3h, C2TX0B3H
+  .endif
+.endif
+.ifndef  C2tx0b3l
+.ifdef C2TX0B3L
+         .equiv  C2tx0b3l, C2TX0B3L
+  .endif
+.endif
+.ifndef  C2tx0b4h
+.ifdef C2TX0B4H
+         .equiv  C2tx0b4h, C2TX0B4H
+  .endif
+.endif
+.ifndef  C2tx0b4l
+.ifdef C2TX0B4L
+         .equiv  C2tx0b4l, C2TX0B4L
+  .endif
+.endif
+.ifndef  C2tx0conh
+.ifdef C2TX0CONH
+         .equiv  C2tx0conh, C2TX0CONH
+  .endif
+.endif
+.ifndef  C2tx0conl
+.ifdef C2TX0CONL
+         .equiv  C2tx0conl, C2TX0CONL
+  .endif
+.endif
+.ifndef  C2tx0eidh
+.ifdef C2TX0EIDH
+         .equiv  C2tx0eidh, C2TX0EIDH
+  .endif
+.endif
+.ifndef  C2tx0eidl
+.ifdef C2TX0EIDL
+         .equiv  C2tx0eidl, C2TX0EIDL
+  .endif
+.endif
+.ifndef  C2tx0sidh
+.ifdef C2TX0SIDH
+         .equiv  C2tx0sidh, C2TX0SIDH
+  .endif
+.endif
+.ifndef  C2tx0sidl
+.ifdef C2TX0SIDL
+         .equiv  C2tx0sidl, C2TX0SIDL
+  .endif
+.endif
+.ifndef  C2tx1b1h
+.ifdef C2TX1B1H
+         .equiv  C2tx1b1h, C2TX1B1H
+  .endif
+.endif
+.ifndef  C2tx1b1l
+.ifdef C2TX1B1L
+         .equiv  C2tx1b1l, C2TX1B1L
+  .endif
+.endif
+.ifndef  C2tx1b2h
+.ifdef C2TX1B2H
+         .equiv  C2tx1b2h, C2TX1B2H
+  .endif
+.endif
+.ifndef  C2tx1b2l
+.ifdef C2TX1B2L
+         .equiv  C2tx1b2l, C2TX1B2L
+  .endif
+.endif
+.ifndef  C2tx1b3h
+.ifdef C2TX1B3H
+         .equiv  C2tx1b3h, C2TX1B3H
+  .endif
+.endif
+.ifndef  C2tx1b3l
+.ifdef C2TX1B3L
+         .equiv  C2tx1b3l, C2TX1B3L
+  .endif
+.endif
+.ifndef  C2tx1b4h
+.ifdef C2TX1B4H
+         .equiv  C2tx1b4h, C2TX1B4H
+  .endif
+.endif
+.ifndef  C2tx1b4l
+.ifdef C2TX1B4L
+         .equiv  C2tx1b4l, C2TX1B4L
+  .endif
+.endif
+.ifndef  C2tx1conh
+.ifdef C2TX1CONH
+         .equiv  C2tx1conh, C2TX1CONH
+  .endif
+.endif
+.ifndef  C2tx1conl
+.ifdef C2TX1CONL
+         .equiv  C2tx1conl, C2TX1CONL
+  .endif
+.endif
+.ifndef  C2tx1eidh
+.ifdef C2TX1EIDH
+         .equiv  C2tx1eidh, C2TX1EIDH
+  .endif
+.endif
+.ifndef  C2tx1eidl
+.ifdef C2TX1EIDL
+         .equiv  C2tx1eidl, C2TX1EIDL
+  .endif
+.endif
+.ifndef  C2tx1sidh
+.ifdef C2TX1SIDH
+         .equiv  C2tx1sidh, C2TX1SIDH
+  .endif
+.endif
+.ifndef  C2tx1sidl
+.ifdef C2TX1SIDL
+         .equiv  C2tx1sidl, C2TX1SIDL
+  .endif
+.endif
+.ifndef  C2tx2b1h
+.ifdef C2TX2B1H
+         .equiv  C2tx2b1h, C2TX2B1H
+  .endif
+.endif
+.ifndef  C2tx2b1l
+.ifdef C2TX2B1L
+         .equiv  C2tx2b1l, C2TX2B1L
+  .endif
+.endif
+.ifndef  C2tx2b2h
+.ifdef C2TX2B2H
+         .equiv  C2tx2b2h, C2TX2B2H
+  .endif
+.endif
+.ifndef  C2tx2b2l
+.ifdef C2TX2B2L
+         .equiv  C2tx2b2l, C2TX2B2L
+  .endif
+.endif
+.ifndef  C2tx2b3h
+.ifdef C2TX2B3H
+         .equiv  C2tx2b3h, C2TX2B3H
+  .endif
+.endif
+.ifndef  C2tx2b3l
+.ifdef C2TX2B3L
+         .equiv  C2tx2b3l, C2TX2B3L
+  .endif
+.endif
+.ifndef  C2tx2b4h
+.ifdef C2TX2B4H
+         .equiv  C2tx2b4h, C2TX2B4H
+  .endif
+.endif
+.ifndef  C2tx2b4l
+.ifdef C2TX2B4L
+         .equiv  C2tx2b4l, C2TX2B4L
+  .endif
+.endif
+.ifndef  C2tx2conh
+.ifdef C2TX2CONH
+         .equiv  C2tx2conh, C2TX2CONH
+  .endif
+.endif
+.ifndef  C2tx2conl
+.ifdef C2TX2CONL
+         .equiv  C2tx2conl, C2TX2CONL
+  .endif
+.endif
+.ifndef  C2tx2eidh
+.ifdef C2TX2EIDH
+         .equiv  C2tx2eidh, C2TX2EIDH
+  .endif
+.endif
+.ifndef  C2tx2eidl
+.ifdef C2TX2EIDL
+         .equiv  C2tx2eidl, C2TX2EIDL
+  .endif
+.endif
+.ifndef  C2tx2sidh
+.ifdef C2TX2SIDH
+         .equiv  C2tx2sidh, C2TX2SIDH
+  .endif
+.endif
+.ifndef  C2tx2sidl
+.ifdef C2TX2SIDL
+         .equiv  C2tx2sidl, C2TX2SIDL
+  .endif
+.endif
+.ifndef  Cancap
+.ifdef CANCAP
+         .equiv  Cancap, CANCAP
+  .endif
+.endif
+.ifndef  Cancks
+.ifdef CANCKS
+         .equiv  Cancks, CANCKS
+  .endif
+.endif
+.ifndef  Ccpon
+.ifdef CCPON
+         .equiv  Ccpon, CCPON
+  .endif
+.endif
+.ifndef  Ccp1if
+.ifdef CCP1IF
+         .equiv  Ccp1if, CCP1IF
+  .endif
+.endif
+.ifndef  Ccp1ie
+.ifdef CCP1IE
+         .equiv  Ccp1ie, CCP1IE
+  .endif
+.endif
+.ifndef  Cct1if
+.ifdef CCT1IF
+         .equiv  Cct1if, CCT1IF
+  .endif
+.endif
+.ifndef  Cct1ie
+.ifdef CCT1IE
+         .equiv  Cct1ie, CCT1IE
+  .endif
+.endif
+.ifndef  Cf
+.ifdef CF
+         .equiv  Cf, CF
+  .endif
+.endif
+.ifndef  Ch0na
+.ifdef CH0NA
+         .equiv  Ch0na, CH0NA
+  .endif
+.endif
+.ifndef  Ch0nb
+.ifdef CH0NB
+         .equiv  Ch0nb, CH0NB
+  .endif
+.endif
+.ifndef  Ch0sa0
+.ifdef CH0SA0
+         .equiv  Ch0sa0, CH0SA0
+  .endif
+.endif
+.ifndef  Ch0sa1
+.ifdef CH0SA1
+         .equiv  Ch0sa1, CH0SA1
+  .endif
+.endif
+.ifndef  Ch0sa2
+.ifdef CH0SA2
+         .equiv  Ch0sa2, CH0SA2
+  .endif
+.endif
+.ifndef  Ch0sa3
+.ifdef CH0SA3
+         .equiv  Ch0sa3, CH0SA3
+  .endif
+.endif
+.ifndef  Ch0sb0
+.ifdef CH0SB0
+         .equiv  Ch0sb0, CH0SB0
+  .endif
+.endif
+.ifndef  Ch0sb1
+.ifdef CH0SB1
+         .equiv  Ch0sb1, CH0SB1
+  .endif
+.endif
+.ifndef  Ch0sb2
+.ifdef CH0SB2
+         .equiv  Ch0sb2, CH0SB2
+  .endif
+.endif
+.ifndef  Ch0sb3
+.ifdef CH0SB3
+         .equiv  Ch0sb3, CH0SB3
+  .endif
+.endif
+.ifndef  Ch123na0
+.ifdef CH123NA0
+         .equiv  Ch123na0, CH123NA0
+  .endif
+.endif
+.ifndef  Ch123na1
+.ifdef CH123NA1
+         .equiv  Ch123na1, CH123NA1
+  .endif
+.endif
+.ifndef  Ch123nb0
+.ifdef CH123NB0
+         .equiv  Ch123nb0, CH123NB0
+  .endif
+.endif
+.ifndef  Ch123nb1
+.ifdef CH123NB1
+         .equiv  Ch123nb1, CH123NB1
+  .endif
+.endif
+.ifndef  Ch123sa
+.ifdef CH123SA
+         .equiv  Ch123sa, CH123SA
+  .endif
+.endif
+.ifndef  Ch123sb
+.ifdef CH123SB
+         .equiv  Ch123sb, CH123SB
+  .endif
+.endif
+.ifndef  Chps0
+.ifdef CHPS0
+         .equiv  Chps0, CHPS0
+  .endif
+.endif
+.ifndef  Chps1
+.ifdef CHPS1
+         .equiv  Chps1, CHPS1
+  .endif
+.endif
+.ifndef  Cke
+.ifdef CKE
+         .equiv  Cke, CKE
+  .endif
+.endif
+.ifndef  Ckp
+.ifdef CKP
+         .equiv  Ckp, CKP
+  .endif
+.endif
+.ifndef  Cn0ie
+.ifdef CN0IE
+         .equiv  Cn0ie, CN0IE
+  .endif
+.endif
+.ifndef  Cn0pue
+.ifdef CN0PUE
+         .equiv  Cn0pue, CN0PUE
+  .endif
+.endif
+.ifndef  Cn10ie
+.ifdef CN10IE
+         .equiv  Cn10ie, CN10IE
+  .endif
+.endif
+.ifndef  Cn10pue
+.ifdef CN10PUE
+         .equiv  Cn10pue, CN10PUE
+  .endif
+.endif
+.ifndef  Cn11ie
+.ifdef CN11IE
+         .equiv  Cn11ie, CN11IE
+  .endif
+.endif
+.ifndef  Cn11pue
+.ifdef CN11PUE
+         .equiv  Cn11pue, CN11PUE
+  .endif
+.endif
+.ifndef  Cn12ie
+.ifdef CN12IE
+         .equiv  Cn12ie, CN12IE
+  .endif
+.endif
+.ifndef  Cn12pue
+.ifdef CN12PUE
+         .equiv  Cn12pue, CN12PUE
+  .endif
+.endif
+.ifndef  Cn13ie
+.ifdef CN13IE
+         .equiv  Cn13ie, CN13IE
+  .endif
+.endif
+.ifndef  Cn13pue
+.ifdef CN13PUE
+         .equiv  Cn13pue, CN13PUE
+  .endif
+.endif
+.ifndef  Cn14ie
+.ifdef CN14IE
+         .equiv  Cn14ie, CN14IE
+  .endif
+.endif
+.ifndef  Cn14pue
+.ifdef CN14PUE
+         .equiv  Cn14pue, CN14PUE
+  .endif
+.endif
+.ifndef  Cn15ie
+.ifdef CN15IE
+         .equiv  Cn15ie, CN15IE
+  .endif
+.endif
+.ifndef  Cn15pue
+.ifdef CN15PUE
+         .equiv  Cn15pue, CN15PUE
+  .endif
+.endif
+.ifndef  Cn16ie
+.ifdef CN16IE
+         .equiv  Cn16ie, CN16IE
+  .endif
+.endif
+.ifndef  Cn16pue
+.ifdef CN16PUE
+         .equiv  Cn16pue, CN16PUE
+  .endif
+.endif
+.ifndef  Cn17ie
+.ifdef CN17IE
+         .equiv  Cn17ie, CN17IE
+  .endif
+.endif
+.ifndef  Cn17pue
+.ifdef CN17PUE
+         .equiv  Cn17pue, CN17PUE
+  .endif
+.endif
+.ifndef  Cn18ie
+.ifdef CN18IE
+         .equiv  Cn18ie, CN18IE
+  .endif
+.endif
+.ifndef  Cn18pue
+.ifdef CN18PUE
+         .equiv  Cn18pue, CN18PUE
+  .endif
+.endif
+.ifndef  Cn19ie
+.ifdef CN19IE
+         .equiv  Cn19ie, CN19IE
+  .endif
+.endif
+.ifndef  Cn19pue
+.ifdef CN19PUE
+         .equiv  Cn19pue, CN19PUE
+  .endif
+.endif
+.ifndef  Cn1ie
+.ifdef CN1IE
+         .equiv  Cn1ie, CN1IE
+  .endif
+.endif
+.ifndef  Cn1pue
+.ifdef CN1PUE
+         .equiv  Cn1pue, CN1PUE
+  .endif
+.endif
+.ifndef  Cn20ie
+.ifdef CN20IE
+         .equiv  Cn20ie, CN20IE
+  .endif
+.endif
+.ifndef  Cn20pue
+.ifdef CN20PUE
+         .equiv  Cn20pue, CN20PUE
+  .endif
+.endif
+.ifndef  Cn21ie
+.ifdef CN21IE
+         .equiv  Cn21ie, CN21IE
+  .endif
+.endif
+.ifndef  Cn21pue
+.ifdef CN21PUE
+         .equiv  Cn21pue, CN21PUE
+  .endif
+.endif
+.ifndef  Cn2ie
+.ifdef CN2IE
+         .equiv  Cn2ie, CN2IE
+  .endif
+.endif
+.ifndef  Cn2pue
+.ifdef CN2PUE
+         .equiv  Cn2pue, CN2PUE
+  .endif
+.endif
+.ifndef  Cn3ie
+.ifdef CN3IE
+         .equiv  Cn3ie, CN3IE
+  .endif
+.endif
+.ifndef  Cn3pue
+.ifdef CN3PUE
+         .equiv  Cn3pue, CN3PUE
+  .endif
+.endif
+.ifndef  Cn4ie
+.ifdef CN4IE
+         .equiv  Cn4ie, CN4IE
+  .endif
+.endif
+.ifndef  Cn4pue
+.ifdef CN4PUE
+         .equiv  Cn4pue, CN4PUE
+  .endif
+.endif
+.ifndef  Cn5ie
+.ifdef CN5IE
+         .equiv  Cn5ie, CN5IE
+  .endif
+.endif
+.ifndef  Cn5pue
+.ifdef CN5PUE
+         .equiv  Cn5pue, CN5PUE
+  .endif
+.endif
+.ifndef  Cn6ie
+.ifdef CN6IE
+         .equiv  Cn6ie, CN6IE
+  .endif
+.endif
+.ifndef  Cn6pue
+.ifdef CN6PUE
+         .equiv  Cn6pue, CN6PUE
+  .endif
+.endif
+.ifndef  Cn7ie
+.ifdef CN7IE
+         .equiv  Cn7ie, CN7IE
+  .endif
+.endif
+.ifndef  Cn7pue
+.ifdef CN7PUE
+         .equiv  Cn7pue, CN7PUE
+  .endif
+.endif
+.ifndef  Cn8ie
+.ifdef CN8IE
+         .equiv  Cn8ie, CN8IE
+  .endif
+.endif
+.ifndef  Cn8pue
+.ifdef CN8PUE
+         .equiv  Cn8pue, CN8PUE
+  .endif
+.endif
+.ifndef  Cn9ie
+.ifdef CN9IE
+         .equiv  Cn9ie, CN9IE
+  .endif
+.endif
+.ifndef  Cn9pue
+.ifdef CN9PUE
+         .equiv  Cn9pue, CN9PUE
+  .endif
+.endif
+.ifndef  Cnen1h
+.ifdef CNEN1H
+         .equiv  Cnen1h, CNEN1H
+  .endif
+.endif
+.ifndef  Cnen1l
+.ifdef CNEN1L
+         .equiv  Cnen1l, CNEN1L
+  .endif
+.endif
+.ifndef  Cnen2l
+.ifdef CNEN2L
+         .equiv  Cnen2l, CNEN2L
+  .endif
+.endif
+.ifndef  Cnie
+.ifdef CNIE
+         .equiv  Cnie, CNIE
+  .endif
+.endif
+.ifndef  Cnif
+.ifdef CNIF
+         .equiv  Cnif, CNIF
+  .endif
+.endif
+.ifndef  Cnip0
+.ifdef CNIP0
+         .equiv  Cnip0, CNIP0
+  .endif
+.endif
+.ifndef  Cnip1
+.ifdef CNIP1
+         .equiv  Cnip1, CNIP1
+  .endif
+.endif
+.ifndef  Cnip2
+.ifdef CNIP2
+         .equiv  Cnip2, CNIP2
+  .endif
+.endif
+.ifndef  Cnpu1h
+.ifdef CNPU1H
+         .equiv  Cnpu1h, CNPU1H
+  .endif
+.endif
+.ifndef  Cnpu1l
+.ifdef CNPU1L
+         .equiv  Cnpu1l, CNPU1L
+  .endif
+.endif
+.ifndef  Cnpu2l
+.ifdef CNPU2L
+         .equiv  Cnpu2l, CNPU2L
+  .endif
+.endif
+.ifndef  Cnterr
+.ifdef CNTERR
+         .equiv  Cnterr, CNTERR
+  .endif
+.endif
+.ifndef  Code_prot_off
+.ifdef CODE_PROT_OFF
+         .equiv  Code_prot_off, CODE_PROT_OFF
+  .endif
+.endif
+.ifndef  Code_prot_on
+.ifdef CODE_PROT_ON
+         .equiv  Code_prot_on, CODE_PROT_ON
+  .endif
+.endif
+.ifndef  Conv
+.ifdef CONV
+         .equiv  Conv, CONV
+  .endif
+.endif
+.ifndef  Corconl
+.ifdef CORCONL
+         .equiv  Corconl, CORCONL
+  .endif
+.endif
+.ifndef  Cosc0
+.ifdef COSC0
+         .equiv  Cosc0, COSC0
+  .endif
+.endif
+.ifndef  Cosc1
+.ifdef COSC1
+         .equiv  Cosc1, COSC1
+  .endif
+.endif
+.ifndef  Covte
+.ifdef COVTE
+         .equiv  Covte, COVTE
+  .endif
+.endif
+.ifndef  Cscna
+.ifdef CSCNA
+         .equiv  Cscna, CSCNA
+  .endif
+.endif
+.ifndef  Csidl
+.ifdef CSIDL
+         .equiv  Csidl, CSIDL
+  .endif
+.endif
+.ifndef  Cssl0
+.ifdef CSSL0
+         .equiv  Cssl0, CSSL0
+  .endif
+.endif
+.ifndef  Cssl1
+.ifdef CSSL1
+         .equiv  Cssl1, CSSL1
+  .endif
+.endif
+.ifndef  Cssl10
+.ifdef CSSL10
+         .equiv  Cssl10, CSSL10
+  .endif
+.endif
+.ifndef  Cssl11
+.ifdef CSSL11
+         .equiv  Cssl11, CSSL11
+  .endif
+.endif
+.ifndef  Cssl12
+.ifdef CSSL12
+         .equiv  Cssl12, CSSL12
+  .endif
+.endif
+.ifndef  Cssl13
+.ifdef CSSL13
+         .equiv  Cssl13, CSSL13
+  .endif
+.endif
+.ifndef  Cssl14
+.ifdef CSSL14
+         .equiv  Cssl14, CSSL14
+  .endif
+.endif
+.ifndef  Cssl15
+.ifdef CSSL15
+         .equiv  Cssl15, CSSL15
+  .endif
+.endif
+.ifndef  Cssl2
+.ifdef CSSL2
+         .equiv  Cssl2, CSSL2
+  .endif
+.endif
+.ifndef  Cssl3
+.ifdef CSSL3
+         .equiv  Cssl3, CSSL3
+  .endif
+.endif
+.ifndef  Cssl4
+.ifdef CSSL4
+         .equiv  Cssl4, CSSL4
+  .endif
+.endif
+.ifndef  Cssl5
+.ifdef CSSL5
+         .equiv  Cssl5, CSSL5
+  .endif
+.endif
+.ifndef  Cssl6
+.ifdef CSSL6
+         .equiv  Cssl6, CSSL6
+  .endif
+.endif
+.ifndef  Cssl7
+.ifdef CSSL7
+         .equiv  Cssl7, CSSL7
+  .endif
+.endif
+.ifndef  Cssl8
+.ifdef CSSL8
+         .equiv  Cssl8, CSSL8
+  .endif
+.endif
+.ifndef  Cssl9
+.ifdef CSSL9
+         .equiv  Cssl9, CSSL9
+  .endif
+.endif
+.ifndef  Csw_fscm_off
+.ifdef CSW_FSCM_OFF
+         .equiv  Csw_fscm_off, CSW_FSCM_OFF
+  .endif
+.endif
+.ifndef  Csw_fscm_on
+.ifdef CSW_FSCM_ON
+         .equiv  Csw_fscm_on, CSW_FSCM_ON
+  .endif
+.endif
+.ifndef  Csw_on_fscm_off
+.ifdef CSW_ON_FSCM_OFF
+         .equiv  Csw_on_fscm_off, CSW_ON_FSCM_OFF
+  .endif
+.endif
+.ifndef  Da
+.ifdef DA
+         .equiv  Da, DA
+  .endif
+.endif
+.ifndef  Dben
+.ifdef DBEN
+         .equiv  Dben, DBEN
+  .endif
+.endif
+.ifndef  Dc
+.ifdef DC
+         .equiv  Dc, DC
+  .endif
+.endif
+.ifndef  Dcounth
+.ifdef DCOUNTH
+         .equiv  Dcounth, DCOUNTH
+  .endif
+.endif
+.ifndef  Dcountl
+.ifdef DCOUNTL
+         .equiv  Dcountl, DCOUNTL
+  .endif
+.endif
+.ifndef  Dfltconh
+.ifdef DFLTCONH
+         .equiv  Dfltconh, DFLTCONH
+  .endif
+.endif
+.ifndef  Dfltconl
+.ifdef DFLTCONL
+         .equiv  Dfltconl, DFLTCONL
+  .endif
+.endif
+.ifndef  Disi
+.ifdef DISI
+         .equiv  Disi, DISI
+  .endif
+.endif
+.ifndef  Disicnth
+.ifdef DISICNTH
+         .equiv  Disicnth, DISICNTH
+  .endif
+.endif
+.ifndef  Disicntl
+.ifdef DISICNTL
+         .equiv  Disicntl, DISICNTL
+  .endif
+.endif
+.ifndef  Dissdo
+.ifdef DISSDO
+         .equiv  Dissdo, DISSDO
+  .endif
+.endif
+.ifndef  Disslw
+.ifdef DISSLW
+         .equiv  Disslw, DISSLW
+  .endif
+.endif
+.ifndef  Dl0
+.ifdef DL0
+         .equiv  Dl0, DL0
+  .endif
+.endif
+.ifndef  Dl1
+.ifdef DL1
+         .equiv  Dl1, DL1
+  .endif
+.endif
+.ifndef  Dl2
+.ifdef DL2
+         .equiv  Dl2, DL2
+  .endif
+.endif
+.ifndef  Dlc0
+.ifdef DLC0
+         .equiv  Dlc0, DLC0
+  .endif
+.endif
+.ifndef  Dlc1
+.ifdef DLC1
+         .equiv  Dlc1, DLC1
+  .endif
+.endif
+.ifndef  Dlc2
+.ifdef DLC2
+         .equiv  Dlc2, DLC2
+  .endif
+.endif
+.ifndef  Dlc3
+.ifdef DLC3
+         .equiv  Dlc3, DLC3
+  .endif
+.endif
+.ifndef  Dma0ie
+.ifdef DMA0IE
+         .equiv  Dma0ie, DMA0IE
+  .endif
+.endif
+.ifndef  Dma0if
+.ifdef DMA0IF
+         .equiv  Dma0if, DMA0IF
+  .endif
+.endif
+.ifndef  Dma1ie
+.ifdef DMA1IE
+         .equiv  Dma1ie, DMA1IE
+  .endif
+.endif
+.ifndef  Dma1if
+.ifdef DMA1IF
+         .equiv  Dma1if, DMA1IF
+  .endif
+.endif
+.ifndef  Dma2ie
+.ifdef DMA2IE
+         .equiv  Dma2ie, DMA2IE
+  .endif
+.endif
+.ifndef  Dma2if
+.ifdef DMA2IF
+         .equiv  Dma2if, DMA2IF
+  .endif
+.endif
+.ifndef  Dma3ie
+.ifdef DMA3IE
+         .equiv  Dma3ie, DMA3IE
+  .endif
+.endif
+.ifndef  Dma3if
+.ifdef DMA3IF
+         .equiv  Dma3if, DMA3IF
+  .endif
+.endif
+.ifndef  Dma4ie
+.ifdef DMA4IE
+         .equiv  Dma4ie, DMA4IE
+  .endif
+.endif
+.ifndef  Dma4if
+.ifdef DMA4IF
+         .equiv  Dma4if, DMA4IF
+  .endif
+.endif
+.ifndef  Dma5ie
+.ifdef DMA5IE
+         .equiv  Dma5ie, DMA5IE
+  .endif
+.endif
+.ifndef  Dma5if
+.ifdef DMA5IF
+         .equiv  Dma5if, DMA5IF
+  .endif
+.endif
+.ifndef  Dma6ie
+.ifdef DMA6IE
+         .equiv  Dma6ie, DMA6IE
+  .endif
+.endif
+.ifndef  Dma6if
+.ifdef DMA6IF
+         .equiv  Dma6if, DMA6IF
+  .endif
+.endif
+.ifndef  Dma7ie
+.ifdef DMA7IE
+         .equiv  Dma7ie, DMA7IE
+  .endif
+.endif
+.ifndef  Dma7if
+.ifdef DMA7IF
+         .equiv  Dma7if, DMA7IF
+  .endif
+.endif
+.ifndef  Doendhh
+.ifdef DOENDHH
+         .equiv  Doendhh, DOENDHH
+  .endif
+.endif
+.ifndef  Doendhl
+.ifdef DOENDHL
+         .equiv  Doendhl, DOENDHL
+  .endif
+.endif
+.ifndef  Doendlh
+.ifdef DOENDLH
+         .equiv  Doendlh, DOENDLH
+  .endif
+.endif
+.ifndef  Doendll
+.ifdef DOENDLL
+         .equiv  Doendll, DOENDLL
+  .endif
+.endif
+.ifndef  Dozen
+.ifdef DOZEN
+         .equiv  Dozen, DOZEN
+  .endif
+.endif
+.ifndef  Dostarthh
+.ifdef DOSTARTHH
+         .equiv  Dostarthh, DOSTARTHH
+  .endif
+.endif
+.ifndef  Dostarthl
+.ifdef DOSTARTHL
+         .equiv  Dostarthl, DOSTARTHL
+  .endif
+.endif
+.ifndef  Dostartlh
+.ifdef DOSTARTLH
+         .equiv  Dostartlh, DOSTARTLH
+  .endif
+.endif
+.ifndef  Dostartll
+.ifdef DOSTARTLL
+         .equiv  Dostartll, DOSTARTLL
+  .endif
+.endif
+.ifndef  Dta0
+.ifdef DTA0
+         .equiv  Dta0, DTA0
+  .endif
+.endif
+.ifndef  Dta1
+.ifdef DTA1
+         .equiv  Dta1, DTA1
+  .endif
+.endif
+.ifndef  Dta2
+.ifdef DTA2
+         .equiv  Dta2, DTA2
+  .endif
+.endif
+.ifndef  Dta3
+.ifdef DTA3
+         .equiv  Dta3, DTA3
+  .endif
+.endif
+.ifndef  Dta4
+.ifdef DTA4
+         .equiv  Dta4, DTA4
+  .endif
+.endif
+.ifndef  Dta5
+.ifdef DTA5
+         .equiv  Dta5, DTA5
+  .endif
+.endif
+.ifndef  Dtaps0
+.ifdef DTAPS0
+         .equiv  Dtaps0, DTAPS0
+  .endif
+.endif
+.ifndef  Dtaps1
+.ifdef DTAPS1
+         .equiv  Dtaps1, DTAPS1
+  .endif
+.endif
+.ifndef  Dtb0
+.ifdef DTB0
+         .equiv  Dtb0, DTB0
+  .endif
+.endif
+.ifndef  Dtb1
+.ifdef DTB1
+         .equiv  Dtb1, DTB1
+  .endif
+.endif
+.ifndef  Dtb2
+.ifdef DTB2
+         .equiv  Dtb2, DTB2
+  .endif
+.endif
+.ifndef  Dtb3
+.ifdef DTB3
+         .equiv  Dtb3, DTB3
+  .endif
+.endif
+.ifndef  Dtb4
+.ifdef DTB4
+         .equiv  Dtb4, DTB4
+  .endif
+.endif
+.ifndef  Dtb5
+.ifdef DTB5
+         .equiv  Dtb5, DTB5
+  .endif
+.endif
+.ifndef  Dtbps0
+.ifdef DTBPS0
+         .equiv  Dtbps0, DTBPS0
+  .endif
+.endif
+.ifndef  Dtbps1
+.ifdef DTBPS1
+         .equiv  Dtbps1, DTBPS1
+  .endif
+.endif
+.ifndef  Dtcon1h
+.ifdef DTCON1H
+         .equiv  Dtcon1h, DTCON1H
+  .endif
+.endif
+.ifndef  Dtcon1l
+.ifdef DTCON1L
+         .equiv  Dtcon1l, DTCON1L
+  .endif
+.endif
+.ifndef  Dtcon2h
+.ifdef DTCON2H
+         .equiv  Dtcon2h, DTCON2H
+  .endif
+.endif
+.ifndef  Dtcon2l
+.ifdef DTCON2L
+         .equiv  Dtcon2l, DTCON2L
+  .endif
+.endif
+.ifndef  Dts1a
+.ifdef DTS1A
+         .equiv  Dts1a, DTS1A
+  .endif
+.endif
+.ifndef  Dts1i
+.ifdef DTS1I
+         .equiv  Dts1i, DTS1I
+  .endif
+.endif
+.ifndef  Dts2a
+.ifdef DTS2A
+         .equiv  Dts2a, DTS2A
+  .endif
+.endif
+.ifndef  Dts2i
+.ifdef DTS2I
+         .equiv  Dts2i, DTS2I
+  .endif
+.endif
+.ifndef  Dts3a
+.ifdef DTS3A
+         .equiv  Dts3a, DTS3A
+  .endif
+.endif
+.ifndef  Dts3i
+.ifdef DTS3I
+         .equiv  Dts3i, DTS3I
+  .endif
+.endif
+.ifndef  Dts4a
+.ifdef DTS4A
+         .equiv  Dts4a, DTS4A
+  .endif
+.endif
+.ifndef  Dts4i
+.ifdef DTS4I
+         .equiv  Dts4i, DTS4I
+  .endif
+.endif
+.ifndef  D_a
+.ifdef D_A
+         .equiv  D_a, D_A
+  .endif
+.endif
+.ifndef  Ec
+.ifdef EC
+         .equiv  Ec, EC
+  .endif
+.endif
+.ifndef  Ec_io
+.ifdef EC_IO
+         .equiv  Ec_io, EC_IO
+  .endif
+.endif
+.ifndef  Ec_pll16
+.ifdef EC_PLL16
+         .equiv  Ec_pll16, EC_PLL16
+  .endif
+.endif
+.ifndef  Ec_pll4
+.ifdef EC_PLL4
+         .equiv  Ec_pll4, EC_PLL4
+  .endif
+.endif
+.ifndef  Ec_pll8
+.ifdef EC_PLL8
+         .equiv  Ec_pll8, EC_PLL8
+  .endif
+.endif
+.ifndef  Edt
+.ifdef EDT
+         .equiv  Edt, EDT
+  .endif
+.endif
+.ifndef  Eid0
+.ifdef EID0
+         .equiv  Eid0, EID0
+  .endif
+.endif
+.ifndef  Eid1
+.ifdef EID1
+         .equiv  Eid1, EID1
+  .endif
+.endif
+.ifndef  Eid10
+.ifdef EID10
+         .equiv  Eid10, EID10
+  .endif
+.endif
+.ifndef  Eid11
+.ifdef EID11
+         .equiv  Eid11, EID11
+  .endif
+.endif
+.ifndef  Eid12
+.ifdef EID12
+         .equiv  Eid12, EID12
+  .endif
+.endif
+.ifndef  Eid13
+.ifdef EID13
+         .equiv  Eid13, EID13
+  .endif
+.endif
+.ifndef  Eid14
+.ifdef EID14
+         .equiv  Eid14, EID14
+  .endif
+.endif
+.ifndef  Eid15
+.ifdef EID15
+         .equiv  Eid15, EID15
+  .endif
+.endif
+.ifndef  Eid16
+.ifdef EID16
+         .equiv  Eid16, EID16
+  .endif
+.endif
+.ifndef  Eid17
+.ifdef EID17
+         .equiv  Eid17, EID17
+  .endif
+.endif
+.ifndef  Eid2
+.ifdef EID2
+         .equiv  Eid2, EID2
+  .endif
+.endif
+.ifndef  Eid3
+.ifdef EID3
+         .equiv  Eid3, EID3
+  .endif
+.endif
+.ifndef  Eid4
+.ifdef EID4
+         .equiv  Eid4, EID4
+  .endif
+.endif
+.ifndef  Eid5
+.ifdef EID5
+         .equiv  Eid5, EID5
+  .endif
+.endif
+.ifndef  Eid6
+.ifdef EID6
+         .equiv  Eid6, EID6
+  .endif
+.endif
+.ifndef  Eid7
+.ifdef EID7
+         .equiv  Eid7, EID7
+  .endif
+.endif
+.ifndef  Eid8
+.ifdef EID8
+         .equiv  Eid8, EID8
+  .endif
+.endif
+.ifndef  Eid9
+.ifdef EID9
+         .equiv  Eid9, EID9
+  .endif
+.endif
+.ifndef  Erc
+.ifdef ERC
+         .equiv  Erc, ERC
+  .endif
+.endif
+.ifndef  Erc_io
+.ifdef ERC_IO
+         .equiv  Erc_io, ERC_IO
+  .endif
+.endif
+.ifndef  Errie
+.ifdef ERRIE
+         .equiv  Errie, ERRIE
+  .endif
+.endif
+.ifndef  Errif
+.ifdef ERRIF
+         .equiv  Errif, ERRIF
+  .endif
+.endif
+.ifndef  Ewarn
+.ifdef EWARN
+         .equiv  Ewarn, EWARN
+  .endif
+.endif
+.ifndef  Exid
+.ifdef EXID
+         .equiv  Exid, EXID
+  .endif
+.endif
+.ifndef  Exide
+.ifdef EXIDE
+         .equiv  Exide, EXIDE
+  .endif
+.endif
+.ifndef  Exiden
+.ifdef EXIDEN
+         .equiv  Exiden, EXIDEN
+  .endif
+.endif
+.ifndef  Extr
+.ifdef EXTR
+         .equiv  Extr, EXTR
+  .endif
+.endif
+.ifndef  Faen1
+.ifdef FAEN1
+         .equiv  Faen1, FAEN1
+  .endif
+.endif
+.ifndef  Faen2
+.ifdef FAEN2
+         .equiv  Faen2, FAEN2
+  .endif
+.endif
+.ifndef  Faen3
+.ifdef FAEN3
+         .equiv  Faen3, FAEN3
+  .endif
+.endif
+.ifndef  Faen4
+.ifdef FAEN4
+         .equiv  Faen4, FAEN4
+  .endif
+.endif
+.ifndef  Faov1h
+.ifdef FAOV1H
+         .equiv  Faov1h, FAOV1H
+  .endif
+.endif
+.ifndef  Faov1l
+.ifdef FAOV1L
+         .equiv  Faov1l, FAOV1L
+  .endif
+.endif
+.ifndef  Faov2h
+.ifdef FAOV2H
+         .equiv  Faov2h, FAOV2H
+  .endif
+.endif
+.ifndef  Faov2l
+.ifdef FAOV2L
+         .equiv  Faov2l, FAOV2L
+  .endif
+.endif
+.ifndef  Faov3h
+.ifdef FAOV3H
+         .equiv  Faov3h, FAOV3H
+  .endif
+.endif
+.ifndef  Faov3l
+.ifdef FAOV3L
+         .equiv  Faov3l, FAOV3L
+  .endif
+.endif
+.ifndef  Faov4h
+.ifdef FAOV4H
+         .equiv  Faov4h, FAOV4H
+  .endif
+.endif
+.ifndef  Faov4l
+.ifdef FAOV4L
+         .equiv  Faov4l, FAOV4L
+  .endif
+.endif
+.ifndef  Fben1
+.ifdef FBEN1
+         .equiv  Fben1, FBEN1
+  .endif
+.endif
+.ifndef  Fben2
+.ifdef FBEN2
+         .equiv  Fben2, FBEN2
+  .endif
+.endif
+.ifndef  Fben3
+.ifdef FBEN3
+         .equiv  Fben3, FBEN3
+  .endif
+.endif
+.ifndef  Fben4
+.ifdef FBEN4
+         .equiv  Fben4, FBEN4
+  .endif
+.endif
+.ifndef  Fbov1h
+.ifdef FBOV1H
+         .equiv  Fbov1h, FBOV1H
+  .endif
+.endif
+.ifndef  Fbov1l
+.ifdef FBOV1L
+         .equiv  Fbov1l, FBOV1L
+  .endif
+.endif
+.ifndef  Fbov2h
+.ifdef FBOV2H
+         .equiv  Fbov2h, FBOV2H
+  .endif
+.endif
+.ifndef  Fbov2l
+.ifdef FBOV2L
+         .equiv  Fbov2l, FBOV2L
+  .endif
+.endif
+.ifndef  Fbov3h
+.ifdef FBOV3H
+         .equiv  Fbov3h, FBOV3H
+  .endif
+.endif
+.ifndef  Fbov3l
+.ifdef FBOV3L
+         .equiv  Fbov3l, FBOV3L
+  .endif
+.endif
+.ifndef  Fbov4h
+.ifdef FBOV4H
+         .equiv  Fbov4h, FBOV4H
+  .endif
+.endif
+.ifndef  Fbov4l
+.ifdef FBOV4L
+         .equiv  Fbov4l, FBOV4L
+  .endif
+.endif
+.ifndef  Ferr
+.ifdef FERR
+         .equiv  Ferr, FERR
+  .endif
+.endif
+.ifndef  Filhit0
+.ifdef FILHIT0
+         .equiv  Filhit0, FILHIT0
+  .endif
+.endif
+.ifndef  Filhit1
+.ifdef FILHIT1
+         .equiv  Filhit1, FILHIT1
+  .endif
+.endif
+.ifndef  Filhit2
+.ifdef FILHIT2
+         .equiv  Filhit2, FILHIT2
+  .endif
+.endif
+.ifndef  Fltaconh
+.ifdef FLTACONH
+         .equiv  Fltaconh, FLTACONH
+  .endif
+.endif
+.ifndef  Fltaconl
+.ifdef FLTACONL
+         .equiv  Fltaconl, FLTACONL
+  .endif
+.endif
+.ifndef  Fltaie
+.ifdef FLTAIE
+         .equiv  Fltaie, FLTAIE
+  .endif
+.endif
+.ifndef  Fltaif
+.ifdef FLTAIF
+         .equiv  Fltaif, FLTAIF
+  .endif
+.endif
+.ifndef  Fltaip0
+.ifdef FLTAIP0
+         .equiv  Fltaip0, FLTAIP0
+  .endif
+.endif
+.ifndef  Fltaip1
+.ifdef FLTAIP1
+         .equiv  Fltaip1, FLTAIP1
+  .endif
+.endif
+.ifndef  Fltaip2
+.ifdef FLTAIP2
+         .equiv  Fltaip2, FLTAIP2
+  .endif
+.endif
+.ifndef  Fltam
+.ifdef FLTAM
+         .equiv  Fltam, FLTAM
+  .endif
+.endif
+.ifndef  Fltbconh
+.ifdef FLTBCONH
+         .equiv  Fltbconh, FLTBCONH
+  .endif
+.endif
+.ifndef  Fltbconl
+.ifdef FLTBCONL
+         .equiv  Fltbconl, FLTBCONL
+  .endif
+.endif
+.ifndef  Fltbie
+.ifdef FLTBIE
+         .equiv  Fltbie, FLTBIE
+  .endif
+.endif
+.ifndef  Fltbif
+.ifdef FLTBIF
+         .equiv  Fltbif, FLTBIF
+  .endif
+.endif
+.ifndef  Fltbip0
+.ifdef FLTBIP0
+         .equiv  Fltbip0, FLTBIP0
+  .endif
+.endif
+.ifndef  Fltbip1
+.ifdef FLTBIP1
+         .equiv  Fltbip1, FLTBIP1
+  .endif
+.endif
+.ifndef  Fltbip2
+.ifdef FLTBIP2
+         .equiv  Fltbip2, FLTBIP2
+  .endif
+.endif
+.ifndef  Fltbm
+.ifdef FLTBM
+         .equiv  Fltbm, FLTBM
+  .endif
+.endif
+.ifndef  Form0
+.ifdef FORM0
+         .equiv  Form0, FORM0
+  .endif
+.endif
+.ifndef  Form1
+.ifdef FORM1
+         .equiv  Form1, FORM1
+  .endif
+.endif
+.ifndef  Frc
+.ifdef FRC
+         .equiv  Frc, FRC
+  .endif
+.endif
+.ifndef  Frmen
+.ifdef FRMEN
+         .equiv  Frmen, FRMEN
+  .endif
+.endif
+.ifndef  Gcen
+.ifdef GCEN
+         .equiv  Gcen, GCEN
+  .endif
+.endif
+.ifndef  Gcstat
+.ifdef GCSTAT
+         .equiv  Gcstat, GCSTAT
+  .endif
+.endif
+.ifndef  Gie
+.ifdef GIE
+         .equiv  Gie, GIE
+  .endif
+.endif
+.ifndef  Hs
+.ifdef HS
+         .equiv  Hs, HS
+  .endif
+.endif
+.ifndef  I2caddh
+.ifdef I2CADDH
+         .equiv  I2caddh, I2CADDH
+  .endif
+.endif
+.ifndef  I2caddl
+.ifdef I2CADDL
+         .equiv  I2caddl, I2CADDL
+  .endif
+.endif
+.ifndef  I2cbrgh
+.ifdef I2CBRGH
+         .equiv  I2cbrgh, I2CBRGH
+  .endif
+.endif
+.ifndef  I2cbrgl
+.ifdef I2CBRGL
+         .equiv  I2cbrgl, I2CBRGL
+  .endif
+.endif
+.ifndef  I2cconh
+.ifdef I2CCONH
+         .equiv  I2cconh, I2CCONH
+  .endif
+.endif
+.ifndef  I2cconl
+.ifdef I2CCONL
+         .equiv  I2cconl, I2CCONL
+  .endif
+.endif
+.ifndef  I2cen
+.ifdef I2CEN
+         .equiv  I2cen, I2CEN
+  .endif
+.endif
+.ifndef  I2cmd
+.ifdef I2CMD
+         .equiv  I2cmd, I2CMD
+  .endif
+.endif
+.ifndef  I2cov
+.ifdef I2COV
+         .equiv  I2cov, I2COV
+  .endif
+.endif
+.ifndef  I2crcvh
+.ifdef I2CRCVH
+         .equiv  I2crcvh, I2CRCVH
+  .endif
+.endif
+.ifndef  I2crcvl
+.ifdef I2CRCVL
+         .equiv  I2crcvl, I2CRCVL
+  .endif
+.endif
+.ifndef  I2csidl
+.ifdef I2CSIDL
+         .equiv  I2csidl, I2CSIDL
+  .endif
+.endif
+.ifndef  I2cstath
+.ifdef I2CSTATH
+         .equiv  I2cstath, I2CSTATH
+  .endif
+.endif
+.ifndef  I2cstatl
+.ifdef I2CSTATL
+         .equiv  I2cstatl, I2CSTATL
+  .endif
+.endif
+.ifndef  I2ctrnh
+.ifdef I2CTRNH
+         .equiv  I2ctrnh, I2CTRNH
+  .endif
+.endif
+.ifndef  I2ctrnl
+.ifdef I2CTRNL
+         .equiv  I2ctrnl, I2CTRNL
+  .endif
+.endif
+.ifndef  Ic1bufh
+.ifdef IC1BUFH
+         .equiv  Ic1bufh, IC1BUFH
+  .endif
+.endif
+.ifndef  Ic1bufl
+.ifdef IC1BUFL
+         .equiv  Ic1bufl, IC1BUFL
+  .endif
+.endif
+.ifndef  Ic1conh
+.ifdef IC1CONH
+         .equiv  Ic1conh, IC1CONH
+  .endif
+.endif
+.ifndef  Ic1conl
+.ifdef IC1CONL
+         .equiv  Ic1conl, IC1CONL
+  .endif
+.endif
+.ifndef  Ic1ie
+.ifdef IC1IE
+         .equiv  Ic1ie, IC1IE
+  .endif
+.endif
+.ifndef  Ic1if
+.ifdef IC1IF
+         .equiv  Ic1if, IC1IF
+  .endif
+.endif
+.ifndef  Ic1ip0
+.ifdef IC1IP0
+         .equiv  Ic1ip0, IC1IP0
+  .endif
+.endif
+.ifndef  Ic1ip1
+.ifdef IC1IP1
+         .equiv  Ic1ip1, IC1IP1
+  .endif
+.endif
+.ifndef  Ic1ip2
+.ifdef IC1IP2
+         .equiv  Ic1ip2, IC1IP2
+  .endif
+.endif
+.ifndef  Ic1md
+.ifdef IC1MD
+         .equiv  Ic1md, IC1MD
+  .endif
+.endif
+.ifndef  Ic2bufh
+.ifdef IC2BUFH
+         .equiv  Ic2bufh, IC2BUFH
+  .endif
+.endif
+.ifndef  Ic2bufl
+.ifdef IC2BUFL
+         .equiv  Ic2bufl, IC2BUFL
+  .endif
+.endif
+.ifndef  Ic2conh
+.ifdef IC2CONH
+         .equiv  Ic2conh, IC2CONH
+  .endif
+.endif
+.ifndef  Ic2conl
+.ifdef IC2CONL
+         .equiv  Ic2conl, IC2CONL
+  .endif
+.endif
+.ifndef  Ic2ie
+.ifdef IC2IE
+         .equiv  Ic2ie, IC2IE
+  .endif
+.endif
+.ifndef  Ic2if
+.ifdef IC2IF
+         .equiv  Ic2if, IC2IF
+  .endif
+.endif
+.ifndef  Ic2ip0
+.ifdef IC2IP0
+         .equiv  Ic2ip0, IC2IP0
+  .endif
+.endif
+.ifndef  Ic2ip1
+.ifdef IC2IP1
+         .equiv  Ic2ip1, IC2IP1
+  .endif
+.endif
+.ifndef  Ic2ip2
+.ifdef IC2IP2
+         .equiv  Ic2ip2, IC2IP2
+  .endif
+.endif
+.ifndef  Ic2md
+.ifdef IC2MD
+         .equiv  Ic2md, IC2MD
+  .endif
+.endif
+.ifndef  Ic3bufh
+.ifdef IC3BUFH
+         .equiv  Ic3bufh, IC3BUFH
+  .endif
+.endif
+.ifndef  Ic3bufl
+.ifdef IC3BUFL
+         .equiv  Ic3bufl, IC3BUFL
+  .endif
+.endif
+.ifndef  Ic3conh
+.ifdef IC3CONH
+         .equiv  Ic3conh, IC3CONH
+  .endif
+.endif
+.ifndef  Ic3conl
+.ifdef IC3CONL
+         .equiv  Ic3conl, IC3CONL
+  .endif
+.endif
+.ifndef  Ic3ie
+.ifdef IC3IE
+         .equiv  Ic3ie, IC3IE
+  .endif
+.endif
+.ifndef  Ic3if
+.ifdef IC3IF
+         .equiv  Ic3if, IC3IF
+  .endif
+.endif
+.ifndef  Ic3ip0
+.ifdef IC3IP0
+         .equiv  Ic3ip0, IC3IP0
+  .endif
+.endif
+.ifndef  Ic3ip1
+.ifdef IC3IP1
+         .equiv  Ic3ip1, IC3IP1
+  .endif
+.endif
+.ifndef  Ic3ip2
+.ifdef IC3IP2
+         .equiv  Ic3ip2, IC3IP2
+  .endif
+.endif
+.ifndef  Ic3md
+.ifdef IC3MD
+         .equiv  Ic3md, IC3MD
+  .endif
+.endif
+.ifndef  Ic4bufh
+.ifdef IC4BUFH
+         .equiv  Ic4bufh, IC4BUFH
+  .endif
+.endif
+.ifndef  Ic4bufl
+.ifdef IC4BUFL
+         .equiv  Ic4bufl, IC4BUFL
+  .endif
+.endif
+.ifndef  Ic4conh
+.ifdef IC4CONH
+         .equiv  Ic4conh, IC4CONH
+  .endif
+.endif
+.ifndef  Ic4conl
+.ifdef IC4CONL
+         .equiv  Ic4conl, IC4CONL
+  .endif
+.endif
+.ifndef  Ic4ie
+.ifdef IC4IE
+         .equiv  Ic4ie, IC4IE
+  .endif
+.endif
+.ifndef  Ic4if
+.ifdef IC4IF
+         .equiv  Ic4if, IC4IF
+  .endif
+.endif
+.ifndef  Ic4ip0
+.ifdef IC4IP0
+         .equiv  Ic4ip0, IC4IP0
+  .endif
+.endif
+.ifndef  Ic4ip1
+.ifdef IC4IP1
+         .equiv  Ic4ip1, IC4IP1
+  .endif
+.endif
+.ifndef  Ic4ip2
+.ifdef IC4IP2
+         .equiv  Ic4ip2, IC4IP2
+  .endif
+.endif
+.ifndef  Ic4md
+.ifdef IC4MD
+         .equiv  Ic4md, IC4MD
+  .endif
+.endif
+.ifndef  Ic5bufh
+.ifdef IC5BUFH
+         .equiv  Ic5bufh, IC5BUFH
+  .endif
+.endif
+.ifndef  Ic5bufl
+.ifdef IC5BUFL
+         .equiv  Ic5bufl, IC5BUFL
+  .endif
+.endif
+.ifndef  Ic5conh
+.ifdef IC5CONH
+         .equiv  Ic5conh, IC5CONH
+  .endif
+.endif
+.ifndef  Ic5conl
+.ifdef IC5CONL
+         .equiv  Ic5conl, IC5CONL
+  .endif
+.endif
+.ifndef  Ic5ie
+.ifdef IC5IE
+         .equiv  Ic5ie, IC5IE
+  .endif
+.endif
+.ifndef  Ic5if
+.ifdef IC5IF
+         .equiv  Ic5if, IC5IF
+  .endif
+.endif
+.ifndef  Ic5ip0
+.ifdef IC5IP0
+         .equiv  Ic5ip0, IC5IP0
+  .endif
+.endif
+.ifndef  Ic5ip1
+.ifdef IC5IP1
+         .equiv  Ic5ip1, IC5IP1
+  .endif
+.endif
+.ifndef  Ic5ip2
+.ifdef IC5IP2
+         .equiv  Ic5ip2, IC5IP2
+  .endif
+.endif
+.ifndef  Ic5md
+.ifdef IC5MD
+         .equiv  Ic5md, IC5MD
+  .endif
+.endif
+.ifndef  Ic6bufh
+.ifdef IC6BUFH
+         .equiv  Ic6bufh, IC6BUFH
+  .endif
+.endif
+.ifndef  Ic6bufl
+.ifdef IC6BUFL
+         .equiv  Ic6bufl, IC6BUFL
+  .endif
+.endif
+.ifndef  Ic6conh
+.ifdef IC6CONH
+         .equiv  Ic6conh, IC6CONH
+  .endif
+.endif
+.ifndef  Ic6conl
+.ifdef IC6CONL
+         .equiv  Ic6conl, IC6CONL
+  .endif
+.endif
+.ifndef  Ic6ie
+.ifdef IC6IE
+         .equiv  Ic6ie, IC6IE
+  .endif
+.endif
+.ifndef  Ic6if
+.ifdef IC6IF
+         .equiv  Ic6if, IC6IF
+  .endif
+.endif
+.ifndef  Ic6ip0
+.ifdef IC6IP0
+         .equiv  Ic6ip0, IC6IP0
+  .endif
+.endif
+.ifndef  Ic6ip1
+.ifdef IC6IP1
+         .equiv  Ic6ip1, IC6IP1
+  .endif
+.endif
+.ifndef  Ic6ip2
+.ifdef IC6IP2
+         .equiv  Ic6ip2, IC6IP2
+  .endif
+.endif
+.ifndef  Ic6md
+.ifdef IC6MD
+         .equiv  Ic6md, IC6MD
+  .endif
+.endif
+.ifndef  Ic7bufh
+.ifdef IC7BUFH
+         .equiv  Ic7bufh, IC7BUFH
+  .endif
+.endif
+.ifndef  Ic7bufl
+.ifdef IC7BUFL
+         .equiv  Ic7bufl, IC7BUFL
+  .endif
+.endif
+.ifndef  Ic7conh
+.ifdef IC7CONH
+         .equiv  Ic7conh, IC7CONH
+  .endif
+.endif
+.ifndef  Ic7conl
+.ifdef IC7CONL
+         .equiv  Ic7conl, IC7CONL
+  .endif
+.endif
+.ifndef  Ic7ie
+.ifdef IC7IE
+         .equiv  Ic7ie, IC7IE
+  .endif
+.endif
+.ifndef  Ic7if
+.ifdef IC7IF
+         .equiv  Ic7if, IC7IF
+  .endif
+.endif
+.ifndef  Ic7ip0
+.ifdef IC7IP0
+         .equiv  Ic7ip0, IC7IP0
+  .endif
+.endif
+.ifndef  Ic7ip1
+.ifdef IC7IP1
+         .equiv  Ic7ip1, IC7IP1
+  .endif
+.endif
+.ifndef  Ic7ip2
+.ifdef IC7IP2
+         .equiv  Ic7ip2, IC7IP2
+  .endif
+.endif
+.ifndef  Ic7md
+.ifdef IC7MD
+         .equiv  Ic7md, IC7MD
+  .endif
+.endif
+.ifndef  Ic8bufh
+.ifdef IC8BUFH
+         .equiv  Ic8bufh, IC8BUFH
+  .endif
+.endif
+.ifndef  Ic8bufl
+.ifdef IC8BUFL
+         .equiv  Ic8bufl, IC8BUFL
+  .endif
+.endif
+.ifndef  Ic8conh
+.ifdef IC8CONH
+         .equiv  Ic8conh, IC8CONH
+  .endif
+.endif
+.ifndef  Ic8conl
+.ifdef IC8CONL
+         .equiv  Ic8conl, IC8CONL
+  .endif
+.endif
+.ifndef  Ic8ie
+.ifdef IC8IE
+         .equiv  Ic8ie, IC8IE
+  .endif
+.endif
+.ifndef  Ic8if
+.ifdef IC8IF
+         .equiv  Ic8if, IC8IF
+  .endif
+.endif
+.ifndef  Ic8ip0
+.ifdef IC8IP0
+         .equiv  Ic8ip0, IC8IP0
+  .endif
+.endif
+.ifndef  Ic8ip1
+.ifdef IC8IP1
+         .equiv  Ic8ip1, IC8IP1
+  .endif
+.endif
+.ifndef  Ic8ip2
+.ifdef IC8IP2
+         .equiv  Ic8ip2, IC8IP2
+  .endif
+.endif
+.ifndef  Ic8md
+.ifdef IC8MD
+         .equiv  Ic8md, IC8MD
+  .endif
+.endif
+.ifndef  Icbne
+.ifdef ICBNE
+         .equiv  Icbne, ICBNE
+  .endif
+.endif
+.ifndef  Ici0
+.ifdef ICI0
+         .equiv  Ici0, ICI0
+  .endif
+.endif
+.ifndef  Ici1
+.ifdef ICI1
+         .equiv  Ici1, ICI1
+  .endif
+.endif
+.ifndef  Icm0
+.ifdef ICM0
+         .equiv  Icm0, ICM0
+  .endif
+.endif
+.ifndef  Icm1
+.ifdef ICM1
+         .equiv  Icm1, ICM1
+  .endif
+.endif
+.ifndef  Icm2
+.ifdef ICM2
+         .equiv  Icm2, ICM2
+  .endif
+.endif
+.ifndef  Icode0
+.ifdef ICODE0
+         .equiv  Icode0, ICODE0
+  .endif
+.endif
+.ifndef  Icode1
+.ifdef ICODE1
+         .equiv  Icode1, ICODE1
+  .endif
+.endif
+.ifndef  Icode2
+.ifdef ICODE2
+         .equiv  Icode2, ICODE2
+  .endif
+.endif
+.ifndef  Icov
+.ifdef ICOV
+         .equiv  Icov, ICOV
+  .endif
+.endif
+.ifndef  Icsidl
+.ifdef ICSIDL
+         .equiv  Icsidl, ICSIDL
+  .endif
+.endif
+.ifndef  Ictmr
+.ifdef ICTMR
+         .equiv  Ictmr, ICTMR
+  .endif
+.endif
+.ifndef  Idle
+.ifdef IDLE
+         .equiv  Idle, IDLE
+  .endif
+.endif
+.ifndef  Idle_mode
+.ifdef IDLE_MODE
+         .equiv  Idle_mode, IDLE_MODE
+  .endif
+.endif
+.ifndef  Iec0h
+.ifdef IEC0H
+         .equiv  Iec0h, IEC0H
+  .endif
+.endif
+.ifndef  Iec0l
+.ifdef IEC0L
+         .equiv  Iec0l, IEC0L
+  .endif
+.endif
+.ifndef  Iec1h
+.ifdef IEC1H
+         .equiv  Iec1h, IEC1H
+  .endif
+.endif
+.ifndef  Iec1l
+.ifdef IEC1L
+         .equiv  Iec1l, IEC1L
+  .endif
+.endif
+.ifndef  Iec2h
+.ifdef IEC2H
+         .equiv  Iec2h, IEC2H
+  .endif
+.endif
+.ifndef  Iec2l
+.ifdef IEC2L
+         .equiv  Iec2l, IEC2L
+  .endif
+.endif
+.ifndef  If
+.ifdef IF
+         .equiv  If, IF
+  .endif
+.endif
+.ifndef  Ifs0h
+.ifdef IFS0H
+         .equiv  Ifs0h, IFS0H
+  .endif
+.endif
+.ifndef  Ifs0l
+.ifdef IFS0L
+         .equiv  Ifs0l, IFS0L
+  .endif
+.endif
+.ifndef  Ifs1h
+.ifdef IFS1H
+         .equiv  Ifs1h, IFS1H
+  .endif
+.endif
+.ifndef  Ifs1l
+.ifdef IFS1L
+         .equiv  Ifs1l, IFS1L
+  .endif
+.endif
+.ifndef  Ifs2h
+.ifdef IFS2H
+         .equiv  Ifs2h, IFS2H
+  .endif
+.endif
+.ifndef  Ifs2l
+.ifdef IFS2L
+         .equiv  Ifs2l, IFS2L
+  .endif
+.endif
+.ifndef  Indck0
+.ifdef INDCK0
+         .equiv  Indck0, INDCK0
+  .endif
+.endif
+.ifndef  Indck1
+.ifdef INDCK1
+         .equiv  Indck1, INDCK1
+  .endif
+.endif
+.ifndef  Indck2
+.ifdef INDCK2
+         .equiv  Indck2, INDCK2
+  .endif
+.endif
+.ifndef  Indout
+.ifdef INDOUT
+         .equiv  Indout, INDOUT
+  .endif
+.endif
+.ifndef  Indx
+.ifdef INDX
+         .equiv  Indx, INDX
+  .endif
+.endif
+.ifndef  Int0ep
+.ifdef INT0EP
+         .equiv  Int0ep, INT0EP
+  .endif
+.endif
+.ifndef  Int0ie
+.ifdef INT0IE
+         .equiv  Int0ie, INT0IE
+  .endif
+.endif
+.ifndef  Int0if
+.ifdef INT0IF
+         .equiv  Int0if, INT0IF
+  .endif
+.endif
+.ifndef  Int0ip0
+.ifdef INT0IP0
+         .equiv  Int0ip0, INT0IP0
+  .endif
+.endif
+.ifndef  Int0ip1
+.ifdef INT0IP1
+         .equiv  Int0ip1, INT0IP1
+  .endif
+.endif
+.ifndef  Int0ip2
+.ifdef INT0IP2
+         .equiv  Int0ip2, INT0IP2
+  .endif
+.endif
+.ifndef  Int1ep
+.ifdef INT1EP
+         .equiv  Int1ep, INT1EP
+  .endif
+.endif
+.ifndef  Int1ie
+.ifdef INT1IE
+         .equiv  Int1ie, INT1IE
+  .endif
+.endif
+.ifndef  Int1if
+.ifdef INT1IF
+         .equiv  Int1if, INT1IF
+  .endif
+.endif
+.ifndef  Int1ip0
+.ifdef INT1IP0
+         .equiv  Int1ip0, INT1IP0
+  .endif
+.endif
+.ifndef  Int1ip1
+.ifdef INT1IP1
+         .equiv  Int1ip1, INT1IP1
+  .endif
+.endif
+.ifndef  Int1ip2
+.ifdef INT1IP2
+         .equiv  Int1ip2, INT1IP2
+  .endif
+.endif
+.ifndef  Int2ep
+.ifdef INT2EP
+         .equiv  Int2ep, INT2EP
+  .endif
+.endif
+.ifndef  Int2ie
+.ifdef INT2IE
+         .equiv  Int2ie, INT2IE
+  .endif
+.endif
+.ifndef  Int2if
+.ifdef INT2IF
+         .equiv  Int2if, INT2IF
+  .endif
+.endif
+.ifndef  Int2ip0
+.ifdef INT2IP0
+         .equiv  Int2ip0, INT2IP0
+  .endif
+.endif
+.ifndef  Int2ip1
+.ifdef INT2IP1
+         .equiv  Int2ip1, INT2IP1
+  .endif
+.endif
+.ifndef  Int2ip2
+.ifdef INT2IP2
+         .equiv  Int2ip2, INT2IP2
+  .endif
+.endif
+.ifndef  Int3ep
+.ifdef INT3EP
+         .equiv  Int3ep, INT3EP
+  .endif
+.endif
+.ifndef  Int3ie
+.ifdef INT3IE
+         .equiv  Int3ie, INT3IE
+  .endif
+.endif
+.ifndef  Int3if
+.ifdef INT3IF
+         .equiv  Int3if, INT3IF
+  .endif
+.endif
+.ifndef  Int3ip0
+.ifdef INT3IP0
+         .equiv  Int3ip0, INT3IP0
+  .endif
+.endif
+.ifndef  Int3ip1
+.ifdef INT3IP1
+         .equiv  Int3ip1, INT3IP1
+  .endif
+.endif
+.ifndef  Int3ip2
+.ifdef INT3IP2
+         .equiv  Int3ip2, INT3IP2
+  .endif
+.endif
+.ifndef  Int4ep
+.ifdef INT4EP
+         .equiv  Int4ep, INT4EP
+  .endif
+.endif
+.ifndef  Int4ie
+.ifdef INT4IE
+         .equiv  Int4ie, INT4IE
+  .endif
+.endif
+.ifndef  Int4if
+.ifdef INT4IF
+         .equiv  Int4if, INT4IF
+  .endif
+.endif
+.ifndef  Int4ip0
+.ifdef INT4IP0
+         .equiv  Int4ip0, INT4IP0
+  .endif
+.endif
+.ifndef  Int4ip1
+.ifdef INT4IP1
+         .equiv  Int4ip1, INT4IP1
+  .endif
+.endif
+.ifndef  Int4ip2
+.ifdef INT4IP2
+         .equiv  Int4ip2, INT4IP2
+  .endif
+.endif
+.ifndef  Intcon1h
+.ifdef INTCON1H
+         .equiv  Intcon1h, INTCON1H
+  .endif
+.endif
+.ifndef  Intcon1l
+.ifdef INTCON1L
+         .equiv  Intcon1l, INTCON1L
+  .endif
+.endif
+.ifndef  Intcon2h
+.ifdef INTCON2H
+         .equiv  Intcon2h, INTCON2H
+  .endif
+.endif
+.ifndef  Intcon2l
+.ifdef INTCON2L
+         .equiv  Intcon2l, INTCON2L
+  .endif
+.endif
+.ifndef  Iolock
+.ifdef IOLOCK
+         .equiv  Iolock, IOLOCK
+  .endif
+.endif
+.ifndef  Iopuwr
+.ifdef IOPUWR
+         .equiv  Iopuwr, IOPUWR
+  .endif
+.endif
+.ifndef  Ipc0h
+.ifdef IPC0H
+         .equiv  Ipc0h, IPC0H
+  .endif
+.endif
+.ifndef  Ipc0l
+.ifdef IPC0L
+         .equiv  Ipc0l, IPC0L
+  .endif
+.endif
+.ifndef  Ipc10h
+.ifdef IPC10H
+         .equiv  Ipc10h, IPC10H
+  .endif
+.endif
+.ifndef  Ipc10l
+.ifdef IPC10L
+         .equiv  Ipc10l, IPC10L
+  .endif
+.endif
+.ifndef  Ipc11h
+.ifdef IPC11H
+         .equiv  Ipc11h, IPC11H
+  .endif
+.endif
+.ifndef  Ipc11l
+.ifdef IPC11L
+         .equiv  Ipc11l, IPC11L
+  .endif
+.endif
+.ifndef  Ipc1h
+.ifdef IPC1H
+         .equiv  Ipc1h, IPC1H
+  .endif
+.endif
+.ifndef  Ipc1l
+.ifdef IPC1L
+         .equiv  Ipc1l, IPC1L
+  .endif
+.endif
+.ifndef  Ipc2h
+.ifdef IPC2H
+         .equiv  Ipc2h, IPC2H
+  .endif
+.endif
+.ifndef  Ipc2l
+.ifdef IPC2L
+         .equiv  Ipc2l, IPC2L
+  .endif
+.endif
+.ifndef  Ipc3h
+.ifdef IPC3H
+         .equiv  Ipc3h, IPC3H
+  .endif
+.endif
+.ifndef  Ipc3l
+.ifdef IPC3L
+         .equiv  Ipc3l, IPC3L
+  .endif
+.endif
+.ifndef  Ipc4h
+.ifdef IPC4H
+         .equiv  Ipc4h, IPC4H
+  .endif
+.endif
+.ifndef  Ipc4l
+.ifdef IPC4L
+         .equiv  Ipc4l, IPC4L
+  .endif
+.endif
+.ifndef  Ipc5h
+.ifdef IPC5H
+         .equiv  Ipc5h, IPC5H
+  .endif
+.endif
+.ifndef  Ipc5l
+.ifdef IPC5L
+         .equiv  Ipc5l, IPC5L
+  .endif
+.endif
+.ifndef  Ipc6h
+.ifdef IPC6H
+         .equiv  Ipc6h, IPC6H
+  .endif
+.endif
+.ifndef  Ipc6l
+.ifdef IPC6L
+         .equiv  Ipc6l, IPC6L
+  .endif
+.endif
+.ifndef  Ipc7h
+.ifdef IPC7H
+         .equiv  Ipc7h, IPC7H
+  .endif
+.endif
+.ifndef  Ipc7l
+.ifdef IPC7L
+         .equiv  Ipc7l, IPC7L
+  .endif
+.endif
+.ifndef  Ipc8h
+.ifdef IPC8H
+         .equiv  Ipc8h, IPC8H
+  .endif
+.endif
+.ifndef  Ipc8l
+.ifdef IPC8L
+         .equiv  Ipc8l, IPC8L
+  .endif
+.endif
+.ifndef  Ipc9h
+.ifdef IPC9H
+         .equiv  Ipc9h, IPC9H
+  .endif
+.endif
+.ifndef  Ipc9l
+.ifdef IPC9L
+         .equiv  Ipc9l, IPC9L
+  .endif
+.endif
+.ifndef  Ipl0
+.ifdef IPL0
+         .equiv  Ipl0, IPL0
+  .endif
+.endif
+.ifndef  Ipl1
+.ifdef IPL1
+         .equiv  Ipl1, IPL1
+  .endif
+.endif
+.ifndef  Ipl2
+.ifdef IPL2
+         .equiv  Ipl2, IPL2
+  .endif
+.endif
+.ifndef  Ipl3
+.ifdef IPL3
+         .equiv  Ipl3, IPL3
+  .endif
+.endif
+.ifndef  Ipmien
+.ifdef IPMIEN
+         .equiv  Ipmien, IPMIEN
+  .endif
+.endif
+.ifndef  Ivrie
+.ifdef IVRIE
+         .equiv  Ivrie, IVRIE
+  .endif
+.endif
+.ifndef  Ivrif
+.ifdef IVRIF
+         .equiv  Ivrif, IVRIF
+  .endif
+.endif
+.ifndef  Iwcol
+.ifdef IWCOL
+         .equiv  Iwcol, IWCOL
+  .endif
+.endif
+.ifndef  Jtoff
+.ifdef JTOFF
+         .equiv  Jtoff, JTOFF
+  .endif
+.endif
+.ifndef  Latah
+.ifdef LATAH
+         .equiv  Latah, LATAH
+  .endif
+.endif
+.ifndef  Latal
+.ifdef LATAL
+         .equiv  Latal, LATAL
+  .endif
+.endif
+.ifndef  Latbh
+.ifdef LATBH
+         .equiv  Latbh, LATBH
+  .endif
+.endif
+.ifndef  Latbl
+.ifdef LATBL
+         .equiv  Latbl, LATBL
+  .endif
+.endif
+.ifndef  Latch
+.ifdef LATCH
+         .equiv  Latch, LATCH
+  .endif
+.endif
+.ifndef  Latcl
+.ifdef LATCL
+         .equiv  Latcl, LATCL
+  .endif
+.endif
+.ifndef  Latdh
+.ifdef LATDH
+         .equiv  Latdh, LATDH
+  .endif
+.endif
+.ifndef  Latdl
+.ifdef LATDL
+         .equiv  Latdl, LATDL
+  .endif
+.endif
+.ifndef  Lateh
+.ifdef LATEH
+         .equiv  Lateh, LATEH
+  .endif
+.endif
+.ifndef  Latel
+.ifdef LATEL
+         .equiv  Latel, LATEL
+  .endif
+.endif
+.ifndef  Latfh
+.ifdef LATFH
+         .equiv  Latfh, LATFH
+  .endif
+.endif
+.ifndef  Latfl
+.ifdef LATFL
+         .equiv  Latfl, LATFL
+  .endif
+.endif
+.ifndef  Latgh
+.ifdef LATGH
+         .equiv  Latgh, LATGH
+  .endif
+.endif
+.ifndef  Latgl
+.ifdef LATGL
+         .equiv  Latgl, LATGL
+  .endif
+.endif
+.ifndef  Lock
+.ifdef LOCK
+         .equiv  Lock, LOCK
+  .endif
+.endif
+.ifndef  Lp
+.ifdef LP
+         .equiv  Lp, LP
+  .endif
+.endif
+.ifndef  Lpback
+.ifdef LPBACK
+         .equiv  Lpback, LPBACK
+  .endif
+.endif
+.ifndef  Lposcen
+.ifdef LPOSCEN
+         .equiv  Lposcen, LPOSCEN
+  .endif
+.endif
+.ifndef  Lprc
+.ifdef LPRC
+         .equiv  Lprc, LPRC
+  .endif
+.endif
+.ifndef  Lvden
+.ifdef LVDEN
+         .equiv  Lvden, LVDEN
+  .endif
+.endif
+.ifndef  Lvdie
+.ifdef LVDIE
+         .equiv  Lvdie, LVDIE
+  .endif
+.endif
+.ifndef  Lvdif
+.ifdef LVDIF
+         .equiv  Lvdif, LVDIF
+  .endif
+.endif
+.ifndef  Lvdip0
+.ifdef LVDIP0
+         .equiv  Lvdip0, LVDIP0
+  .endif
+.endif
+.ifndef  Lvdip1
+.ifdef LVDIP1
+         .equiv  Lvdip1, LVDIP1
+  .endif
+.endif
+.ifndef  Lvdip2
+.ifdef LVDIP2
+         .equiv  Lvdip2, LVDIP2
+  .endif
+.endif
+.ifndef  Lvdl0
+.ifdef LVDL0
+         .equiv  Lvdl0, LVDL0
+  .endif
+.endif
+.ifndef  Lvdl1
+.ifdef LVDL1
+         .equiv  Lvdl1, LVDL1
+  .endif
+.endif
+.ifndef  Lvdl2
+.ifdef LVDL2
+         .equiv  Lvdl2, LVDL2
+  .endif
+.endif
+.ifndef  Lvdl3
+.ifdef LVDL3
+         .equiv  Lvdl3, LVDL3
+  .endif
+.endif
+.ifndef  Matherr
+.ifdef MATHERR
+         .equiv  Matherr, MATHERR
+  .endif
+.endif
+.ifndef  Maxcnth
+.ifdef MAXCNTH
+         .equiv  Maxcnth, MAXCNTH
+  .endif
+.endif
+.ifndef  Maxcntl
+.ifdef MAXCNTL
+         .equiv  Maxcntl, MAXCNTL
+  .endif
+.endif
+.ifndef  Mclr_dis
+.ifdef MCLR_DIS
+         .equiv  Mclr_dis, MCLR_DIS
+  .endif
+.endif
+.ifndef  Mclr_en
+.ifdef MCLR_EN
+         .equiv  Mclr_en, MCLR_EN
+  .endif
+.endif
+.ifndef  Mi2cie
+.ifdef MI2CIE
+         .equiv  Mi2cie, MI2CIE
+  .endif
+.endif
+.ifndef  Mi2c1ie
+.ifdef MI2C1IE
+         .equiv  Mi2c1ie, MI2C1IE
+  .endif
+.endif
+.ifndef  Mi2c2ie
+.ifdef MI2C2IE
+         .equiv  Mi2c2ie, MI2C2IE
+  .endif
+.endif
+.ifndef  Mi2cif
+.ifdef MI2CIF
+         .equiv  Mi2cif, MI2CIF
+  .endif
+.endif
+.ifndef  Mi2c1if
+.ifdef MI2C1IF
+         .equiv  Mi2c1if, MI2C1IF
+  .endif
+.endif
+.ifndef  Mi2c2if
+.ifdef MI2C2IF
+         .equiv  Mi2c2if, MI2C2IF
+  .endif
+.endif
+.ifndef  Mi2cip0
+.ifdef MI2CIP0
+         .equiv  Mi2cip0, MI2CIP0
+  .endif
+.endif
+.ifndef  Mi2cip1
+.ifdef MI2CIP1
+         .equiv  Mi2cip1, MI2CIP1
+  .endif
+.endif
+.ifndef  Mi2cip2
+.ifdef MI2CIP2
+         .equiv  Mi2cip2, MI2CIP2
+  .endif
+.endif
+.ifndef  Modconh
+.ifdef MODCONH
+         .equiv  Modconh, MODCONH
+  .endif
+.endif
+.ifndef  Modconl
+.ifdef MODCONL
+         .equiv  Modconl, MODCONL
+  .endif
+.endif
+.ifndef  Mode16
+.ifdef MODE16
+         .equiv  Mode16, MODE16
+  .endif
+.endif
+.ifndef  Msten
+.ifdef MSTEN
+         .equiv  Msten, MSTEN
+  .endif
+.endif
+.ifndef  Nosc0
+.ifdef NOSC0
+         .equiv  Nosc0, NOSC0
+  .endif
+.endif
+.ifndef  Nosc1
+.ifdef NOSC1
+         .equiv  Nosc1, NOSC1
+  .endif
+.endif
+.ifndef  Nstdis
+.ifdef NSTDIS
+         .equiv  Nstdis, NSTDIS
+  .endif
+.endif
+.ifndef  Nvmadr
+.ifdef NVMADR
+         .equiv  Nvmadr, NVMADR
+  .endif
+.endif
+.ifndef  Nvmadrh
+.ifdef NVMADRH
+         .equiv  Nvmadrh, NVMADRH
+  .endif
+.endif
+.ifndef  Nvmadrl
+.ifdef NVMADRL
+         .equiv  Nvmadrl, NVMADRL
+  .endif
+.endif
+.ifndef  Nvmadru
+.ifdef NVMADRU
+         .equiv  Nvmadru, NVMADRU
+  .endif
+.endif
+.ifndef  Nvmcon
+.ifdef NVMCON
+         .equiv  Nvmcon, NVMCON
+  .endif
+.endif
+.ifndef  Nvmie
+.ifdef NVMIE
+         .equiv  Nvmie, NVMIE
+  .endif
+.endif
+.ifndef  Nvmif
+.ifdef NVMIF
+         .equiv  Nvmif, NVMIF
+  .endif
+.endif
+.ifndef  Nvmip0
+.ifdef NVMIP0
+         .equiv  Nvmip0, NVMIP0
+  .endif
+.endif
+.ifndef  Nvmip1
+.ifdef NVMIP1
+         .equiv  Nvmip1, NVMIP1
+  .endif
+.endif
+.ifndef  Nvmip2
+.ifdef NVMIP2
+         .equiv  Nvmip2, NVMIP2
+  .endif
+.endif
+.ifndef  Nvmkey
+.ifdef NVMKEY
+         .equiv  Nvmkey, NVMKEY
+  .endif
+.endif
+.ifndef  Nvmsrcadrl
+.ifdef NVMSRCADRL
+         .equiv  Nvmsrcadrl, NVMSRCADRL
+  .endif
+.endif
+.ifndef  Nvmsrcadrh
+.ifdef NVMSRCADRH
+         .equiv  Nvmsrcadrh, NVMSRCADRH
+  .endif
+.endif
+.ifndef  Oa
+.ifdef OA
+         .equiv  Oa, OA
+  .endif
+.endif
+.ifndef  Oab
+.ifdef OAB
+         .equiv  Oab, OAB
+  .endif
+.endif
+.ifndef  Ob
+.ifdef OB
+         .equiv  Ob, OB
+  .endif
+.endif
+.ifndef  Oc1conh
+.ifdef OC1CONH
+         .equiv  Oc1conh, OC1CONH
+  .endif
+.endif
+.ifndef  Oc1conl
+.ifdef OC1CONL
+         .equiv  Oc1conl, OC1CONL
+  .endif
+.endif
+.ifndef  Oc1ie
+.ifdef OC1IE
+         .equiv  Oc1ie, OC1IE
+  .endif
+.endif
+.ifndef  Oc1if
+.ifdef OC1IF
+         .equiv  Oc1if, OC1IF
+  .endif
+.endif
+.ifndef  Oc1ip0
+.ifdef OC1IP0
+         .equiv  Oc1ip0, OC1IP0
+  .endif
+.endif
+.ifndef  Oc1ip1
+.ifdef OC1IP1
+         .equiv  Oc1ip1, OC1IP1
+  .endif
+.endif
+.ifndef  Oc1ip2
+.ifdef OC1IP2
+         .equiv  Oc1ip2, OC1IP2
+  .endif
+.endif
+.ifndef  Oc1md
+.ifdef OC1MD
+         .equiv  Oc1md, OC1MD
+  .endif
+.endif
+.ifndef  Oc1rh
+.ifdef OC1RH
+         .equiv  Oc1rh, OC1RH
+  .endif
+.endif
+.ifndef  Oc1rl
+.ifdef OC1RL
+         .equiv  Oc1rl, OC1RL
+  .endif
+.endif
+.ifndef  Oc1rsh
+.ifdef OC1RSH
+         .equiv  Oc1rsh, OC1RSH
+  .endif
+.endif
+.ifndef  Oc1rsl
+.ifdef OC1RSL
+         .equiv  Oc1rsl, OC1RSL
+  .endif
+.endif
+.ifndef  Oc2conh
+.ifdef OC2CONH
+         .equiv  Oc2conh, OC2CONH
+  .endif
+.endif
+.ifndef  Oc2conl
+.ifdef OC2CONL
+         .equiv  Oc2conl, OC2CONL
+  .endif
+.endif
+.ifndef  Oc2ie
+.ifdef OC2IE
+         .equiv  Oc2ie, OC2IE
+  .endif
+.endif
+.ifndef  Oc2if
+.ifdef OC2IF
+         .equiv  Oc2if, OC2IF
+  .endif
+.endif
+.ifndef  Oc2ip0
+.ifdef OC2IP0
+         .equiv  Oc2ip0, OC2IP0
+  .endif
+.endif
+.ifndef  Oc2ip1
+.ifdef OC2IP1
+         .equiv  Oc2ip1, OC2IP1
+  .endif
+.endif
+.ifndef  Oc2ip2
+.ifdef OC2IP2
+         .equiv  Oc2ip2, OC2IP2
+  .endif
+.endif
+.ifndef  Oc2md
+.ifdef OC2MD
+         .equiv  Oc2md, OC2MD
+  .endif
+.endif
+.ifndef  Oc2rh
+.ifdef OC2RH
+         .equiv  Oc2rh, OC2RH
+  .endif
+.endif
+.ifndef  Oc2rl
+.ifdef OC2RL
+         .equiv  Oc2rl, OC2RL
+  .endif
+.endif
+.ifndef  Oc2rsh
+.ifdef OC2RSH
+         .equiv  Oc2rsh, OC2RSH
+  .endif
+.endif
+.ifndef  Oc2rsl
+.ifdef OC2RSL
+         .equiv  Oc2rsl, OC2RSL
+  .endif
+.endif
+.ifndef  Oc3conh
+.ifdef OC3CONH
+         .equiv  Oc3conh, OC3CONH
+  .endif
+.endif
+.ifndef  Oc3conl
+.ifdef OC3CONL
+         .equiv  Oc3conl, OC3CONL
+  .endif
+.endif
+.ifndef  Oc3ie
+.ifdef OC3IE
+         .equiv  Oc3ie, OC3IE
+  .endif
+.endif
+.ifndef  Oc3if
+.ifdef OC3IF
+         .equiv  Oc3if, OC3IF
+  .endif
+.endif
+.ifndef  Oc3ip0
+.ifdef OC3IP0
+         .equiv  Oc3ip0, OC3IP0
+  .endif
+.endif
+.ifndef  Oc3ip1
+.ifdef OC3IP1
+         .equiv  Oc3ip1, OC3IP1
+  .endif
+.endif
+.ifndef  Oc3ip2
+.ifdef OC3IP2
+         .equiv  Oc3ip2, OC3IP2
+  .endif
+.endif
+.ifndef  Oc3md
+.ifdef OC3MD
+         .equiv  Oc3md, OC3MD
+  .endif
+.endif
+.ifndef  Oc3rh
+.ifdef OC3RH
+         .equiv  Oc3rh, OC3RH
+  .endif
+.endif
+.ifndef  Oc3rl
+.ifdef OC3RL
+         .equiv  Oc3rl, OC3RL
+  .endif
+.endif
+.ifndef  Oc3rsh
+.ifdef OC3RSH
+         .equiv  Oc3rsh, OC3RSH
+  .endif
+.endif
+.ifndef  Oc3rsl
+.ifdef OC3RSL
+         .equiv  Oc3rsl, OC3RSL
+  .endif
+.endif
+.ifndef  Oc4conh
+.ifdef OC4CONH
+         .equiv  Oc4conh, OC4CONH
+  .endif
+.endif
+.ifndef  Oc4conl
+.ifdef OC4CONL
+         .equiv  Oc4conl, OC4CONL
+  .endif
+.endif
+.ifndef  Oc4ie
+.ifdef OC4IE
+         .equiv  Oc4ie, OC4IE
+  .endif
+.endif
+.ifndef  Oc4if
+.ifdef OC4IF
+         .equiv  Oc4if, OC4IF
+  .endif
+.endif
+.ifndef  Oc4ip0
+.ifdef OC4IP0
+         .equiv  Oc4ip0, OC4IP0
+  .endif
+.endif
+.ifndef  Oc4ip1
+.ifdef OC4IP1
+         .equiv  Oc4ip1, OC4IP1
+  .endif
+.endif
+.ifndef  Oc4ip2
+.ifdef OC4IP2
+         .equiv  Oc4ip2, OC4IP2
+  .endif
+.endif
+.ifndef  Oc4md
+.ifdef OC4MD
+         .equiv  Oc4md, OC4MD
+  .endif
+.endif
+.ifndef  Oc4rh
+.ifdef OC4RH
+         .equiv  Oc4rh, OC4RH
+  .endif
+.endif
+.ifndef  Oc4rl
+.ifdef OC4RL
+         .equiv  Oc4rl, OC4RL
+  .endif
+.endif
+.ifndef  Oc4rsh
+.ifdef OC4RSH
+         .equiv  Oc4rsh, OC4RSH
+  .endif
+.endif
+.ifndef  Oc4rsl
+.ifdef OC4RSL
+         .equiv  Oc4rsl, OC4RSL
+  .endif
+.endif
+.ifndef  Oc5conh
+.ifdef OC5CONH
+         .equiv  Oc5conh, OC5CONH
+  .endif
+.endif
+.ifndef  Oc5conl
+.ifdef OC5CONL
+         .equiv  Oc5conl, OC5CONL
+  .endif
+.endif
+.ifndef  Oc5ie
+.ifdef OC5IE
+         .equiv  Oc5ie, OC5IE
+  .endif
+.endif
+.ifndef  Oc5if
+.ifdef OC5IF
+         .equiv  Oc5if, OC5IF
+  .endif
+.endif
+.ifndef  Oc5ip0
+.ifdef OC5IP0
+         .equiv  Oc5ip0, OC5IP0
+  .endif
+.endif
+.ifndef  Oc5ip1
+.ifdef OC5IP1
+         .equiv  Oc5ip1, OC5IP1
+  .endif
+.endif
+.ifndef  Oc5ip2
+.ifdef OC5IP2
+         .equiv  Oc5ip2, OC5IP2
+  .endif
+.endif
+.ifndef  Oc5md
+.ifdef OC5MD
+         .equiv  Oc5md, OC5MD
+  .endif
+.endif
+.ifndef  Oc5rh
+.ifdef OC5RH
+         .equiv  Oc5rh, OC5RH
+  .endif
+.endif
+.ifndef  Oc5rl
+.ifdef OC5RL
+         .equiv  Oc5rl, OC5RL
+  .endif
+.endif
+.ifndef  Oc5rsh
+.ifdef OC5RSH
+         .equiv  Oc5rsh, OC5RSH
+  .endif
+.endif
+.ifndef  Oc5rsl
+.ifdef OC5RSL
+         .equiv  Oc5rsl, OC5RSL
+  .endif
+.endif
+.ifndef  Oc6conh
+.ifdef OC6CONH
+         .equiv  Oc6conh, OC6CONH
+  .endif
+.endif
+.ifndef  Oc6conl
+.ifdef OC6CONL
+         .equiv  Oc6conl, OC6CONL
+  .endif
+.endif
+.ifndef  Oc6ie
+.ifdef OC6IE
+         .equiv  Oc6ie, OC6IE
+  .endif
+.endif
+.ifndef  Oc6if
+.ifdef OC6IF
+         .equiv  Oc6if, OC6IF
+  .endif
+.endif
+.ifndef  Oc6ip0
+.ifdef OC6IP0
+         .equiv  Oc6ip0, OC6IP0
+  .endif
+.endif
+.ifndef  Oc6ip1
+.ifdef OC6IP1
+         .equiv  Oc6ip1, OC6IP1
+  .endif
+.endif
+.ifndef  Oc6ip2
+.ifdef OC6IP2
+         .equiv  Oc6ip2, OC6IP2
+  .endif
+.endif
+.ifndef  Oc6md
+.ifdef OC6MD
+         .equiv  Oc6md, OC6MD
+  .endif
+.endif
+.ifndef  Oc6rh
+.ifdef OC6RH
+         .equiv  Oc6rh, OC6RH
+  .endif
+.endif
+.ifndef  Oc6rl
+.ifdef OC6RL
+         .equiv  Oc6rl, OC6RL
+  .endif
+.endif
+.ifndef  Oc6rsh
+.ifdef OC6RSH
+         .equiv  Oc6rsh, OC6RSH
+  .endif
+.endif
+.ifndef  Oc6rsl
+.ifdef OC6RSL
+         .equiv  Oc6rsl, OC6RSL
+  .endif
+.endif
+.ifndef  Oc7conh
+.ifdef OC7CONH
+         .equiv  Oc7conh, OC7CONH
+  .endif
+.endif
+.ifndef  Oc7conl
+.ifdef OC7CONL
+         .equiv  Oc7conl, OC7CONL
+  .endif
+.endif
+.ifndef  Oc7ie
+.ifdef OC7IE
+         .equiv  Oc7ie, OC7IE
+  .endif
+.endif
+.ifndef  Oc7if
+.ifdef OC7IF
+         .equiv  Oc7if, OC7IF
+  .endif
+.endif
+.ifndef  Oc7ip0
+.ifdef OC7IP0
+         .equiv  Oc7ip0, OC7IP0
+  .endif
+.endif
+.ifndef  Oc7ip1
+.ifdef OC7IP1
+         .equiv  Oc7ip1, OC7IP1
+  .endif
+.endif
+.ifndef  Oc7ip2
+.ifdef OC7IP2
+         .equiv  Oc7ip2, OC7IP2
+  .endif
+.endif
+.ifndef  Oc7md
+.ifdef OC7MD
+         .equiv  Oc7md, OC7MD
+  .endif
+.endif
+.ifndef  Oc7rh
+.ifdef OC7RH
+         .equiv  Oc7rh, OC7RH
+  .endif
+.endif
+.ifndef  Oc7rl
+.ifdef OC7RL
+         .equiv  Oc7rl, OC7RL
+  .endif
+.endif
+.ifndef  Oc7rsh
+.ifdef OC7RSH
+         .equiv  Oc7rsh, OC7RSH
+  .endif
+.endif
+.ifndef  Oc7rsl
+.ifdef OC7RSL
+         .equiv  Oc7rsl, OC7RSL
+  .endif
+.endif
+.ifndef  Oc8conh
+.ifdef OC8CONH
+         .equiv  Oc8conh, OC8CONH
+  .endif
+.endif
+.ifndef  Oc8conl
+.ifdef OC8CONL
+         .equiv  Oc8conl, OC8CONL
+  .endif
+.endif
+.ifndef  Oc8ie
+.ifdef OC8IE
+         .equiv  Oc8ie, OC8IE
+  .endif
+.endif
+.ifndef  Oc8if
+.ifdef OC8IF
+         .equiv  Oc8if, OC8IF
+  .endif
+.endif
+.ifndef  Oc8ip0
+.ifdef OC8IP0
+         .equiv  Oc8ip0, OC8IP0
+  .endif
+.endif
+.ifndef  Oc8ip1
+.ifdef OC8IP1
+         .equiv  Oc8ip1, OC8IP1
+  .endif
+.endif
+.ifndef  Oc8ip2
+.ifdef OC8IP2
+         .equiv  Oc8ip2, OC8IP2
+  .endif
+.endif
+.ifndef  Oc8md
+.ifdef OC8MD
+         .equiv  Oc8md, OC8MD
+  .endif
+.endif
+.ifndef  Oc8rh
+.ifdef OC8RH
+         .equiv  Oc8rh, OC8RH
+  .endif
+.endif
+.ifndef  Oc8rl
+.ifdef OC8RL
+         .equiv  Oc8rl, OC8RL
+  .endif
+.endif
+.ifndef  Oc8rsh
+.ifdef OC8RSH
+         .equiv  Oc8rsh, OC8RSH
+  .endif
+.endif
+.ifndef  Oc8rsl
+.ifdef OC8RSL
+         .equiv  Oc8rsl, OC8RSL
+  .endif
+.endif
+.ifndef  Ocaen
+.ifdef OCAEN
+         .equiv  Ocaen, OCAEN
+  .endif
+.endif
+.ifndef  Ocben
+.ifdef OCBEN
+         .equiv  Ocben, OCBEN
+  .endif
+.endif
+.ifndef  Occen
+.ifdef OCCEN
+         .equiv  Occen, OCCEN
+  .endif
+.endif
+.ifndef  Ocden
+.ifdef OCDEN
+         .equiv  Ocden, OCDEN
+  .endif
+.endif
+.ifndef  Oceen
+.ifdef OCEEN
+         .equiv  Oceen, OCEEN
+  .endif
+.endif
+.ifndef  Ocfen
+.ifdef OCFEN
+         .equiv  Ocfen, OCFEN
+  .endif
+.endif
+.ifndef  Ocflt
+.ifdef OCFLT
+         .equiv  Ocflt, OCFLT
+  .endif
+.endif
+.ifndef  Ocm0
+.ifdef OCM0
+         .equiv  Ocm0, OCM0
+  .endif
+.endif
+.ifndef  Ocm1
+.ifdef OCM1
+         .equiv  Ocm1, OCM1
+  .endif
+.endif
+.ifndef  Ocm2
+.ifdef OCM2
+         .equiv  Ocm2, OCM2
+  .endif
+.endif
+.ifndef  Ocsidl
+.ifdef OCSIDL
+         .equiv  Ocsidl, OCSIDL
+  .endif
+.endif
+.ifndef  Octsel
+.ifdef OCTSEL
+         .equiv  Octsel, OCTSEL
+  .endif
+.endif
+.ifndef  Oerr
+.ifdef OERR
+         .equiv  Oerr, OERR
+  .endif
+.endif
+.ifndef  Opmode0
+.ifdef OPMODE0
+         .equiv  Opmode0, OPMODE0
+  .endif
+.endif
+.ifndef  Opmode1
+.ifdef OPMODE1
+         .equiv  Opmode1, OPMODE1
+  .endif
+.endif
+.ifndef  Opmode2
+.ifdef OPMODE2
+         .equiv  Opmode2, OPMODE2
+  .endif
+.endif
+.ifndef  Oscconh
+.ifdef OSCCONH
+         .equiv  Oscconh, OSCCONH
+  .endif
+.endif
+.ifndef  Oscconl
+.ifdef OSCCONL
+         .equiv  Oscconl, OSCCONL
+  .endif
+.endif
+.ifndef  Oscfail
+.ifdef OSCFAIL
+         .equiv  Oscfail, OSCFAIL
+  .endif
+.endif
+.ifndef  Oswen
+.ifdef OSWEN
+         .equiv  Oswen, OSWEN
+  .endif
+.endif
+.ifndef  Osync
+.ifdef OSYNC
+         .equiv  Osync, OSYNC
+  .endif
+.endif
+.ifndef  Ov
+.ifdef OV
+         .equiv  Ov, OV
+  .endif
+.endif
+.ifndef  Ovate
+.ifdef OVATE
+         .equiv  Ovate, OVATE
+  .endif
+.endif
+.ifndef  Ovbte
+.ifdef OVBTE
+         .equiv  Ovbte, OVBTE
+  .endif
+.endif
+.ifndef  Ovdconh
+.ifdef OVDCONH
+         .equiv  Ovdconh, OVDCONH
+  .endif
+.endif
+.ifndef  Ovdconl
+.ifdef OVDCONL
+         .equiv  Ovdconl, OVDCONL
+  .endif
+.endif
+.ifndef  Pbor_off
+.ifdef PBOR_OFF
+         .equiv  Pbor_off, PBOR_OFF
+  .endif
+.endif
+.ifndef  Pbor_on
+.ifdef PBOR_ON
+         .equiv  Pbor_on, PBOR_ON
+  .endif
+.endif
+.ifndef  Pcdout
+.ifdef PCDOUT
+         .equiv  Pcdout, PCDOUT
+  .endif
+.endif
+.ifndef  Pcfg0
+.ifdef PCFG0
+         .equiv  Pcfg0, PCFG0
+  .endif
+.endif
+.ifndef  Pcfg1
+.ifdef PCFG1
+         .equiv  Pcfg1, PCFG1
+  .endif
+.endif
+.ifndef  Pcfg10
+.ifdef PCFG10
+         .equiv  Pcfg10, PCFG10
+  .endif
+.endif
+.ifndef  Pcfg11
+.ifdef PCFG11
+         .equiv  Pcfg11, PCFG11
+  .endif
+.endif
+.ifndef  Pcfg12
+.ifdef PCFG12
+         .equiv  Pcfg12, PCFG12
+  .endif
+.endif
+.ifndef  Pcfg13
+.ifdef PCFG13
+         .equiv  Pcfg13, PCFG13
+  .endif
+.endif
+.ifndef  Pcfg14
+.ifdef PCFG14
+         .equiv  Pcfg14, PCFG14
+  .endif
+.endif
+.ifndef  Pcfg15
+.ifdef PCFG15
+         .equiv  Pcfg15, PCFG15
+  .endif
+.endif
+.ifndef  Pcfg2
+.ifdef PCFG2
+         .equiv  Pcfg2, PCFG2
+  .endif
+.endif
+.ifndef  Pcfg3
+.ifdef PCFG3
+         .equiv  Pcfg3, PCFG3
+  .endif
+.endif
+.ifndef  Pcfg4
+.ifdef PCFG4
+         .equiv  Pcfg4, PCFG4
+  .endif
+.endif
+.ifndef  Pcfg5
+.ifdef PCFG5
+         .equiv  Pcfg5, PCFG5
+  .endif
+.endif
+.ifndef  Pcfg6
+.ifdef PCFG6
+         .equiv  Pcfg6, PCFG6
+  .endif
+.endif
+.ifndef  Pcfg7
+.ifdef PCFG7
+         .equiv  Pcfg7, PCFG7
+  .endif
+.endif
+.ifndef  Pcfg8
+.ifdef PCFG8
+         .equiv  Pcfg8, PCFG8
+  .endif
+.endif
+.ifndef  Pcfg9
+.ifdef PCFG9
+         .equiv  Pcfg9, PCFG9
+  .endif
+.endif
+.ifndef  Pchh
+.ifdef PCHH
+         .equiv  Pchh, PCHH
+  .endif
+.endif
+.ifndef  Pchl
+.ifdef PCHL
+         .equiv  Pchl, PCHL
+  .endif
+.endif
+.ifndef  Pclh
+.ifdef PCLH
+         .equiv  Pclh, PCLH
+  .endif
+.endif
+.ifndef  Pcll
+.ifdef PCLL
+         .equiv  Pcll, PCLL
+  .endif
+.endif
+.ifndef  Pdc1h
+.ifdef PDC1H
+         .equiv  Pdc1h, PDC1H
+  .endif
+.endif
+.ifndef  Pdc1l
+.ifdef PDC1L
+         .equiv  Pdc1l, PDC1L
+  .endif
+.endif
+.ifndef  Pdc2h
+.ifdef PDC2H
+         .equiv  Pdc2h, PDC2H
+  .endif
+.endif
+.ifndef  Pdc2l
+.ifdef PDC2L
+         .equiv  Pdc2l, PDC2L
+  .endif
+.endif
+.ifndef  Pdc3h
+.ifdef PDC3H
+         .equiv  Pdc3h, PDC3H
+  .endif
+.endif
+.ifndef  Pdc3l
+.ifdef PDC3L
+         .equiv  Pdc3l, PDC3L
+  .endif
+.endif
+.ifndef  Pdc4h
+.ifdef PDC4H
+         .equiv  Pdc4h, PDC4H
+  .endif
+.endif
+.ifndef  Pdc4l
+.ifdef PDC4L
+         .equiv  Pdc4l, PDC4L
+  .endif
+.endif
+.ifndef  Pdsel0
+.ifdef PDSEL0
+         .equiv  Pdsel0, PDSEL0
+  .endif
+.endif
+.ifndef  Pdsel1
+.ifdef PDSEL1
+         .equiv  Pdsel1, PDSEL1
+  .endif
+.endif
+.ifndef  Pen
+.ifdef PEN
+         .equiv  Pen, PEN
+  .endif
+.endif
+.ifndef  Pen1h
+.ifdef PEN1H
+         .equiv  Pen1h, PEN1H
+  .endif
+.endif
+.ifndef  Pen1l
+.ifdef PEN1L
+         .equiv  Pen1l, PEN1L
+  .endif
+.endif
+.ifndef  Pen2h
+.ifdef PEN2H
+         .equiv  Pen2h, PEN2H
+  .endif
+.endif
+.ifndef  Pen2l
+.ifdef PEN2L
+         .equiv  Pen2l, PEN2L
+  .endif
+.endif
+.ifndef  Pen3h
+.ifdef PEN3H
+         .equiv  Pen3h, PEN3H
+  .endif
+.endif
+.ifndef  Pen3l
+.ifdef PEN3L
+         .equiv  Pen3l, PEN3L
+  .endif
+.endif
+.ifndef  Pen4h
+.ifdef PEN4H
+         .equiv  Pen4h, PEN4H
+  .endif
+.endif
+.ifndef  Pen4l
+.ifdef PEN4L
+         .equiv  Pen4l, PEN4L
+  .endif
+.endif
+.ifndef  Perr
+.ifdef PERR
+         .equiv  Perr, PERR
+  .endif
+.endif
+.ifndef  Pmd1h
+.ifdef PMD1H
+         .equiv  Pmd1h, PMD1H
+  .endif
+.endif
+.ifndef  Pmd1l
+.ifdef PMD1L
+         .equiv  Pmd1l, PMD1L
+  .endif
+.endif
+.ifndef  Pmd2h
+.ifdef PMD2H
+         .equiv  Pmd2h, PMD2H
+  .endif
+.endif
+.ifndef  Pmd2l
+.ifdef PMD2L
+         .equiv  Pmd2l, PMD2L
+  .endif
+.endif
+.ifndef  Pmod1
+.ifdef PMOD1
+         .equiv  Pmod1, PMOD1
+  .endif
+.endif
+.ifndef  Pmod2
+.ifdef PMOD2
+         .equiv  Pmod2, PMOD2
+  .endif
+.endif
+.ifndef  Pmod3
+.ifdef PMOD3
+         .equiv  Pmod3, PMOD3
+  .endif
+.endif
+.ifndef  Pmod4
+.ifdef PMOD4
+         .equiv  Pmod4, PMOD4
+  .endif
+.endif
+.ifndef  Por
+.ifdef POR
+         .equiv  Por, POR
+  .endif
+.endif
+.ifndef  Portah
+.ifdef PORTAH
+         .equiv  Portah, PORTAH
+  .endif
+.endif
+.ifndef  Portal
+.ifdef PORTAL
+         .equiv  Portal, PORTAL
+  .endif
+.endif
+.ifndef  Portbh
+.ifdef PORTBH
+         .equiv  Portbh, PORTBH
+  .endif
+.endif
+.ifndef  Portbl
+.ifdef PORTBL
+         .equiv  Portbl, PORTBL
+  .endif
+.endif
+.ifndef  Portch
+.ifdef PORTCH
+         .equiv  Portch, PORTCH
+  .endif
+.endif
+.ifndef  Portcl
+.ifdef PORTCL
+         .equiv  Portcl, PORTCL
+  .endif
+.endif
+.ifndef  Portdh
+.ifdef PORTDH
+         .equiv  Portdh, PORTDH
+  .endif
+.endif
+.ifndef  Portdl
+.ifdef PORTDL
+         .equiv  Portdl, PORTDL
+  .endif
+.endif
+.ifndef  Porteh
+.ifdef PORTEH
+         .equiv  Porteh, PORTEH
+  .endif
+.endif
+.ifndef  Portel
+.ifdef PORTEL
+         .equiv  Portel, PORTEL
+  .endif
+.endif
+.ifndef  Portfh
+.ifdef PORTFH
+         .equiv  Portfh, PORTFH
+  .endif
+.endif
+.ifndef  Portfl
+.ifdef PORTFL
+         .equiv  Portfl, PORTFL
+  .endif
+.endif
+.ifndef  Portgh
+.ifdef PORTGH
+         .equiv  Portgh, PORTGH
+  .endif
+.endif
+.ifndef  Portgl
+.ifdef PORTGL
+         .equiv  Portgl, PORTGL
+  .endif
+.endif
+.ifndef  Poscnth
+.ifdef POSCNTH
+         .equiv  Poscnth, POSCNTH
+  .endif
+.endif
+.ifndef  Poscntl
+.ifdef POSCNTL
+         .equiv  Poscntl, POSCNTL
+  .endif
+.endif
+.ifndef  Posres
+.ifdef POSRES
+         .equiv  Posres, POSRES
+  .endif
+.endif
+.ifndef  Post0
+.ifdef POST0
+         .equiv  Post0, POST0
+  .endif
+.endif
+.ifndef  Post1
+.ifdef POST1
+         .equiv  Post1, POST1
+  .endif
+.endif
+.ifndef  Pout1h
+.ifdef POUT1H
+         .equiv  Pout1h, POUT1H
+  .endif
+.endif
+.ifndef  Pout1l
+.ifdef POUT1L
+         .equiv  Pout1l, POUT1L
+  .endif
+.endif
+.ifndef  Pout2h
+.ifdef POUT2H
+         .equiv  Pout2h, POUT2H
+  .endif
+.endif
+.ifndef  Pout2l
+.ifdef POUT2L
+         .equiv  Pout2l, POUT2L
+  .endif
+.endif
+.ifndef  Pout3h
+.ifdef POUT3H
+         .equiv  Pout3h, POUT3H
+  .endif
+.endif
+.ifndef  Pout3l
+.ifdef POUT3L
+         .equiv  Pout3l, POUT3L
+  .endif
+.endif
+.ifndef  Pout4h
+.ifdef POUT4H
+         .equiv  Pout4h, POUT4H
+  .endif
+.endif
+.ifndef  Pout4l
+.ifdef POUT4L
+         .equiv  Pout4l, POUT4L
+  .endif
+.endif
+.ifndef  Povd1h
+.ifdef POVD1H
+         .equiv  Povd1h, POVD1H
+  .endif
+.endif
+.ifndef  Povd1l
+.ifdef POVD1L
+         .equiv  Povd1l, POVD1L
+  .endif
+.endif
+.ifndef  Povd2h
+.ifdef POVD2H
+         .equiv  Povd2h, POVD2H
+  .endif
+.endif
+.ifndef  Povd2l
+.ifdef POVD2L
+         .equiv  Povd2l, POVD2L
+  .endif
+.endif
+.ifndef  Povd3h
+.ifdef POVD3H
+         .equiv  Povd3h, POVD3H
+  .endif
+.endif
+.ifndef  Povd3l
+.ifdef POVD3L
+         .equiv  Povd3l, POVD3L
+  .endif
+.endif
+.ifndef  Povd4h
+.ifdef POVD4H
+         .equiv  Povd4h, POVD4H
+  .endif
+.endif
+.ifndef  Povd4l
+.ifdef POVD4L
+         .equiv  Povd4l, POVD4L
+  .endif
+.endif
+.ifndef  Ppre0
+.ifdef PPRE0
+         .equiv  Ppre0, PPRE0
+  .endif
+.endif
+.ifndef  Ppre1
+.ifdef PPRE1
+         .equiv  Ppre1, PPRE1
+  .endif
+.endif
+.ifndef  Pr1h
+.ifdef PR1H
+         .equiv  Pr1h, PR1H
+  .endif
+.endif
+.ifndef  Pr1l
+.ifdef PR1L
+         .equiv  Pr1l, PR1L
+  .endif
+.endif
+.ifndef  Pr2h
+.ifdef PR2H
+         .equiv  Pr2h, PR2H
+  .endif
+.endif
+.ifndef  Pr2l
+.ifdef PR2L
+         .equiv  Pr2l, PR2L
+  .endif
+.endif
+.ifndef  Pr3h
+.ifdef PR3H
+         .equiv  Pr3h, PR3H
+  .endif
+.endif
+.ifndef  Pr3l
+.ifdef PR3L
+         .equiv  Pr3l, PR3L
+  .endif
+.endif
+.ifndef  Pr4h
+.ifdef PR4H
+         .equiv  Pr4h, PR4H
+  .endif
+.endif
+.ifndef  Pr4l
+.ifdef PR4L
+         .equiv  Pr4l, PR4L
+  .endif
+.endif
+.ifndef  Pr5h
+.ifdef PR5H
+         .equiv  Pr5h, PR5H
+  .endif
+.endif
+.ifndef  Pr5l
+.ifdef PR5L
+         .equiv  Pr5l, PR5L
+  .endif
+.endif
+.ifndef  Progop0
+.ifdef PROGOP0
+         .equiv  Progop0, PROGOP0
+  .endif
+.endif
+.ifndef  Progop1
+.ifdef PROGOP1
+         .equiv  Progop1, PROGOP1
+  .endif
+.endif
+.ifndef  Progop2
+.ifdef PROGOP2
+         .equiv  Progop2, PROGOP2
+  .endif
+.endif
+.ifndef  Progop3
+.ifdef PROGOP3
+         .equiv  Progop3, PROGOP3
+  .endif
+.endif
+.ifndef  Progop4
+.ifdef PROGOP4
+         .equiv  Progop4, PROGOP4
+  .endif
+.endif
+.ifndef  Progop5
+.ifdef PROGOP5
+         .equiv  Progop5, PROGOP5
+  .endif
+.endif
+.ifndef  Progop6
+.ifdef PROGOP6
+         .equiv  Progop6, PROGOP6
+  .endif
+.endif
+.ifndef  Prseg0
+.ifdef PRSEG0
+         .equiv  Prseg0, PRSEG0
+  .endif
+.endif
+.ifndef  Prseg1
+.ifdef PRSEG1
+         .equiv  Prseg1, PRSEG1
+  .endif
+.endif
+.ifndef  Prseg2
+.ifdef PRSEG2
+         .equiv  Prseg2, PRSEG2
+  .endif
+.endif
+.ifndef  Psv
+.ifdef PSV
+         .equiv  Psv, PSV
+  .endif
+.endif
+.ifndef  Psvpagh
+.ifdef PSVPAGH
+         .equiv  Psvpagh, PSVPAGH
+  .endif
+.endif
+.ifndef  Psvpagl
+.ifdef PSVPAGL
+         .equiv  Psvpagl, PSVPAGL
+  .endif
+.endif
+.ifndef  Ptckps0
+.ifdef PTCKPS0
+         .equiv  Ptckps0, PTCKPS0
+  .endif
+.endif
+.ifndef  Ptckps1
+.ifdef PTCKPS1
+         .equiv  Ptckps1, PTCKPS1
+  .endif
+.endif
+.ifndef  Ptconh
+.ifdef PTCONH
+         .equiv  Ptconh, PTCONH
+  .endif
+.endif
+.ifndef  Ptconl
+.ifdef PTCONL
+         .equiv  Ptconl, PTCONL
+  .endif
+.endif
+.ifndef  Ptdir
+.ifdef PTDIR
+         .equiv  Ptdir, PTDIR
+  .endif
+.endif
+.ifndef  Pten
+.ifdef PTEN
+         .equiv  Pten, PTEN
+  .endif
+.endif
+.ifndef  Ptmod0
+.ifdef PTMOD0
+         .equiv  Ptmod0, PTMOD0
+  .endif
+.endif
+.ifndef  Ptmod1
+.ifdef PTMOD1
+         .equiv  Ptmod1, PTMOD1
+  .endif
+.endif
+.ifndef  Ptmrh
+.ifdef PTMRH
+         .equiv  Ptmrh, PTMRH
+  .endif
+.endif
+.ifndef  Ptmrl
+.ifdef PTMRL
+         .equiv  Ptmrl, PTMRL
+  .endif
+.endif
+.ifndef  Ptops0
+.ifdef PTOPS0
+         .equiv  Ptops0, PTOPS0
+  .endif
+.endif
+.ifndef  Ptops1
+.ifdef PTOPS1
+         .equiv  Ptops1, PTOPS1
+  .endif
+.endif
+.ifndef  Ptops2
+.ifdef PTOPS2
+         .equiv  Ptops2, PTOPS2
+  .endif
+.endif
+.ifndef  Ptops3
+.ifdef PTOPS3
+         .equiv  Ptops3, PTOPS3
+  .endif
+.endif
+.ifndef  Ptperh
+.ifdef PTPERH
+         .equiv  Ptperh, PTPERH
+  .endif
+.endif
+.ifndef  Ptperl
+.ifdef PTPERL
+         .equiv  Ptperl, PTPERL
+  .endif
+.endif
+.ifndef  Ptsidl
+.ifdef PTSIDL
+         .equiv  Ptsidl, PTSIDL
+  .endif
+.endif
+.ifndef  Pwmcon1h
+.ifdef PWMCON1H
+         .equiv  Pwmcon1h, PWMCON1H
+  .endif
+.endif
+.ifndef  Pwmcon1l
+.ifdef PWMCON1L
+         .equiv  Pwmcon1l, PWMCON1L
+  .endif
+.endif
+.ifndef  Pwmcon2h
+.ifdef PWMCON2H
+         .equiv  Pwmcon2h, PWMCON2H
+  .endif
+.endif
+.ifndef  Pwmcon2l
+.ifdef PWMCON2L
+         .equiv  Pwmcon2l, PWMCON2L
+  .endif
+.endif
+.ifndef  Pwmie
+.ifdef PWMIE
+         .equiv  Pwmie, PWMIE
+  .endif
+.endif
+.ifndef  Pwmif
+.ifdef PWMIF
+         .equiv  Pwmif, PWMIF
+  .endif
+.endif
+.ifndef  Pwmip0
+.ifdef PWMIP0
+         .equiv  Pwmip0, PWMIP0
+  .endif
+.endif
+.ifndef  Pwmip1
+.ifdef PWMIP1
+         .equiv  Pwmip1, PWMIP1
+  .endif
+.endif
+.ifndef  Pwmip2
+.ifdef PWMIP2
+         .equiv  Pwmip2, PWMIP2
+  .endif
+.endif
+.ifndef  Pwmmd
+.ifdef PWMMD
+         .equiv  Pwmmd, PWMMD
+  .endif
+.endif
+.ifndef  Pwmxh_act_hi
+.ifdef PWMxH_ACT_HI
+         .equiv  Pwmxh_act_hi, PWMxH_ACT_HI
+  .endif
+.endif
+.ifndef  Pwmxh_act_lo
+.ifdef PWMxH_ACT_LO
+         .equiv  Pwmxh_act_lo, PWMxH_ACT_LO
+  .endif
+.endif
+.ifndef  Pwmxl_act_hi
+.ifdef PWMxL_ACT_HI
+         .equiv  Pwmxl_act_hi, PWMxL_ACT_HI
+  .endif
+.endif
+.ifndef  Pwmxl_act_lo
+.ifdef PWMxL_ACT_LO
+         .equiv  Pwmxl_act_lo, PWMxL_ACT_LO
+  .endif
+.endif
+.ifndef  Pwrt_16
+.ifdef PWRT_16
+         .equiv  Pwrt_16, PWRT_16
+  .endif
+.endif
+.ifndef  Pwrt_4
+.ifdef PWRT_4
+         .equiv  Pwrt_4, PWRT_4
+  .endif
+.endif
+.ifndef  Pwrt_64
+.ifdef PWRT_64
+         .equiv  Pwrt_64, PWRT_64
+  .endif
+.endif
+.ifndef  Pwrt_off
+.ifdef PWRT_OFF
+         .equiv  Pwrt_off, PWRT_OFF
+  .endif
+.endif
+.ifndef  Qeck0
+.ifdef QECK0
+         .equiv  Qeck0, QECK0
+  .endif
+.endif
+.ifndef  Qeck1
+.ifdef QECK1
+         .equiv  Qeck1, QECK1
+  .endif
+.endif
+.ifndef  Qeck2
+.ifdef QECK2
+         .equiv  Qeck2, QECK2
+  .endif
+.endif
+.ifndef  Qeiconh
+.ifdef QEICONH
+         .equiv  Qeiconh, QEICONH
+  .endif
+.endif
+.ifndef  Qeiconl
+.ifdef QEICONL
+         .equiv  Qeiconl, QEICONL
+  .endif
+.endif
+.ifndef  Qeiie
+.ifdef QEIIE
+         .equiv  Qeiie, QEIIE
+  .endif
+.endif
+.ifndef  Qeiif
+.ifdef QEIIF
+         .equiv  Qeiif, QEIIF
+  .endif
+.endif
+.ifndef  Qeiip0
+.ifdef QEIIP0
+         .equiv  Qeiip0, QEIIP0
+  .endif
+.endif
+.ifndef  Qeiip1
+.ifdef QEIIP1
+         .equiv  Qeiip1, QEIIP1
+  .endif
+.endif
+.ifndef  Qeiip2
+.ifdef QEIIP2
+         .equiv  Qeiip2, QEIIP2
+  .endif
+.endif
+.ifndef  Qeim0
+.ifdef QEIM0
+         .equiv  Qeim0, QEIM0
+  .endif
+.endif
+.ifndef  Qeim1
+.ifdef QEIM1
+         .equiv  Qeim1, QEIM1
+  .endif
+.endif
+.ifndef  Qeim2
+.ifdef QEIM2
+         .equiv  Qeim2, QEIM2
+  .endif
+.endif
+.ifndef  Qeimd
+.ifdef QEIMD
+         .equiv  Qeimd, QEIMD
+  .endif
+.endif
+.ifndef  Qeisidl
+.ifdef QEISIDL
+         .equiv  Qeisidl, QEISIDL
+  .endif
+.endif
+.ifndef  Qeout
+.ifdef QEOUT
+         .equiv  Qeout, QEOUT
+  .endif
+.endif
+.ifndef  Ra
+.ifdef RA
+         .equiv  Ra, RA
+  .endif
+.endif
+.ifndef  Rbf
+.ifdef RBF
+         .equiv  Rbf, RBF
+  .endif
+.endif
+.ifndef  Rcen
+.ifdef RCEN
+         .equiv  Rcen, RCEN
+  .endif
+.endif
+.ifndef  Rconh
+.ifdef RCONH
+         .equiv  Rconh, RCONH
+  .endif
+.endif
+.ifndef  Rconl
+.ifdef RCONL
+         .equiv  Rconl, RCONL
+  .endif
+.endif
+.ifndef  Rcounth
+.ifdef RCOUNTH
+         .equiv  Rcounth, RCOUNTH
+  .endif
+.endif
+.ifndef  Rcountl
+.ifdef RCOUNTL
+         .equiv  Rcountl, RCOUNTL
+  .endif
+.endif
+.ifndef  Reqop0
+.ifdef REQOP0
+         .equiv  Reqop0, REQOP0
+  .endif
+.endif
+.ifndef  Reqop1
+.ifdef REQOP1
+         .equiv  Reqop1, REQOP1
+  .endif
+.endif
+.ifndef  Reqop2
+.ifdef REQOP2
+         .equiv  Reqop2, REQOP2
+  .endif
+.endif
+.ifndef  Ridle
+.ifdef RIDLE
+         .equiv  Ridle, RIDLE
+  .endif
+.endif
+.ifndef  Rnd
+.ifdef RND
+         .equiv  Rnd, RND
+  .endif
+.endif
+.ifndef  Rsen
+.ifdef RSEN
+         .equiv  Rsen, RSEN
+  .endif
+.endif
+.ifndef  Rst_iopin
+.ifdef RST_IOPIN
+         .equiv  Rst_iopin, RST_IOPIN
+  .endif
+.endif
+.ifndef  Rst_pwmpin
+.ifdef RST_PWMPIN
+         .equiv  Rst_pwmpin, RST_PWMPIN
+  .endif
+.endif
+.ifndef  Rx0ie
+.ifdef RX0IE
+         .equiv  Rx0ie, RX0IE
+  .endif
+.endif
+.ifndef  Rx0if
+.ifdef RX0IF
+         .equiv  Rx0if, RX0IF
+  .endif
+.endif
+.ifndef  Rx0ovr
+.ifdef RX0OVR
+         .equiv  Rx0ovr, RX0OVR
+  .endif
+.endif
+.ifndef  Rx1ie
+.ifdef RX1IE
+         .equiv  Rx1ie, RX1IE
+  .endif
+.endif
+.ifndef  Rx1if
+.ifdef RX1IF
+         .equiv  Rx1if, RX1IF
+  .endif
+.endif
+.ifndef  Rx1ovr
+.ifdef RX1OVR
+         .equiv  Rx1ovr, RX1OVR
+  .endif
+.endif
+.ifndef  Rxep
+.ifdef RXEP
+         .equiv  Rxep, RXEP
+  .endif
+.endif
+.ifndef  Rxful
+.ifdef RXFUL
+         .equiv  Rxful, RXFUL
+  .endif
+.endif
+.ifndef  Rxide
+.ifdef RXIDE
+         .equiv  Rxide, RXIDE
+  .endif
+.endif
+.ifndef  Rxm0
+.ifdef RXM0
+         .equiv  Rxm0, RXM0
+  .endif
+.endif
+.ifndef  Rxm1
+.ifdef RXM1
+         .equiv  Rxm1, RXM1
+  .endif
+.endif
+.ifndef  Rxrtr
+.ifdef RXRTR
+         .equiv  Rxrtr, RXRTR
+  .endif
+.endif
+.ifndef  Rxrtrro
+.ifdef RXRTRRO
+         .equiv  Rxrtrro, RXRTRRO
+  .endif
+.endif
+.ifndef  Rxwar
+.ifdef RXWAR
+         .equiv  Rxwar, RXWAR
+  .endif
+.endif
+.ifndef  R_w
+.ifdef R_W
+         .equiv  R_w, R_W
+  .endif
+.endif
+.ifndef  Sa
+.ifdef SA
+         .equiv  Sa, SA
+  .endif
+.endif
+.ifndef  Sab
+.ifdef SAB
+         .equiv  Sab, SAB
+  .endif
+.endif
+.ifndef  Sam
+.ifdef SAM
+         .equiv  Sam, SAM
+  .endif
+.endif
+.ifndef  Samc0
+.ifdef SAMC0
+         .equiv  Samc0, SAMC0
+  .endif
+.endif
+.ifndef  Samc1
+.ifdef SAMC1
+         .equiv  Samc1, SAMC1
+  .endif
+.endif
+.ifndef  Samc2
+.ifdef SAMC2
+         .equiv  Samc2, SAMC2
+  .endif
+.endif
+.ifndef  Samc3
+.ifdef SAMC3
+         .equiv  Samc3, SAMC3
+  .endif
+.endif
+.ifndef  Samc4
+.ifdef SAMC4
+         .equiv  Samc4, SAMC4
+  .endif
+.endif
+.ifndef  Samp
+.ifdef SAMP
+         .equiv  Samp, SAMP
+  .endif
+.endif
+.ifndef  Sata
+.ifdef SATA
+         .equiv  Sata, SATA
+  .endif
+.endif
+.ifndef  Satb
+.ifdef SATB
+         .equiv  Satb, SATB
+  .endif
+.endif
+.ifndef  Satdw
+.ifdef SATDW
+         .equiv  Satdw, SATDW
+  .endif
+.endif
+.ifndef  Sb
+.ifdef SB
+         .equiv  Sb, SB
+  .endif
+.endif
+.ifndef  Sclrel
+.ifdef SCLREL
+         .equiv  Sclrel, SCLREL
+  .endif
+.endif
+.ifndef  Secureflt
+.ifdef SECUREFLT
+         .equiv  Secureflt, SECUREFLT
+  .endif
+.endif
+.ifndef  Seg1ph0
+.ifdef SEG1PH0
+         .equiv  Seg1ph0, SEG1PH0
+  .endif
+.endif
+.ifndef  Seg1ph1
+.ifdef SEG1PH1
+         .equiv  Seg1ph1, SEG1PH1
+  .endif
+.endif
+.ifndef  Seg1ph2
+.ifdef SEG1PH2
+         .equiv  Seg1ph2, SEG1PH2
+  .endif
+.endif
+.ifndef  Seg2ph0
+.ifdef SEG2PH0
+         .equiv  Seg2ph0, SEG2PH0
+  .endif
+.endif
+.ifndef  Seg2ph1
+.ifdef SEG2PH1
+         .equiv  Seg2ph1, SEG2PH1
+  .endif
+.endif
+.ifndef  Seg2ph2
+.ifdef SEG2PH2
+         .equiv  Seg2ph2, SEG2PH2
+  .endif
+.endif
+.ifndef  Seg2phts
+.ifdef SEG2PHTS
+         .equiv  Seg2phts, SEG2PHTS
+  .endif
+.endif
+.ifndef  Sen
+.ifdef SEN
+         .equiv  Sen, SEN
+  .endif
+.endif
+.ifndef  Sevops0
+.ifdef SEVOPS0
+         .equiv  Sevops0, SEVOPS0
+  .endif
+.endif
+.ifndef  Sevops1
+.ifdef SEVOPS1
+         .equiv  Sevops1, SEVOPS1
+  .endif
+.endif
+.ifndef  Sevops2
+.ifdef SEVOPS2
+         .equiv  Sevops2, SEVOPS2
+  .endif
+.endif
+.ifndef  Sevops3
+.ifdef SEVOPS3
+         .equiv  Sevops3, SEVOPS3
+  .endif
+.endif
+.ifndef  Sevtcmph
+.ifdef SEVTCMPH
+         .equiv  Sevtcmph, SEVTCMPH
+  .endif
+.endif
+.ifndef  Sevtcmpl
+.ifdef SEVTCMPL
+         .equiv  Sevtcmpl, SEVTCMPL
+  .endif
+.endif
+.ifndef  Sevtdir
+.ifdef SEVTDIR
+         .equiv  Sevtdir, SEVTDIR
+  .endif
+.endif
+.ifndef  Si2cie
+.ifdef SI2CIE
+         .equiv  Si2cie, SI2CIE
+  .endif
+.endif
+.ifndef  Si2cif
+.ifdef SI2CIF
+         .equiv  Si2cif, SI2CIF
+  .endif
+.endif
+.ifndef  Si2cip0
+.ifdef SI2CIP0
+         .equiv  Si2cip0, SI2CIP0
+  .endif
+.endif
+.ifndef  Si2cip1
+.ifdef SI2CIP1
+         .equiv  Si2cip1, SI2CIP1
+  .endif
+.endif
+.ifndef  Si2cip2
+.ifdef SI2CIP2
+         .equiv  Si2cip2, SI2CIP2
+  .endif
+.endif
+.ifndef  Si2c1ie
+.ifdef SI2C1IE
+         .equiv  Si2c1ie, SI2C1IE
+  .endif
+.endif
+.ifndef  Si2c1if
+.ifdef SI2C1IF
+         .equiv  Si2c1if, SI2C1IF
+  .endif
+.endif
+.ifndef  Si2c2ie
+.ifdef SI2C2IE
+         .equiv  Si2c2ie, SI2C2IE
+  .endif
+.endif
+.ifndef  Si2c2if
+.ifdef SI2C2IF
+         .equiv  Si2c2if, SI2C2IF
+  .endif
+.endif
+.ifndef  Sid0
+.ifdef SID0
+         .equiv  Sid0, SID0
+  .endif
+.endif
+.ifndef  Sid1
+.ifdef SID1
+         .equiv  Sid1, SID1
+  .endif
+.endif
+.ifndef  Sid10
+.ifdef SID10
+         .equiv  Sid10, SID10
+  .endif
+.endif
+.ifndef  Sid2
+.ifdef SID2
+         .equiv  Sid2, SID2
+  .endif
+.endif
+.ifndef  Sid3
+.ifdef SID3
+         .equiv  Sid3, SID3
+  .endif
+.endif
+.ifndef  Sid4
+.ifdef SID4
+         .equiv  Sid4, SID4
+  .endif
+.endif
+.ifndef  Sid5
+.ifdef SID5
+         .equiv  Sid5, SID5
+  .endif
+.endif
+.ifndef  Sid6
+.ifdef SID6
+         .equiv  Sid6, SID6
+  .endif
+.endif
+.ifndef  Sid7
+.ifdef SID7
+         .equiv  Sid7, SID7
+  .endif
+.endif
+.ifndef  Sid8
+.ifdef SID8
+         .equiv  Sid8, SID8
+  .endif
+.endif
+.ifndef  Sid9
+.ifdef SID9
+         .equiv  Sid9, SID9
+  .endif
+.endif
+.ifndef  Simsam
+.ifdef SIMSAM
+         .equiv  Simsam, SIMSAM
+  .endif
+.endif
+.ifndef  Sjw0
+.ifdef SJW0
+         .equiv  Sjw0, SJW0
+  .endif
+.endif
+.ifndef  Sjw1
+.ifdef SJW1
+         .equiv  Sjw1, SJW1
+  .endif
+.endif
+.ifndef  Sleep
+.ifdef SLEEP
+         .equiv  Sleep, SLEEP
+  .endif
+.endif
+.ifndef  Sleep_mode
+.ifdef SLEEP_MODE
+         .equiv  Sleep_mode, SLEEP_MODE
+  .endif
+.endif
+.ifndef  Smen
+.ifdef SMEN
+         .equiv  Smen, SMEN
+  .endif
+.endif
+.ifndef  Smp
+.ifdef SMP
+         .equiv  Smp, SMP
+  .endif
+.endif
+.ifndef  Smpi0
+.ifdef SMPI0
+         .equiv  Smpi0, SMPI0
+  .endif
+.endif
+.ifndef  Smpi1
+.ifdef SMPI1
+         .equiv  Smpi1, SMPI1
+  .endif
+.endif
+.ifndef  Smpi2
+.ifdef SMPI2
+         .equiv  Smpi2, SMPI2
+  .endif
+.endif
+.ifndef  Smpi3
+.ifdef SMPI3
+         .equiv  Smpi3, SMPI3
+  .endif
+.endif
+.ifndef  Spi1bufh
+.ifdef SPI1BUFH
+         .equiv  Spi1bufh, SPI1BUFH
+  .endif
+.endif
+.ifndef  Spi1bufl
+.ifdef SPI1BUFL
+         .equiv  Spi1bufl, SPI1BUFL
+  .endif
+.endif
+.ifndef  Spi1conh
+.ifdef SPI1CONH
+         .equiv  Spi1conh, SPI1CONH
+  .endif
+.endif
+.ifndef  Spi1conl
+.ifdef SPI1CONL
+         .equiv  Spi1conl, SPI1CONL
+  .endif
+.endif
+.ifndef  Spi1ie
+.ifdef SPI1IE
+         .equiv  Spi1ie, SPI1IE
+  .endif
+.endif
+.ifndef  Spi1if
+.ifdef SPI1IF
+         .equiv  Spi1if, SPI1IF
+  .endif
+.endif
+.ifndef  Spi1ip0
+.ifdef SPI1IP0
+         .equiv  Spi1ip0, SPI1IP0
+  .endif
+.endif
+.ifndef  Spi1ip1
+.ifdef SPI1IP1
+         .equiv  Spi1ip1, SPI1IP1
+  .endif
+.endif
+.ifndef  Spi1ip2
+.ifdef SPI1IP2
+         .equiv  Spi1ip2, SPI1IP2
+  .endif
+.endif
+.ifndef  Spi1md
+.ifdef SPI1MD
+         .equiv  Spi1md, SPI1MD
+  .endif
+.endif
+.ifndef  Spi1stath
+.ifdef SPI1STATH
+         .equiv  Spi1stath, SPI1STATH
+  .endif
+.endif
+.ifndef  Spi1statl
+.ifdef SPI1STATL
+         .equiv  Spi1statl, SPI1STATL
+  .endif
+.endif
+.ifndef  Spi2bufh
+.ifdef SPI2BUFH
+         .equiv  Spi2bufh, SPI2BUFH
+  .endif
+.endif
+.ifndef  Spi2bufl
+.ifdef SPI2BUFL
+         .equiv  Spi2bufl, SPI2BUFL
+  .endif
+.endif
+.ifndef  Spi2conh
+.ifdef SPI2CONH
+         .equiv  Spi2conh, SPI2CONH
+  .endif
+.endif
+.ifndef  Spi2conl
+.ifdef SPI2CONL
+         .equiv  Spi2conl, SPI2CONL
+  .endif
+.endif
+.ifndef  Spi2ie
+.ifdef SPI2IE
+         .equiv  Spi2ie, SPI2IE
+  .endif
+.endif
+.ifndef  Spi2if
+.ifdef SPI2IF
+         .equiv  Spi2if, SPI2IF
+  .endif
+.endif
+.ifndef  Spi2ip0
+.ifdef SPI2IP0
+         .equiv  Spi2ip0, SPI2IP0
+  .endif
+.endif
+.ifndef  Spi2ip1
+.ifdef SPI2IP1
+         .equiv  Spi2ip1, SPI2IP1
+  .endif
+.endif
+.ifndef  Spi2ip2
+.ifdef SPI2IP2
+         .equiv  Spi2ip2, SPI2IP2
+  .endif
+.endif
+.ifndef  Spi2md
+.ifdef SPI2MD
+         .equiv  Spi2md, SPI2MD
+  .endif
+.endif
+.ifndef  Spi2stath
+.ifdef SPI2STATH
+         .equiv  Spi2stath, SPI2STATH
+  .endif
+.endif
+.ifndef  Spi2statl
+.ifdef SPI2STATL
+         .equiv  Spi2statl, SPI2STATL
+  .endif
+.endif
+.ifndef  Spien
+.ifdef SPIEN
+         .equiv  Spien, SPIEN
+  .endif
+.endif
+.ifndef  Spifsd
+.ifdef SPIFSD
+         .equiv  Spifsd, SPIFSD
+  .endif
+.endif
+.ifndef  Spirbf
+.ifdef SPIRBF
+         .equiv  Spirbf, SPIRBF
+  .endif
+.endif
+.ifndef  Spirov
+.ifdef SPIROV
+         .equiv  Spirov, SPIROV
+  .endif
+.endif
+.ifndef  Spisidl
+.ifdef SPISIDL
+         .equiv  Spisidl, SPISIDL
+  .endif
+.endif
+.ifndef  Spitbf
+.ifdef SPITBF
+         .equiv  Spitbf, SPITBF
+  .endif
+.endif
+.ifndef  Splimh
+.ifdef SPLIMH
+         .equiv  Splimh, SPLIMH
+  .endif
+.endif
+.ifndef  Spliml
+.ifdef SPLIML
+         .equiv  Spliml, SPLIML
+  .endif
+.endif
+.ifndef  Spre0
+.ifdef SPRE0
+         .equiv  Spre0, SPRE0
+  .endif
+.endif
+.ifndef  Spre1
+.ifdef SPRE1
+         .equiv  Spre1, SPRE1
+  .endif
+.endif
+.ifndef  Spre2
+.ifdef SPRE2
+         .equiv  Spre2, SPRE2
+  .endif
+.endif
+.ifndef  Srh
+.ifdef SRH
+         .equiv  Srh, SRH
+  .endif
+.endif
+.ifndef  Srl
+.ifdef SRL
+         .equiv  Srl, SRL
+  .endif
+.endif
+.ifndef  Srr
+.ifdef SRR
+         .equiv  Srr, SRR
+  .endif
+.endif
+.ifndef  Ssen
+.ifdef SSEN
+         .equiv  Ssen, SSEN
+  .endif
+.endif
+.ifndef  Ssrc0
+.ifdef SSRC0
+         .equiv  Ssrc0, SSRC0
+  .endif
+.endif
+.ifndef  Ssrc1
+.ifdef SSRC1
+         .equiv  Ssrc1, SSRC1
+  .endif
+.endif
+.ifndef  Ssrc2
+.ifdef SSRC2
+         .equiv  Ssrc2, SSRC2
+  .endif
+.endif
+.ifndef  Stkerr
+.ifdef STKERR
+         .equiv  Stkerr, STKERR
+  .endif
+.endif
+.ifndef  Stren
+.ifdef STREN
+         .equiv  Stren, STREN
+  .endif
+.endif
+.ifndef  Stsel
+.ifdef STSEL
+         .equiv  Stsel, STSEL
+  .endif
+.endif
+.ifndef  Swdten
+.ifdef SWDTEN
+         .equiv  Swdten, SWDTEN
+  .endif
+.endif
+.ifndef  Swpab
+.ifdef SWPAB
+         .equiv  Swpab, SWPAB
+  .endif
+.endif
+.ifndef  Swr
+.ifdef SWR
+         .equiv  Swr, SWR
+  .endif
+.endif
+.ifndef  T1conh
+.ifdef T1CONH
+         .equiv  T1conh, T1CONH
+  .endif
+.endif
+.ifndef  T1conl
+.ifdef T1CONL
+         .equiv  T1conl, T1CONL
+  .endif
+.endif
+.ifndef  T1ie
+.ifdef T1IE
+         .equiv  T1ie, T1IE
+  .endif
+.endif
+.ifndef  T1if
+.ifdef T1IF
+         .equiv  T1if, T1IF
+  .endif
+.endif
+.ifndef  T1ip0
+.ifdef T1IP0
+         .equiv  T1ip0, T1IP0
+  .endif
+.endif
+.ifndef  T1ip1
+.ifdef T1IP1
+         .equiv  T1ip1, T1IP1
+  .endif
+.endif
+.ifndef  T1ip2
+.ifdef T1IP2
+         .equiv  T1ip2, T1IP2
+  .endif
+.endif
+.ifndef  T1md
+.ifdef T1MD
+         .equiv  T1md, T1MD
+  .endif
+.endif
+.ifndef  T2conh
+.ifdef T2CONH
+         .equiv  T2conh, T2CONH
+  .endif
+.endif
+.ifndef  T2conl
+.ifdef T2CONL
+         .equiv  T2conl, T2CONL
+  .endif
+.endif
+.ifndef  T2ie
+.ifdef T2IE
+         .equiv  T2ie, T2IE
+  .endif
+.endif
+.ifndef  T2if
+.ifdef T2IF
+         .equiv  T2if, T2IF
+  .endif
+.endif
+.ifndef  T2ip0
+.ifdef T2IP0
+         .equiv  T2ip0, T2IP0
+  .endif
+.endif
+.ifndef  T2ip1
+.ifdef T2IP1
+         .equiv  T2ip1, T2IP1
+  .endif
+.endif
+.ifndef  T2ip2
+.ifdef T2IP2
+         .equiv  T2ip2, T2IP2
+  .endif
+.endif
+.ifndef  T2md
+.ifdef T2MD
+         .equiv  T2md, T2MD
+  .endif
+.endif
+.ifndef  T3conh
+.ifdef T3CONH
+         .equiv  T3conh, T3CONH
+  .endif
+.endif
+.ifndef  T3conl
+.ifdef T3CONL
+         .equiv  T3conl, T3CONL
+  .endif
+.endif
+.ifndef  T3ie
+.ifdef T3IE
+         .equiv  T3ie, T3IE
+  .endif
+.endif
+.ifndef  T3if
+.ifdef T3IF
+         .equiv  T3if, T3IF
+  .endif
+.endif
+.ifndef  T3ip0
+.ifdef T3IP0
+         .equiv  T3ip0, T3IP0
+  .endif
+.endif
+.ifndef  T3ip1
+.ifdef T3IP1
+         .equiv  T3ip1, T3IP1
+  .endif
+.endif
+.ifndef  T3ip2
+.ifdef T3IP2
+         .equiv  T3ip2, T3IP2
+  .endif
+.endif
+.ifndef  T3md
+.ifdef T3MD
+         .equiv  T3md, T3MD
+  .endif
+.endif
+.ifndef  T4conh
+.ifdef T4CONH
+         .equiv  T4conh, T4CONH
+  .endif
+.endif
+.ifndef  T4conl
+.ifdef T4CONL
+         .equiv  T4conl, T4CONL
+  .endif
+.endif
+.ifndef  T4ie
+.ifdef T4IE
+         .equiv  T4ie, T4IE
+  .endif
+.endif
+.ifndef  T4if
+.ifdef T4IF
+         .equiv  T4if, T4IF
+  .endif
+.endif
+.ifndef  T4ip0
+.ifdef T4IP0
+         .equiv  T4ip0, T4IP0
+  .endif
+.endif
+.ifndef  T4ip1
+.ifdef T4IP1
+         .equiv  T4ip1, T4IP1
+  .endif
+.endif
+.ifndef  T4ip2
+.ifdef T4IP2
+         .equiv  T4ip2, T4IP2
+  .endif
+.endif
+.ifndef  T4md
+.ifdef T4MD
+         .equiv  T4md, T4MD
+  .endif
+.endif
+.ifndef  T5conh
+.ifdef T5CONH
+         .equiv  T5conh, T5CONH
+  .endif
+.endif
+.ifndef  T5conl
+.ifdef T5CONL
+         .equiv  T5conl, T5CONL
+  .endif
+.endif
+.ifndef  T5ie
+.ifdef T5IE
+         .equiv  T5ie, T5IE
+  .endif
+.endif
+.ifndef  T5if
+.ifdef T5IF
+         .equiv  T5if, T5IF
+  .endif
+.endif
+.ifndef  T5ip0
+.ifdef T5IP0
+         .equiv  T5ip0, T5IP0
+  .endif
+.endif
+.ifndef  T5ip1
+.ifdef T5IP1
+         .equiv  T5ip1, T5IP1
+  .endif
+.endif
+.ifndef  T5ip2
+.ifdef T5IP2
+         .equiv  T5ip2, T5IP2
+  .endif
+.endif
+.ifndef  T5md
+.ifdef T5MD
+         .equiv  T5md, T5MD
+  .endif
+.endif
+.ifndef  Tbf
+.ifdef TBF
+         .equiv  Tbf, TBF
+  .endif
+.endif
+.ifndef  Tblpagh
+.ifdef TBLPAGH
+         .equiv  Tblpagh, TBLPAGH
+  .endif
+.endif
+.ifndef  Tblpagl
+.ifdef TBLPAGL
+         .equiv  Tblpagl, TBLPAGL
+  .endif
+.endif
+.ifndef  Tckps0
+.ifdef TCKPS0
+         .equiv  Tckps0, TCKPS0
+  .endif
+.endif
+.ifndef  Tckps1
+.ifdef TCKPS1
+         .equiv  Tckps1, TCKPS1
+  .endif
+.endif
+.ifndef  Tcs
+.ifdef TCS
+         .equiv  Tcs, TCS
+  .endif
+.endif
+.ifndef  Tgate
+.ifdef TGATE
+         .equiv  Tgate, TGATE
+  .endif
+.endif
+.ifndef  Tmr1h
+.ifdef TMR1H
+         .equiv  Tmr1h, TMR1H
+  .endif
+.endif
+.ifndef  Tmr1l
+.ifdef TMR1L
+         .equiv  Tmr1l, TMR1L
+  .endif
+.endif
+.ifndef  Tmr2h
+.ifdef TMR2H
+         .equiv  Tmr2h, TMR2H
+  .endif
+.endif
+.ifndef  Tmr2l
+.ifdef TMR2L
+         .equiv  Tmr2l, TMR2L
+  .endif
+.endif
+.ifndef  Tmr3h
+.ifdef TMR3H
+         .equiv  Tmr3h, TMR3H
+  .endif
+.endif
+.ifndef  Tmr3hldh
+.ifdef TMR3HLDH
+         .equiv  Tmr3hldh, TMR3HLDH
+  .endif
+.endif
+.ifndef  Tmr3hldl
+.ifdef TMR3HLDL
+         .equiv  Tmr3hldl, TMR3HLDL
+  .endif
+.endif
+.ifndef  Tmr3l
+.ifdef TMR3L
+         .equiv  Tmr3l, TMR3L
+  .endif
+.endif
+.ifndef  Tmr4h
+.ifdef TMR4H
+         .equiv  Tmr4h, TMR4H
+  .endif
+.endif
+.ifndef  Tmr4l
+.ifdef TMR4L
+         .equiv  Tmr4l, TMR4L
+  .endif
+.endif
+.ifndef  Tmr5h
+.ifdef TMR5H
+         .equiv  Tmr5h, TMR5H
+  .endif
+.endif
+.ifndef  Tmr5hldh
+.ifdef TMR5HLDH
+         .equiv  Tmr5hldh, TMR5HLDH
+  .endif
+.endif
+.ifndef  Tmr5hldl
+.ifdef TMR5HLDL
+         .equiv  Tmr5hldl, TMR5HLDL
+  .endif
+.endif
+.ifndef  Tmr5l
+.ifdef TMR5L
+         .equiv  Tmr5l, TMR5L
+  .endif
+.endif
+.ifndef  Ton
+.ifdef TON
+         .equiv  Ton, TON
+  .endif
+.endif
+.ifndef  Tqckps0
+.ifdef TQCKPS0
+         .equiv  Tqckps0, TQCKPS0
+  .endif
+.endif
+.ifndef  Tqckps1
+.ifdef TQCKPS1
+         .equiv  Tqckps1, TQCKPS1
+  .endif
+.endif
+.ifndef  Tqcs
+.ifdef TQCS
+         .equiv  Tqcs, TQCS
+  .endif
+.endif
+.ifndef  Tqgate
+.ifdef TQGATE
+         .equiv  Tqgate, TQGATE
+  .endif
+.endif
+.ifndef  Trapr
+.ifdef TRAPR
+         .equiv  Trapr, TRAPR
+  .endif
+.endif
+.ifndef  Trisah
+.ifdef TRISAH
+         .equiv  Trisah, TRISAH
+  .endif
+.endif
+.ifndef  Trisal
+.ifdef TRISAL
+         .equiv  Trisal, TRISAL
+  .endif
+.endif
+.ifndef  Trisbh
+.ifdef TRISBH
+         .equiv  Trisbh, TRISBH
+  .endif
+.endif
+.ifndef  Trisbl
+.ifdef TRISBL
+         .equiv  Trisbl, TRISBL
+  .endif
+.endif
+.ifndef  Trisch
+.ifdef TRISCH
+         .equiv  Trisch, TRISCH
+  .endif
+.endif
+.ifndef  Triscl
+.ifdef TRISCL
+         .equiv  Triscl, TRISCL
+  .endif
+.endif
+.ifndef  Trisdh
+.ifdef TRISDH
+         .equiv  Trisdh, TRISDH
+  .endif
+.endif
+.ifndef  Trisdl
+.ifdef TRISDL
+         .equiv  Trisdl, TRISDL
+  .endif
+.endif
+.ifndef  Triseh
+.ifdef TRISEH
+         .equiv  Triseh, TRISEH
+  .endif
+.endif
+.ifndef  Trisel
+.ifdef TRISEL
+         .equiv  Trisel, TRISEL
+  .endif
+.endif
+.ifndef  Trisfh
+.ifdef TRISFH
+         .equiv  Trisfh, TRISFH
+  .endif
+.endif
+.ifndef  Trisfl
+.ifdef TRISFL
+         .equiv  Trisfl, TRISFL
+  .endif
+.endif
+.ifndef  Trisgh
+.ifdef TRISGH
+         .equiv  Trisgh, TRISGH
+  .endif
+.endif
+.ifndef  Trisgl
+.ifdef TRISGL
+         .equiv  Trisgl, TRISGL
+  .endif
+.endif
+.ifndef  Trmt
+.ifdef TRMT
+         .equiv  Trmt, TRMT
+  .endif
+.endif
+.ifndef  Trstat
+.ifdef TRSTAT
+         .equiv  Trstat, TRSTAT
+  .endif
+.endif
+.ifndef  Tsidl
+.ifdef TSIDL
+         .equiv  Tsidl, TSIDL
+  .endif
+.endif
+.ifndef  Tsync
+.ifdef TSYNC
+         .equiv  Tsync, TSYNC
+  .endif
+.endif
+.ifndef  Twri
+.ifdef TWRI
+         .equiv  Twri, TWRI
+  .endif
+.endif
+.ifndef  Tx0ie
+.ifdef TX0IE
+         .equiv  Tx0ie, TX0IE
+  .endif
+.endif
+.ifndef  Tx0if
+.ifdef TX0IF
+         .equiv  Tx0if, TX0IF
+  .endif
+.endif
+.ifndef  Tx1ie
+.ifdef TX1IE
+         .equiv  Tx1ie, TX1IE
+  .endif
+.endif
+.ifndef  Tx1if
+.ifdef TX1IF
+         .equiv  Tx1if, TX1IF
+  .endif
+.endif
+.ifndef  Tx2ie
+.ifdef TX2IE
+         .equiv  Tx2ie, TX2IE
+  .endif
+.endif
+.ifndef  Tx2if
+.ifdef TX2IF
+         .equiv  Tx2if, TX2IF
+  .endif
+.endif
+.ifndef  Txabt
+.ifdef TXABT
+         .equiv  Txabt, TXABT
+  .endif
+.endif
+.ifndef  Txbo
+.ifdef TXBO
+         .equiv  Txbo, TXBO
+  .endif
+.endif
+.ifndef  Txep
+.ifdef TXEP
+         .equiv  Txep, TXEP
+  .endif
+.endif
+.ifndef  Txerr
+.ifdef TXERR
+         .equiv  Txerr, TXERR
+  .endif
+.endif
+.ifndef  Txide
+.ifdef TXIDE
+         .equiv  Txide, TXIDE
+  .endif
+.endif
+.ifndef  Txlarb
+.ifdef TXLARB
+         .equiv  Txlarb, TXLARB
+  .endif
+.endif
+.ifndef  Txpri0
+.ifdef TXPRI0
+         .equiv  Txpri0, TXPRI0
+  .endif
+.endif
+.ifndef  Txpri1
+.ifdef TXPRI1
+         .equiv  Txpri1, TXPRI1
+  .endif
+.endif
+.ifndef  Txreq
+.ifdef TXREQ
+         .equiv  Txreq, TXREQ
+  .endif
+.endif
+.ifndef  Txrtr
+.ifdef TXRTR
+         .equiv  Txrtr, TXRTR
+  .endif
+.endif
+.ifndef  Txwar
+.ifdef TXWAR
+         .equiv  Txwar, TXWAR
+  .endif
+.endif
+.ifndef  U1brgh
+.ifdef U1BRGH
+         .equiv  U1brgh, U1BRGH
+  .endif
+.endif
+.ifndef  U1brgl
+.ifdef U1BRGL
+         .equiv  U1brgl, U1BRGL
+  .endif
+.endif
+.ifndef  U1md
+.ifdef U1MD
+         .equiv  U1md, U1MD
+  .endif
+.endif
+.ifndef  U1modeh
+.ifdef U1MODEH
+         .equiv  U1modeh, U1MODEH
+  .endif
+.endif
+.ifndef  U1model
+.ifdef U1MODEL
+         .equiv  U1model, U1MODEL
+  .endif
+.endif
+.ifndef  U1rxie
+.ifdef U1RXIE
+         .equiv  U1rxie, U1RXIE
+  .endif
+.endif
+.ifndef  U1rxif
+.ifdef U1RXIF
+         .equiv  U1rxif, U1RXIF
+  .endif
+.endif
+.ifndef  U1rxip0
+.ifdef U1RXIP0
+         .equiv  U1rxip0, U1RXIP0
+  .endif
+.endif
+.ifndef  U1rxip1
+.ifdef U1RXIP1
+         .equiv  U1rxip1, U1RXIP1
+  .endif
+.endif
+.ifndef  U1rxip2
+.ifdef U1RXIP2
+         .equiv  U1rxip2, U1RXIP2
+  .endif
+.endif
+.ifndef  U1rxregh
+.ifdef U1RXREGH
+         .equiv  U1rxregh, U1RXREGH
+  .endif
+.endif
+.ifndef  U1rxregl
+.ifdef U1RXREGL
+         .equiv  U1rxregl, U1RXREGL
+  .endif
+.endif
+.ifndef  U1stah
+.ifdef U1STAH
+         .equiv  U1stah, U1STAH
+  .endif
+.endif
+.ifndef  U1stal
+.ifdef U1STAL
+         .equiv  U1stal, U1STAL
+  .endif
+.endif
+.ifndef  U1txie
+.ifdef U1TXIE
+         .equiv  U1txie, U1TXIE
+  .endif
+.endif
+.ifndef  U1txif
+.ifdef U1TXIF
+         .equiv  U1txif, U1TXIF
+  .endif
+.endif
+.ifndef  U1txip0
+.ifdef U1TXIP0
+         .equiv  U1txip0, U1TXIP0
+  .endif
+.endif
+.ifndef  U1txip1
+.ifdef U1TXIP1
+         .equiv  U1txip1, U1TXIP1
+  .endif
+.endif
+.ifndef  U1txip2
+.ifdef U1TXIP2
+         .equiv  U1txip2, U1TXIP2
+  .endif
+.endif
+.ifndef  U1txregh
+.ifdef U1TXREGH
+         .equiv  U1txregh, U1TXREGH
+  .endif
+.endif
+.ifndef  U1txregl
+.ifdef U1TXREGL
+         .equiv  U1txregl, U1TXREGL
+  .endif
+.endif
+.ifndef  U2brgh
+.ifdef U2BRGH
+         .equiv  U2brgh, U2BRGH
+  .endif
+.endif
+.ifndef  U2brgl
+.ifdef U2BRGL
+         .equiv  U2brgl, U2BRGL
+  .endif
+.endif
+.ifndef  U2md
+.ifdef U2MD
+         .equiv  U2md, U2MD
+  .endif
+.endif
+.ifndef  U2modeh
+.ifdef U2MODEH
+         .equiv  U2modeh, U2MODEH
+  .endif
+.endif
+.ifndef  U2model
+.ifdef U2MODEL
+         .equiv  U2model, U2MODEL
+  .endif
+.endif
+.ifndef  U2rxie
+.ifdef U2RXIE
+         .equiv  U2rxie, U2RXIE
+  .endif
+.endif
+.ifndef  U2rxif
+.ifdef U2RXIF
+         .equiv  U2rxif, U2RXIF
+  .endif
+.endif
+.ifndef  U2rxip0
+.ifdef U2RXIP0
+         .equiv  U2rxip0, U2RXIP0
+  .endif
+.endif
+.ifndef  U2rxip1
+.ifdef U2RXIP1
+         .equiv  U2rxip1, U2RXIP1
+  .endif
+.endif
+.ifndef  U2rxip2
+.ifdef U2RXIP2
+         .equiv  U2rxip2, U2RXIP2
+  .endif
+.endif
+.ifndef  U2rxregh
+.ifdef U2RXREGH
+         .equiv  U2rxregh, U2RXREGH
+  .endif
+.endif
+.ifndef  U2rxregl
+.ifdef U2RXREGL
+         .equiv  U2rxregl, U2RXREGL
+  .endif
+.endif
+.ifndef  U2stah
+.ifdef U2STAH
+         .equiv  U2stah, U2STAH
+  .endif
+.endif
+.ifndef  U2stal
+.ifdef U2STAL
+         .equiv  U2stal, U2STAL
+  .endif
+.endif
+.ifndef  U2txie
+.ifdef U2TXIE
+         .equiv  U2txie, U2TXIE
+  .endif
+.endif
+.ifndef  U2txif
+.ifdef U2TXIF
+         .equiv  U2txif, U2TXIF
+  .endif
+.endif
+.ifndef  U2txip0
+.ifdef U2TXIP0
+         .equiv  U2txip0, U2TXIP0
+  .endif
+.endif
+.ifndef  U2txip1
+.ifdef U2TXIP1
+         .equiv  U2txip1, U2TXIP1
+  .endif
+.endif
+.ifndef  U2txip2
+.ifdef U2TXIP2
+         .equiv  U2txip2, U2TXIP2
+  .endif
+.endif
+.ifndef  U2txregh
+.ifdef U2TXREGH
+         .equiv  U2txregh, U2TXREGH
+  .endif
+.endif
+.ifndef  U2txregl
+.ifdef U2TXREGL
+         .equiv  U2txregl, U2TXREGL
+  .endif
+.endif
+.ifndef  Uarten
+.ifdef UARTEN
+         .equiv  Uarten, UARTEN
+  .endif
+.endif
+.ifndef  Udis
+.ifdef UDIS
+         .equiv  Udis, UDIS
+  .endif
+.endif
+.ifndef  Updn
+.ifdef UPDN
+         .equiv  Updn, UPDN
+  .endif
+.endif
+.ifndef  Updn_src
+.ifdef UPDN_SRC
+         .equiv  Updn_src, UPDN_SRC
+  .endif
+.endif
+.ifndef  Urxda
+.ifdef URXDA
+         .equiv  Urxda, URXDA
+  .endif
+.endif
+.ifndef  Urxisel0
+.ifdef URXISEL0
+         .equiv  Urxisel0, URXISEL0
+  .endif
+.endif
+.ifndef  Urxisel1
+.ifdef URXISEL1
+         .equiv  Urxisel1, URXISEL1
+  .endif
+.endif
+.ifndef  Usidl
+.ifdef USIDL
+         .equiv  Usidl, USIDL
+  .endif
+.endif
+.ifndef  Utxbf
+.ifdef UTXBF
+         .equiv  Utxbf, UTXBF
+  .endif
+.endif
+.ifndef  Utxbrk
+.ifdef UTXBRK
+         .equiv  Utxbrk, UTXBRK
+  .endif
+.endif
+.ifndef  Utxen
+.ifdef UTXEN
+         .equiv  Utxen, UTXEN
+  .endif
+.endif
+.ifndef  Utxisel
+.ifdef UTXISEL
+         .equiv  Utxisel, UTXISEL
+  .endif
+.endif
+.ifndef  Vcfg0
+.ifdef VCFG0
+         .equiv  Vcfg0, VCFG0
+  .endif
+.endif
+.ifndef  Vcfg1
+.ifdef VCFG1
+         .equiv  Vcfg1, VCFG1
+  .endif
+.endif
+.ifndef  Vcfg2
+.ifdef VCFG2
+         .equiv  Vcfg2, VCFG2
+  .endif
+.endif
+.ifndef  Wake
+.ifdef WAKE
+         .equiv  Wake, WAKE
+  .endif
+.endif
+.ifndef  Wakfil
+.ifdef WAKFIL
+         .equiv  Wakfil, WAKFIL
+  .endif
+.endif
+.ifndef  Wakie
+.ifdef WAKIE
+         .equiv  Wakie, WAKIE
+  .endif
+.endif
+.ifndef  Wakif
+.ifdef WAKIF
+         .equiv  Wakif, WAKIF
+  .endif
+.endif
+.ifndef  Wdto
+.ifdef WDTO
+         .equiv  Wdto, WDTO
+  .endif
+.endif
+.ifndef  Wdtpsa_1
+.ifdef WDTPSA_1
+         .equiv  Wdtpsa_1, WDTPSA_1
+  .endif
+.endif
+.ifndef  Wdtpsa_512
+.ifdef WDTPSA_512
+         .equiv  Wdtpsa_512, WDTPSA_512
+  .endif
+.endif
+.ifndef  Wdtpsa_64
+.ifdef WDTPSA_64
+         .equiv  Wdtpsa_64, WDTPSA_64
+  .endif
+.endif
+.ifndef  Wdtpsa_8
+.ifdef WDTPSA_8
+         .equiv  Wdtpsa_8, WDTPSA_8
+  .endif
+.endif
+.ifndef  Wdtpsb_1
+.ifdef WDTPSB_1
+         .equiv  Wdtpsb_1, WDTPSB_1
+  .endif
+.endif
+.ifndef  Wdtpsb_10
+.ifdef WDTPSB_10
+         .equiv  Wdtpsb_10, WDTPSB_10
+  .endif
+.endif
+.ifndef  Wdtpsb_11
+.ifdef WDTPSB_11
+         .equiv  Wdtpsb_11, WDTPSB_11
+  .endif
+.endif
+.ifndef  Wdtpsb_12
+.ifdef WDTPSB_12
+         .equiv  Wdtpsb_12, WDTPSB_12
+  .endif
+.endif
+.ifndef  Wdtpsb_13
+.ifdef WDTPSB_13
+         .equiv  Wdtpsb_13, WDTPSB_13
+  .endif
+.endif
+.ifndef  Wdtpsb_14
+.ifdef WDTPSB_14
+         .equiv  Wdtpsb_14, WDTPSB_14
+  .endif
+.endif
+.ifndef  Wdtpsb_15
+.ifdef WDTPSB_15
+         .equiv  Wdtpsb_15, WDTPSB_15
+  .endif
+.endif
+.ifndef  Wdtpsb_16
+.ifdef WDTPSB_16
+         .equiv  Wdtpsb_16, WDTPSB_16
+  .endif
+.endif
+.ifndef  Wdtpsb_2
+.ifdef WDTPSB_2
+         .equiv  Wdtpsb_2, WDTPSB_2
+  .endif
+.endif
+.ifndef  Wdtpsb_3
+.ifdef WDTPSB_3
+         .equiv  Wdtpsb_3, WDTPSB_3
+  .endif
+.endif
+.ifndef  Wdtpsb_4
+.ifdef WDTPSB_4
+         .equiv  Wdtpsb_4, WDTPSB_4
+  .endif
+.endif
+.ifndef  Wdtpsb_5
+.ifdef WDTPSB_5
+         .equiv  Wdtpsb_5, WDTPSB_5
+  .endif
+.endif
+.ifndef  Wdtpsb_6
+.ifdef WDTPSB_6
+         .equiv  Wdtpsb_6, WDTPSB_6
+  .endif
+.endif
+.ifndef  Wdtpsb_7
+.ifdef WDTPSB_7
+         .equiv  Wdtpsb_7, WDTPSB_7
+  .endif
+.endif
+.ifndef  Wdtpsb_8
+.ifdef WDTPSB_8
+         .equiv  Wdtpsb_8, WDTPSB_8
+  .endif
+.endif
+.ifndef  Wdtpsb_9
+.ifdef WDTPSB_9
+         .equiv  Wdtpsb_9, WDTPSB_9
+  .endif
+.endif
+.ifndef  Wdt_off
+.ifdef WDT_OFF
+         .equiv  Wdt_off, WDT_OFF
+  .endif
+.endif
+.ifndef  Wdt_on
+.ifdef WDT_ON
+         .equiv  Wdt_on, WDT_ON
+  .endif
+.endif
+.ifndef  Wr
+.ifdef WR
+         .equiv  Wr, WR
+  .endif
+.endif
+.ifndef  Wreg0h
+.ifdef WREG0H
+         .equiv  Wreg0h, WREG0H
+  .endif
+.endif
+.ifndef  Wreg0l
+.ifdef WREG0L
+         .equiv  Wreg0l, WREG0L
+  .endif
+.endif
+.ifndef  Wreg10h
+.ifdef WREG10H
+         .equiv  Wreg10h, WREG10H
+  .endif
+.endif
+.ifndef  Wreg10l
+.ifdef WREG10L
+         .equiv  Wreg10l, WREG10L
+  .endif
+.endif
+.ifndef  Wreg11h
+.ifdef WREG11H
+         .equiv  Wreg11h, WREG11H
+  .endif
+.endif
+.ifndef  Wreg11l
+.ifdef WREG11L
+         .equiv  Wreg11l, WREG11L
+  .endif
+.endif
+.ifndef  Wreg12h
+.ifdef WREG12H
+         .equiv  Wreg12h, WREG12H
+  .endif
+.endif
+.ifndef  Wreg12l
+.ifdef WREG12L
+         .equiv  Wreg12l, WREG12L
+  .endif
+.endif
+.ifndef  Wreg13h
+.ifdef WREG13H
+         .equiv  Wreg13h, WREG13H
+  .endif
+.endif
+.ifndef  Wreg13l
+.ifdef WREG13L
+         .equiv  Wreg13l, WREG13L
+  .endif
+.endif
+.ifndef  Wreg14h
+.ifdef WREG14H
+         .equiv  Wreg14h, WREG14H
+  .endif
+.endif
+.ifndef  Wreg14l
+.ifdef WREG14L
+         .equiv  Wreg14l, WREG14L
+  .endif
+.endif
+.ifndef  Wreg15h
+.ifdef WREG15H
+         .equiv  Wreg15h, WREG15H
+  .endif
+.endif
+.ifndef  Wreg15l
+.ifdef WREG15L
+         .equiv  Wreg15l, WREG15L
+  .endif
+.endif
+.ifndef  Wreg1h
+.ifdef WREG1H
+         .equiv  Wreg1h, WREG1H
+  .endif
+.endif
+.ifndef  Wreg1l
+.ifdef WREG1L
+         .equiv  Wreg1l, WREG1L
+  .endif
+.endif
+.ifndef  Wreg2h
+.ifdef WREG2H
+         .equiv  Wreg2h, WREG2H
+  .endif
+.endif
+.ifndef  Wreg2l
+.ifdef WREG2L
+         .equiv  Wreg2l, WREG2L
+  .endif
+.endif
+.ifndef  Wreg3h
+.ifdef WREG3H
+         .equiv  Wreg3h, WREG3H
+  .endif
+.endif
+.ifndef  Wreg3l
+.ifdef WREG3L
+         .equiv  Wreg3l, WREG3L
+  .endif
+.endif
+.ifndef  Wreg4h
+.ifdef WREG4H
+         .equiv  Wreg4h, WREG4H
+  .endif
+.endif
+.ifndef  Wreg4l
+.ifdef WREG4L
+         .equiv  Wreg4l, WREG4L
+  .endif
+.endif
+.ifndef  Wreg5h
+.ifdef WREG5H
+         .equiv  Wreg5h, WREG5H
+  .endif
+.endif
+.ifndef  Wreg5l
+.ifdef WREG5L
+         .equiv  Wreg5l, WREG5L
+  .endif
+.endif
+.ifndef  Wreg6h
+.ifdef WREG6H
+         .equiv  Wreg6h, WREG6H
+  .endif
+.endif
+.ifndef  Wreg6l
+.ifdef WREG6L
+         .equiv  Wreg6l, WREG6L
+  .endif
+.endif
+.ifndef  Wreg7h
+.ifdef WREG7H
+         .equiv  Wreg7h, WREG7H
+  .endif
+.endif
+.ifndef  Wreg7l
+.ifdef WREG7L
+         .equiv  Wreg7l, WREG7L
+  .endif
+.endif
+.ifndef  Wreg8h
+.ifdef WREG8H
+         .equiv  Wreg8h, WREG8H
+  .endif
+.endif
+.ifndef  Wreg8l
+.ifdef WREG8L
+         .equiv  Wreg8l, WREG8L
+  .endif
+.endif
+.ifndef  Wreg9h
+.ifdef WREG9H
+         .equiv  Wreg9h, WREG9H
+  .endif
+.endif
+.ifndef  Wreg9l
+.ifdef WREG9L
+         .equiv  Wreg9l, WREG9L
+  .endif
+.endif
+.ifndef  Wren
+.ifdef WREN
+         .equiv  Wren, WREN
+  .endif
+.endif
+.ifndef  Wrerr
+.ifdef WRERR
+         .equiv  Wrerr, WRERR
+  .endif
+.endif
+.ifndef  Xbrevh
+.ifdef XBREVH
+         .equiv  Xbrevh, XBREVH
+  .endif
+.endif
+.ifndef  Xbrevl
+.ifdef XBREVL
+         .equiv  Xbrevl, XBREVL
+  .endif
+.endif
+.ifndef  Xmoden
+.ifdef XMODEN
+         .equiv  Xmoden, XMODEN
+  .endif
+.endif
+.ifndef  Xmodendh
+.ifdef XMODENDH
+         .equiv  Xmodendh, XMODENDH
+  .endif
+.endif
+.ifndef  Xmodendl
+.ifdef XMODENDL
+         .equiv  Xmodendl, XMODENDL
+  .endif
+.endif
+.ifndef  Xmodsrth
+.ifdef XMODSRTH
+         .equiv  Xmodsrth, XMODSRTH
+  .endif
+.endif
+.ifndef  Xmodsrtl
+.ifdef XMODSRTL
+         .equiv  Xmodsrtl, XMODSRTL
+  .endif
+.endif
+.ifndef  Xt
+.ifdef XT
+         .equiv  Xt, XT
+  .endif
+.endif
+.ifndef  Xtl
+.ifdef XTL
+         .equiv  Xtl, XTL
+  .endif
+.endif
+.ifndef  Xt_pll16
+.ifdef XT_PLL16
+         .equiv  Xt_pll16, XT_PLL16
+  .endif
+.endif
+.ifndef  Xt_pll4
+.ifdef XT_PLL4
+         .equiv  Xt_pll4, XT_PLL4
+  .endif
+.endif
+.ifndef  Xt_pll8
+.ifdef XT_PLL8
+         .equiv  Xt_pll8, XT_PLL8
+  .endif
+.endif
+.ifndef  Ymoden
+.ifdef YMODEN
+         .equiv  Ymoden, YMODEN
+  .endif
+.endif
+.ifndef  Ymodendh
+.ifdef YMODENDH
+         .equiv  Ymodendh, YMODENDH
+  .endif
+.endif
+.ifndef  Ymodendl
+.ifdef YMODENDL
+         .equiv  Ymodendl, YMODENDL
+  .endif
+.endif
+.ifndef  Ymodsrth
+.ifdef YMODSRTH
+         .equiv  Ymodsrth, YMODSRTH
+  .endif
+.endif
+.ifndef  Ymodsrtl
+.ifdef YMODSRTL
+         .equiv  Ymodsrtl, YMODSRTL
+  .endif
+.endif
+.ifndef  Accah
+.ifdef _ACCAH
+         .equiv  Accah, _ACCAH
+  .endif
+.endif
+.ifndef  Accal
+.ifdef _ACCAL
+         .equiv  Accal, _ACCAL
+  .endif
+.endif
+.ifndef  Accau
+.ifdef _ACCAU
+         .equiv  Accau, _ACCAU
+  .endif
+.endif
+.ifndef  Accbh
+.ifdef _ACCBH
+         .equiv  Accbh, _ACCBH
+  .endif
+.endif
+.ifndef  Accbl
+.ifdef _ACCBL
+         .equiv  Accbl, _ACCBL
+  .endif
+.endif
+.ifndef  Accbu
+.ifdef _ACCBU
+         .equiv  Accbu, _ACCBU
+  .endif
+.endif
+.ifndef  Adcbuf0
+.ifdef _ADCBUF0
+         .equiv  Adcbuf0, _ADCBUF0
+  .endif
+.endif
+.ifndef  Adcbuf1
+.ifdef _ADCBUF1
+         .equiv  Adcbuf1, _ADCBUF1
+  .endif
+.endif
+.ifndef  Adcbuf2
+.ifdef _ADCBUF2
+         .equiv  Adcbuf2, _ADCBUF2
+  .endif
+.endif
+.ifndef  Adcbuf3
+.ifdef _ADCBUF3
+         .equiv  Adcbuf3, _ADCBUF3
+  .endif
+.endif
+.ifndef  Adcbuf4
+.ifdef _ADCBUF4
+         .equiv  Adcbuf4, _ADCBUF4
+  .endif
+.endif
+.ifndef  Adcbuf5
+.ifdef _ADCBUF5
+         .equiv  Adcbuf5, _ADCBUF5
+  .endif
+.endif
+.ifndef  Adcbuf6
+.ifdef _ADCBUF6
+         .equiv  Adcbuf6, _ADCBUF6
+  .endif
+.endif
+.ifndef  Adcbuf7
+.ifdef _ADCBUF7
+         .equiv  Adcbuf7, _ADCBUF7
+  .endif
+.endif
+.ifndef  Adcbuf8
+.ifdef _ADCBUF8
+         .equiv  Adcbuf8, _ADCBUF8
+  .endif
+.endif
+.ifndef  Adcbuf9
+.ifdef _ADCBUF9
+         .equiv  Adcbuf9, _ADCBUF9
+  .endif
+.endif
+.ifndef  Adcbufa
+.ifdef _ADCBUFA
+         .equiv  Adcbufa, _ADCBUFA
+  .endif
+.endif
+.ifndef  Adcbufb
+.ifdef _ADCBUFB
+         .equiv  Adcbufb, _ADCBUFB
+  .endif
+.endif
+.ifndef  Adcbufc
+.ifdef _ADCBUFC
+         .equiv  Adcbufc, _ADCBUFC
+  .endif
+.endif
+.ifndef  Adcbufd
+.ifdef _ADCBUFD
+         .equiv  Adcbufd, _ADCBUFD
+  .endif
+.endif
+.ifndef  Adcbufe
+.ifdef _ADCBUFE
+         .equiv  Adcbufe, _ADCBUFE
+  .endif
+.endif
+.ifndef  Adcbuff
+.ifdef _ADCBUFF
+         .equiv  Adcbuff, _ADCBUFF
+  .endif
+.endif
+.ifndef  Adchs
+.ifdef _ADCHS
+         .equiv  Adchs, _ADCHS
+  .endif
+.endif
+.ifndef  Adcon1
+.ifdef _ADCON1
+         .equiv  Adcon1, _ADCON1
+  .endif
+.endif
+.ifndef  Adcon2
+.ifdef _ADCON2
+         .equiv  Adcon2, _ADCON2
+  .endif
+.endif
+.ifndef  Adcon3
+.ifdef _ADCON3
+         .equiv  Adcon3, _ADCON3
+  .endif
+.endif
+.ifndef  Adcssl
+.ifdef _ADCSSL
+         .equiv  Adcssl, _ADCSSL
+  .endif
+.endif
+.ifndef  Adpcfg
+.ifdef _ADPCFG
+         .equiv  Adpcfg, _ADPCFG
+  .endif
+.endif
+.ifndef  C1cfg1
+.ifdef _C1CFG1
+         .equiv  C1cfg1, _C1CFG1
+  .endif
+.endif
+.ifndef  C1cfg2
+.ifdef _C1CFG2
+         .equiv  C1cfg2, _C1CFG2
+  .endif
+.endif
+.ifndef  C1ctrl
+.ifdef _C1CTRL
+         .equiv  C1ctrl, _C1CTRL
+  .endif
+.endif
+.ifndef  C1ec
+.ifdef _C1EC
+         .equiv  C1ec, _C1EC
+  .endif
+.endif
+.ifndef  C1inte
+.ifdef _C1INTE
+         .equiv  C1inte, _C1INTE
+  .endif
+.endif
+.ifndef  C1intf
+.ifdef _C1INTF
+         .equiv  C1intf, _C1INTF
+  .endif
+.endif
+.ifndef  C1rx0b1
+.ifdef _C1RX0B1
+         .equiv  C1rx0b1, _C1RX0B1
+  .endif
+.endif
+.ifndef  C1rx0b2
+.ifdef _C1RX0B2
+         .equiv  C1rx0b2, _C1RX0B2
+  .endif
+.endif
+.ifndef  C1rx0b3
+.ifdef _C1RX0B3
+         .equiv  C1rx0b3, _C1RX0B3
+  .endif
+.endif
+.ifndef  C1rx0b4
+.ifdef _C1RX0B4
+         .equiv  C1rx0b4, _C1RX0B4
+  .endif
+.endif
+.ifndef  C1rx0con
+.ifdef _C1RX0CON
+         .equiv  C1rx0con, _C1RX0CON
+  .endif
+.endif
+.ifndef  C1rx0eid
+.ifdef _C1RX0EID
+         .equiv  C1rx0eid, _C1RX0EID
+  .endif
+.endif
+.ifndef  C1rx0sid
+.ifdef _C1RX0SID
+         .equiv  C1rx0sid, _C1RX0SID
+  .endif
+.endif
+.ifndef  C1rx1b1
+.ifdef _C1RX1B1
+         .equiv  C1rx1b1, _C1RX1B1
+  .endif
+.endif
+.ifndef  C1rx1b2
+.ifdef _C1RX1B2
+         .equiv  C1rx1b2, _C1RX1B2
+  .endif
+.endif
+.ifndef  C1rx1b3
+.ifdef _C1RX1B3
+         .equiv  C1rx1b3, _C1RX1B3
+  .endif
+.endif
+.ifndef  C1rx1b4
+.ifdef _C1RX1B4
+         .equiv  C1rx1b4, _C1RX1B4
+  .endif
+.endif
+.ifndef  C1rx1con
+.ifdef _C1RX1CON
+         .equiv  C1rx1con, _C1RX1CON
+  .endif
+.endif
+.ifndef  C1rx1eid
+.ifdef _C1RX1EID
+         .equiv  C1rx1eid, _C1RX1EID
+  .endif
+.endif
+.ifndef  C1rx1sid
+.ifdef _C1RX1SID
+         .equiv  C1rx1sid, _C1RX1SID
+  .endif
+.endif
+.ifndef  C1rxf0eid
+.ifdef _C1RXF0EID
+         .equiv  C1rxf0eid, _C1RXF0EID
+  .endif
+.endif
+.ifndef  C1rxf0sid
+.ifdef _C1RXF0SID
+         .equiv  C1rxf0sid, _C1RXF0SID
+  .endif
+.endif
+.ifndef  C1rxf1eid
+.ifdef _C1RXF1EID
+         .equiv  C1rxf1eid, _C1RXF1EID
+  .endif
+.endif
+.ifndef  C1rxf1sid
+.ifdef _C1RXF1SID
+         .equiv  C1rxf1sid, _C1RXF1SID
+  .endif
+.endif
+.ifndef  C1rxf2eid
+.ifdef _C1RXF2EID
+         .equiv  C1rxf2eid, _C1RXF2EID
+  .endif
+.endif
+.ifndef  C1rxf2sid
+.ifdef _C1RXF2SID
+         .equiv  C1rxf2sid, _C1RXF2SID
+  .endif
+.endif
+.ifndef  C1rxf3eid
+.ifdef _C1RXF3EID
+         .equiv  C1rxf3eid, _C1RXF3EID
+  .endif
+.endif
+.ifndef  C1rxf3sid
+.ifdef _C1RXF3SID
+         .equiv  C1rxf3sid, _C1RXF3SID
+  .endif
+.endif
+.ifndef  C1rxf4eid
+.ifdef _C1RXF4EID
+         .equiv  C1rxf4eid, _C1RXF4EID
+  .endif
+.endif
+.ifndef  C1rxf4sid
+.ifdef _C1RXF4SID
+         .equiv  C1rxf4sid, _C1RXF4SID
+  .endif
+.endif
+.ifndef  C1rxf5eid
+.ifdef _C1RXF5EID
+         .equiv  C1rxf5eid, _C1RXF5EID
+  .endif
+.endif
+.ifndef  C1rxf5sid
+.ifdef _C1RXF5SID
+         .equiv  C1rxf5sid, _C1RXF5SID
+  .endif
+.endif
+.ifndef  C1rxm0eid
+.ifdef _C1RXM0EID
+         .equiv  C1rxm0eid, _C1RXM0EID
+  .endif
+.endif
+.ifndef  C1rxm0sid
+.ifdef _C1RXM0SID
+         .equiv  C1rxm0sid, _C1RXM0SID
+  .endif
+.endif
+.ifndef  C1rxm1eid
+.ifdef _C1RXM1EID
+         .equiv  C1rxm1eid, _C1RXM1EID
+  .endif
+.endif
+.ifndef  C1rxm1sid
+.ifdef _C1RXM1SID
+         .equiv  C1rxm1sid, _C1RXM1SID
+  .endif
+.endif
+.ifndef  C1tx0b1
+.ifdef _C1TX0B1
+         .equiv  C1tx0b1, _C1TX0B1
+  .endif
+.endif
+.ifndef  C1tx0b2
+.ifdef _C1TX0B2
+         .equiv  C1tx0b2, _C1TX0B2
+  .endif
+.endif
+.ifndef  C1tx0b3
+.ifdef _C1TX0B3
+         .equiv  C1tx0b3, _C1TX0B3
+  .endif
+.endif
+.ifndef  C1tx0b4
+.ifdef _C1TX0B4
+         .equiv  C1tx0b4, _C1TX0B4
+  .endif
+.endif
+.ifndef  C1tx0con
+.ifdef _C1TX0CON
+         .equiv  C1tx0con, _C1TX0CON
+  .endif
+.endif
+.ifndef  C1tx0eid
+.ifdef _C1TX0EID
+         .equiv  C1tx0eid, _C1TX0EID
+  .endif
+.endif
+.ifndef  C1tx0sid
+.ifdef _C1TX0SID
+         .equiv  C1tx0sid, _C1TX0SID
+  .endif
+.endif
+.ifndef  C1tx1b1
+.ifdef _C1TX1B1
+         .equiv  C1tx1b1, _C1TX1B1
+  .endif
+.endif
+.ifndef  C1tx1b2
+.ifdef _C1TX1B2
+         .equiv  C1tx1b2, _C1TX1B2
+  .endif
+.endif
+.ifndef  C1tx1b3
+.ifdef _C1TX1B3
+         .equiv  C1tx1b3, _C1TX1B3
+  .endif
+.endif
+.ifndef  C1tx1b4
+.ifdef _C1TX1B4
+         .equiv  C1tx1b4, _C1TX1B4
+  .endif
+.endif
+.ifndef  C1tx1con
+.ifdef _C1TX1CON
+         .equiv  C1tx1con, _C1TX1CON
+  .endif
+.endif
+.ifndef  C1tx1eid
+.ifdef _C1TX1EID
+         .equiv  C1tx1eid, _C1TX1EID
+  .endif
+.endif
+.ifndef  C1tx1sid
+.ifdef _C1TX1SID
+         .equiv  C1tx1sid, _C1TX1SID
+  .endif
+.endif
+.ifndef  C1tx2b1
+.ifdef _C1TX2B1
+         .equiv  C1tx2b1, _C1TX2B1
+  .endif
+.endif
+.ifndef  C1tx2b2
+.ifdef _C1TX2B2
+         .equiv  C1tx2b2, _C1TX2B2
+  .endif
+.endif
+.ifndef  C1tx2b3
+.ifdef _C1TX2B3
+         .equiv  C1tx2b3, _C1TX2B3
+  .endif
+.endif
+.ifndef  C1tx2b4
+.ifdef _C1TX2B4
+         .equiv  C1tx2b4, _C1TX2B4
+  .endif
+.endif
+.ifndef  C1tx2con
+.ifdef _C1TX2CON
+         .equiv  C1tx2con, _C1TX2CON
+  .endif
+.endif
+.ifndef  C1tx2eid
+.ifdef _C1TX2EID
+         .equiv  C1tx2eid, _C1TX2EID
+  .endif
+.endif
+.ifndef  C1tx2sid
+.ifdef _C1TX2SID
+         .equiv  C1tx2sid, _C1TX2SID
+  .endif
+.endif
+.ifndef  C2cfg1
+.ifdef _C2CFG1
+         .equiv  C2cfg1, _C2CFG1
+  .endif
+.endif
+.ifndef  C2cfg2
+.ifdef _C2CFG2
+         .equiv  C2cfg2, _C2CFG2
+  .endif
+.endif
+.ifndef  C2ctrl
+.ifdef _C2CTRL
+         .equiv  C2ctrl, _C2CTRL
+  .endif
+.endif
+.ifndef  C2ec
+.ifdef _C2EC
+         .equiv  C2ec, _C2EC
+  .endif
+.endif
+.ifndef  C2inte
+.ifdef _C2INTE
+         .equiv  C2inte, _C2INTE
+  .endif
+.endif
+.ifndef  C2intf
+.ifdef _C2INTF
+         .equiv  C2intf, _C2INTF
+  .endif
+.endif
+.ifndef  C2rx0b1
+.ifdef _C2RX0B1
+         .equiv  C2rx0b1, _C2RX0B1
+  .endif
+.endif
+.ifndef  C2rx0b2
+.ifdef _C2RX0B2
+         .equiv  C2rx0b2, _C2RX0B2
+  .endif
+.endif
+.ifndef  C2rx0b3
+.ifdef _C2RX0B3
+         .equiv  C2rx0b3, _C2RX0B3
+  .endif
+.endif
+.ifndef  C2rx0b4
+.ifdef _C2RX0B4
+         .equiv  C2rx0b4, _C2RX0B4
+  .endif
+.endif
+.ifndef  C2rx0con
+.ifdef _C2RX0CON
+         .equiv  C2rx0con, _C2RX0CON
+  .endif
+.endif
+.ifndef  C2rx0eid
+.ifdef _C2RX0EID
+         .equiv  C2rx0eid, _C2RX0EID
+  .endif
+.endif
+.ifndef  C2rx0sid
+.ifdef _C2RX0SID
+         .equiv  C2rx0sid, _C2RX0SID
+  .endif
+.endif
+.ifndef  C2rx1b1
+.ifdef _C2RX1B1
+         .equiv  C2rx1b1, _C2RX1B1
+  .endif
+.endif
+.ifndef  C2rx1b2
+.ifdef _C2RX1B2
+         .equiv  C2rx1b2, _C2RX1B2
+  .endif
+.endif
+.ifndef  C2rx1b3
+.ifdef _C2RX1B3
+         .equiv  C2rx1b3, _C2RX1B3
+  .endif
+.endif
+.ifndef  C2rx1b4
+.ifdef _C2RX1B4
+         .equiv  C2rx1b4, _C2RX1B4
+  .endif
+.endif
+.ifndef  C2rx1con
+.ifdef _C2RX1CON
+         .equiv  C2rx1con, _C2RX1CON
+  .endif
+.endif
+.ifndef  C2rx1eid
+.ifdef _C2RX1EID
+         .equiv  C2rx1eid, _C2RX1EID
+  .endif
+.endif
+.ifndef  C2rx1sid
+.ifdef _C2RX1SID
+         .equiv  C2rx1sid, _C2RX1SID
+  .endif
+.endif
+.ifndef  C2rxf0eid
+.ifdef _C2RXF0EID
+         .equiv  C2rxf0eid, _C2RXF0EID
+  .endif
+.endif
+.ifndef  C2rxf0sid
+.ifdef _C2RXF0SID
+         .equiv  C2rxf0sid, _C2RXF0SID
+  .endif
+.endif
+.ifndef  C2rxf1eid
+.ifdef _C2RXF1EID
+         .equiv  C2rxf1eid, _C2RXF1EID
+  .endif
+.endif
+.ifndef  C2rxf1sid
+.ifdef _C2RXF1SID
+         .equiv  C2rxf1sid, _C2RXF1SID
+  .endif
+.endif
+.ifndef  C2rxf2eid
+.ifdef _C2RXF2EID
+         .equiv  C2rxf2eid, _C2RXF2EID
+  .endif
+.endif
+.ifndef  C2rxf2sid
+.ifdef _C2RXF2SID
+         .equiv  C2rxf2sid, _C2RXF2SID
+  .endif
+.endif
+.ifndef  C2rxf3eid
+.ifdef _C2RXF3EID
+         .equiv  C2rxf3eid, _C2RXF3EID
+  .endif
+.endif
+.ifndef  C2rxf3sid
+.ifdef _C2RXF3SID
+         .equiv  C2rxf3sid, _C2RXF3SID
+  .endif
+.endif
+.ifndef  C2rxf4eid
+.ifdef _C2RXF4EID
+         .equiv  C2rxf4eid, _C2RXF4EID
+  .endif
+.endif
+.ifndef  C2rxf4sid
+.ifdef _C2RXF4SID
+         .equiv  C2rxf4sid, _C2RXF4SID
+  .endif
+.endif
+.ifndef  C2rxf5eid
+.ifdef _C2RXF5EID
+         .equiv  C2rxf5eid, _C2RXF5EID
+  .endif
+.endif
+.ifndef  C2rxf5sid
+.ifdef _C2RXF5SID
+         .equiv  C2rxf5sid, _C2RXF5SID
+  .endif
+.endif
+.ifndef  C2rxm0eid
+.ifdef _C2RXM0EID
+         .equiv  C2rxm0eid, _C2RXM0EID
+  .endif
+.endif
+.ifndef  C2rxm0sid
+.ifdef _C2RXM0SID
+         .equiv  C2rxm0sid, _C2RXM0SID
+  .endif
+.endif
+.ifndef  C2rxm1eid
+.ifdef _C2RXM1EID
+         .equiv  C2rxm1eid, _C2RXM1EID
+  .endif
+.endif
+.ifndef  C2rxm1sid
+.ifdef _C2RXM1SID
+         .equiv  C2rxm1sid, _C2RXM1SID
+  .endif
+.endif
+.ifndef  C2tx0b1
+.ifdef _C2TX0B1
+         .equiv  C2tx0b1, _C2TX0B1
+  .endif
+.endif
+.ifndef  C2tx0b2
+.ifdef _C2TX0B2
+         .equiv  C2tx0b2, _C2TX0B2
+  .endif
+.endif
+.ifndef  C2tx0b3
+.ifdef _C2TX0B3
+         .equiv  C2tx0b3, _C2TX0B3
+  .endif
+.endif
+.ifndef  C2tx0b4
+.ifdef _C2TX0B4
+         .equiv  C2tx0b4, _C2TX0B4
+  .endif
+.endif
+.ifndef  C2tx0con
+.ifdef _C2TX0CON
+         .equiv  C2tx0con, _C2TX0CON
+  .endif
+.endif
+.ifndef  C2tx0eid
+.ifdef _C2TX0EID
+         .equiv  C2tx0eid, _C2TX0EID
+  .endif
+.endif
+.ifndef  C2tx0sid
+.ifdef _C2TX0SID
+         .equiv  C2tx0sid, _C2TX0SID
+  .endif
+.endif
+.ifndef  C2tx1b1
+.ifdef _C2TX1B1
+         .equiv  C2tx1b1, _C2TX1B1
+  .endif
+.endif
+.ifndef  C2tx1b2
+.ifdef _C2TX1B2
+         .equiv  C2tx1b2, _C2TX1B2
+  .endif
+.endif
+.ifndef  C2tx1b3
+.ifdef _C2TX1B3
+         .equiv  C2tx1b3, _C2TX1B3
+  .endif
+.endif
+.ifndef  C2tx1b4
+.ifdef _C2TX1B4
+         .equiv  C2tx1b4, _C2TX1B4
+  .endif
+.endif
+.ifndef  C2tx1con
+.ifdef _C2TX1CON
+         .equiv  C2tx1con, _C2TX1CON
+  .endif
+.endif
+.ifndef  C2tx1eid
+.ifdef _C2TX1EID
+         .equiv  C2tx1eid, _C2TX1EID
+  .endif
+.endif
+.ifndef  C2tx1sid
+.ifdef _C2TX1SID
+         .equiv  C2tx1sid, _C2TX1SID
+  .endif
+.endif
+.ifndef  C2tx2b1
+.ifdef _C2TX2B1
+         .equiv  C2tx2b1, _C2TX2B1
+  .endif
+.endif
+.ifndef  C2tx2b2
+.ifdef _C2TX2B2
+         .equiv  C2tx2b2, _C2TX2B2
+  .endif
+.endif
+.ifndef  C2tx2b3
+.ifdef _C2TX2B3
+         .equiv  C2tx2b3, _C2TX2B3
+  .endif
+.endif
+.ifndef  C2tx2b4
+.ifdef _C2TX2B4
+         .equiv  C2tx2b4, _C2TX2B4
+  .endif
+.endif
+.ifndef  C2tx2con
+.ifdef _C2TX2CON
+         .equiv  C2tx2con, _C2TX2CON
+  .endif
+.endif
+.ifndef  C2tx2eid
+.ifdef _C2TX2EID
+         .equiv  C2tx2eid, _C2TX2EID
+  .endif
+.endif
+.ifndef  C2tx2sid
+.ifdef _C2TX2SID
+         .equiv  C2tx2sid, _C2TX2SID
+  .endif
+.endif
+.ifndef  Cnen1
+.ifdef _CNEN1
+         .equiv  Cnen1, _CNEN1
+  .endif
+.endif
+.ifndef  Cnen2
+.ifdef _CNEN2
+         .equiv  Cnen2, _CNEN2
+  .endif
+.endif
+.ifndef  Cnpu1
+.ifdef _CNPU1
+         .equiv  Cnpu1, _CNPU1
+  .endif
+.endif
+.ifndef  Cnpu2
+.ifdef _CNPU2
+         .equiv  Cnpu2, _CNPU2
+  .endif
+.endif
+.ifndef  Corcon
+.ifdef _CORCON
+         .equiv  Corcon, _CORCON
+  .endif
+.endif
+.ifndef  Dcount
+.ifdef _DCOUNT
+         .equiv  Dcount, _DCOUNT
+  .endif
+.endif
+.ifndef  Dfltcon
+.ifdef _DFLTCON
+         .equiv  Dfltcon, _DFLTCON
+  .endif
+.endif
+.ifndef  Disicnt
+.ifdef _DISICNT
+         .equiv  Disicnt, _DISICNT
+  .endif
+.endif
+.ifndef  Doendh
+.ifdef _DOENDH
+         .equiv  Doendh, _DOENDH
+  .endif
+.endif
+.ifndef  Doendl
+.ifdef _DOENDL
+         .equiv  Doendl, _DOENDL
+  .endif
+.endif
+.ifndef  Dostarth
+.ifdef _DOSTARTH
+         .equiv  Dostarth, _DOSTARTH
+  .endif
+.endif
+.ifndef  Dostartl
+.ifdef _DOSTARTL
+         .equiv  Dostartl, _DOSTARTL
+  .endif
+.endif
+.ifndef  Dtcon1
+.ifdef _DTCON1
+         .equiv  Dtcon1, _DTCON1
+  .endif
+.endif
+.ifndef  Dtcon2
+.ifdef _DTCON2
+         .equiv  Dtcon2, _DTCON2
+  .endif
+.endif
+.ifndef  Fltacon
+.ifdef _FLTACON
+         .equiv  Fltacon, _FLTACON
+  .endif
+.endif
+.ifndef  Fltbcon
+.ifdef _FLTBCON
+         .equiv  Fltbcon, _FLTBCON
+  .endif
+.endif
+.ifndef  I2cadd
+.ifdef _I2CADD
+         .equiv  I2cadd, _I2CADD
+  .endif
+.endif
+.ifndef  I2cbrg
+.ifdef _I2CBRG
+         .equiv  I2cbrg, _I2CBRG
+  .endif
+.endif
+.ifndef  I2ccon
+.ifdef _I2CCON
+         .equiv  I2ccon, _I2CCON
+  .endif
+.endif
+.ifndef  I2crcv
+.ifdef _I2CRCV
+         .equiv  I2crcv, _I2CRCV
+  .endif
+.endif
+.ifndef  I2cstat
+.ifdef _I2CSTAT
+         .equiv  I2cstat, _I2CSTAT
+  .endif
+.endif
+.ifndef  I2ctrn
+.ifdef _I2CTRN
+         .equiv  I2ctrn, _I2CTRN
+  .endif
+.endif
+.ifndef  Ic1buf
+.ifdef _IC1BUF
+         .equiv  Ic1buf, _IC1BUF
+  .endif
+.endif
+.ifndef  Ic1con
+.ifdef _IC1CON
+         .equiv  Ic1con, _IC1CON
+  .endif
+.endif
+.ifndef  Ic2buf
+.ifdef _IC2BUF
+         .equiv  Ic2buf, _IC2BUF
+  .endif
+.endif
+.ifndef  Ic2con
+.ifdef _IC2CON
+         .equiv  Ic2con, _IC2CON
+  .endif
+.endif
+.ifndef  Ic3buf
+.ifdef _IC3BUF
+         .equiv  Ic3buf, _IC3BUF
+  .endif
+.endif
+.ifndef  Ic3con
+.ifdef _IC3CON
+         .equiv  Ic3con, _IC3CON
+  .endif
+.endif
+.ifndef  Ic4buf
+.ifdef _IC4BUF
+         .equiv  Ic4buf, _IC4BUF
+  .endif
+.endif
+.ifndef  Ic4con
+.ifdef _IC4CON
+         .equiv  Ic4con, _IC4CON
+  .endif
+.endif
+.ifndef  Ic5buf
+.ifdef _IC5BUF
+         .equiv  Ic5buf, _IC5BUF
+  .endif
+.endif
+.ifndef  Ic5con
+.ifdef _IC5CON
+         .equiv  Ic5con, _IC5CON
+  .endif
+.endif
+.ifndef  Ic6buf
+.ifdef _IC6BUF
+         .equiv  Ic6buf, _IC6BUF
+  .endif
+.endif
+.ifndef  Ic6con
+.ifdef _IC6CON
+         .equiv  Ic6con, _IC6CON
+  .endif
+.endif
+.ifndef  Ic7buf
+.ifdef _IC7BUF
+         .equiv  Ic7buf, _IC7BUF
+  .endif
+.endif
+.ifndef  Ic7con
+.ifdef _IC7CON
+         .equiv  Ic7con, _IC7CON
+  .endif
+.endif
+.ifndef  Ic8buf
+.ifdef _IC8BUF
+         .equiv  Ic8buf, _IC8BUF
+  .endif
+.endif
+.ifndef  Ic8con
+.ifdef _IC8CON
+         .equiv  Ic8con, _IC8CON
+  .endif
+.endif
+.ifndef  Iec0
+.ifdef _IEC0
+         .equiv  Iec0, _IEC0
+  .endif
+.endif
+.ifndef  Iec1
+.ifdef _IEC1
+         .equiv  Iec1, _IEC1
+  .endif
+.endif
+.ifndef  Iec2
+.ifdef _IEC2
+         .equiv  Iec2, _IEC2
+  .endif
+.endif
+.ifndef  Ifs0
+.ifdef _IFS0
+         .equiv  Ifs0, _IFS0
+  .endif
+.endif
+.ifndef  Ifs1
+.ifdef _IFS1
+         .equiv  Ifs1, _IFS1
+  .endif
+.endif
+.ifndef  Ifs2
+.ifdef _IFS2
+         .equiv  Ifs2, _IFS2
+  .endif
+.endif
+.ifndef  Intcon1
+.ifdef _INTCON1
+         .equiv  Intcon1, _INTCON1
+  .endif
+.endif
+.ifndef  Intcon2
+.ifdef _INTCON2
+         .equiv  Intcon2, _INTCON2
+  .endif
+.endif
+.ifndef  Ipc0
+.ifdef _IPC0
+         .equiv  Ipc0, _IPC0
+  .endif
+.endif
+.ifndef  Ipc1
+.ifdef _IPC1
+         .equiv  Ipc1, _IPC1
+  .endif
+.endif
+.ifndef  Ipc10
+.ifdef _IPC10
+         .equiv  Ipc10, _IPC10
+  .endif
+.endif
+.ifndef  Ipc11
+.ifdef _IPC11
+         .equiv  Ipc11, _IPC11
+  .endif
+.endif
+.ifndef  Ipc2
+.ifdef _IPC2
+         .equiv  Ipc2, _IPC2
+  .endif
+.endif
+.ifndef  Ipc3
+.ifdef _IPC3
+         .equiv  Ipc3, _IPC3
+  .endif
+.endif
+.ifndef  Ipc4
+.ifdef _IPC4
+         .equiv  Ipc4, _IPC4
+  .endif
+.endif
+.ifndef  Ipc5
+.ifdef _IPC5
+         .equiv  Ipc5, _IPC5
+  .endif
+.endif
+.ifndef  Ipc6
+.ifdef _IPC6
+         .equiv  Ipc6, _IPC6
+  .endif
+.endif
+.ifndef  Ipc7
+.ifdef _IPC7
+         .equiv  Ipc7, _IPC7
+  .endif
+.endif
+.ifndef  Ipc8
+.ifdef _IPC8
+         .equiv  Ipc8, _IPC8
+  .endif
+.endif
+.ifndef  Ipc9
+.ifdef _IPC9
+         .equiv  Ipc9, _IPC9
+  .endif
+.endif
+.ifndef  Lata
+.ifdef _LATA
+         .equiv  Lata, _LATA
+  .endif
+.endif
+.ifndef  Latb
+.ifdef _LATB
+         .equiv  Latb, _LATB
+  .endif
+.endif
+.ifndef  Latc
+.ifdef _LATC
+         .equiv  Latc, _LATC
+  .endif
+.endif
+.ifndef  Latd
+.ifdef _LATD
+         .equiv  Latd, _LATD
+  .endif
+.endif
+.ifndef  Late
+.ifdef _LATE
+         .equiv  Late, _LATE
+  .endif
+.endif
+.ifndef  Latf
+.ifdef _LATF
+         .equiv  Latf, _LATF
+  .endif
+.endif
+.ifndef  Latg
+.ifdef _LATG
+         .equiv  Latg, _LATG
+  .endif
+.endif
+.ifndef  Maxcnt
+.ifdef _MAXCNT
+         .equiv  Maxcnt, _MAXCNT
+  .endif
+.endif
+.ifndef  Modcon
+.ifdef _MODCON
+         .equiv  Modcon, _MODCON
+  .endif
+.endif
+.ifndef  Nvmadr
+.ifdef _NVMADR
+         .equiv  Nvmadr, _NVMADR
+  .endif
+.endif
+.ifndef  Nvmcon
+.ifdef _NVMCON
+         .equiv  Nvmcon, _NVMCON
+  .endif
+.endif
+.ifndef  Nvmkey
+.ifdef _NVMKEY
+         .equiv  Nvmkey, _NVMKEY
+  .endif
+.endif
+.ifndef  Oc1con
+.ifdef _OC1CON
+         .equiv  Oc1con, _OC1CON
+  .endif
+.endif
+.ifndef  Oc1r
+.ifdef _OC1R
+         .equiv  Oc1r, _OC1R
+  .endif
+.endif
+.ifndef  Oc1rs
+.ifdef _OC1RS
+         .equiv  Oc1rs, _OC1RS
+  .endif
+.endif
+.ifndef  Oc2con
+.ifdef _OC2CON
+         .equiv  Oc2con, _OC2CON
+  .endif
+.endif
+.ifndef  Oc2r
+.ifdef _OC2R
+         .equiv  Oc2r, _OC2R
+  .endif
+.endif
+.ifndef  Oc2rs
+.ifdef _OC2RS
+         .equiv  Oc2rs, _OC2RS
+  .endif
+.endif
+.ifndef  Oc3con
+.ifdef _OC3CON
+         .equiv  Oc3con, _OC3CON
+  .endif
+.endif
+.ifndef  Oc3r
+.ifdef _OC3R
+         .equiv  Oc3r, _OC3R
+  .endif
+.endif
+.ifndef  Oc3rs
+.ifdef _OC3RS
+         .equiv  Oc3rs, _OC3RS
+  .endif
+.endif
+.ifndef  Oc4con
+.ifdef _OC4CON
+         .equiv  Oc4con, _OC4CON
+  .endif
+.endif
+.ifndef  Oc4r
+.ifdef _OC4R
+         .equiv  Oc4r, _OC4R
+  .endif
+.endif
+.ifndef  Oc4rs
+.ifdef _OC4RS
+         .equiv  Oc4rs, _OC4RS
+  .endif
+.endif
+.ifndef  Oc5con
+.ifdef _OC5CON
+         .equiv  Oc5con, _OC5CON
+  .endif
+.endif
+.ifndef  Oc5r
+.ifdef _OC5R
+         .equiv  Oc5r, _OC5R
+  .endif
+.endif
+.ifndef  Oc5rs
+.ifdef _OC5RS
+         .equiv  Oc5rs, _OC5RS
+  .endif
+.endif
+.ifndef  Oc6con
+.ifdef _OC6CON
+         .equiv  Oc6con, _OC6CON
+  .endif
+.endif
+.ifndef  Oc6r
+.ifdef _OC6R
+         .equiv  Oc6r, _OC6R
+  .endif
+.endif
+.ifndef  Oc6rs
+.ifdef _OC6RS
+         .equiv  Oc6rs, _OC6RS
+  .endif
+.endif
+.ifndef  Oc7con
+.ifdef _OC7CON
+         .equiv  Oc7con, _OC7CON
+  .endif
+.endif
+.ifndef  Oc7r
+.ifdef _OC7R
+         .equiv  Oc7r, _OC7R
+  .endif
+.endif
+.ifndef  Oc7rs
+.ifdef _OC7RS
+         .equiv  Oc7rs, _OC7RS
+  .endif
+.endif
+.ifndef  Oc8con
+.ifdef _OC8CON
+         .equiv  Oc8con, _OC8CON
+  .endif
+.endif
+.ifndef  Oc8r
+.ifdef _OC8R
+         .equiv  Oc8r, _OC8R
+  .endif
+.endif
+.ifndef  Oc8rs
+.ifdef _OC8RS
+         .equiv  Oc8rs, _OC8RS
+  .endif
+.endif
+.ifndef  Osccon
+.ifdef _OSCCON
+         .equiv  Osccon, _OSCCON
+  .endif
+.endif
+.ifndef  Ovdcon
+.ifdef _OVDCON
+         .equiv  Ovdcon, _OVDCON
+  .endif
+.endif
+.ifndef  Pch
+.ifdef _PCH
+         .equiv  Pch, _PCH
+  .endif
+.endif
+.ifndef  Pcl
+.ifdef _PCL
+         .equiv  Pcl, _PCL
+  .endif
+.endif
+.ifndef  Pdc1
+.ifdef _PDC1
+         .equiv  Pdc1, _PDC1
+  .endif
+.endif
+.ifndef  Pdc2
+.ifdef _PDC2
+         .equiv  Pdc2, _PDC2
+  .endif
+.endif
+.ifndef  Pdc3
+.ifdef _PDC3
+         .equiv  Pdc3, _PDC3
+  .endif
+.endif
+.ifndef  Pdc4
+.ifdef _PDC4
+         .equiv  Pdc4, _PDC4
+  .endif
+.endif
+.ifndef  Pmd1
+.ifdef _PMD1
+         .equiv  Pmd1, _PMD1
+  .endif
+.endif
+.ifndef  Pmd2
+.ifdef _PMD2
+         .equiv  Pmd2, _PMD2
+  .endif
+.endif
+.ifndef  Porta
+.ifdef _PORTA
+         .equiv  Porta, _PORTA
+  .endif
+.endif
+.ifndef  Portb
+.ifdef _PORTB
+         .equiv  Portb, _PORTB
+  .endif
+.endif
+.ifndef  Portc
+.ifdef _PORTC
+         .equiv  Portc, _PORTC
+  .endif
+.endif
+.ifndef  Portd
+.ifdef _PORTD
+         .equiv  Portd, _PORTD
+  .endif
+.endif
+.ifndef  Porte
+.ifdef _PORTE
+         .equiv  Porte, _PORTE
+  .endif
+.endif
+.ifndef  Portf
+.ifdef _PORTF
+         .equiv  Portf, _PORTF
+  .endif
+.endif
+.ifndef  Portg
+.ifdef _PORTG
+         .equiv  Portg, _PORTG
+  .endif
+.endif
+.ifndef  Poscnt
+.ifdef _POSCNT
+         .equiv  Poscnt, _POSCNT
+  .endif
+.endif
+.ifndef  Pr1
+.ifdef _PR1
+         .equiv  Pr1, _PR1
+  .endif
+.endif
+.ifndef  Pr2
+.ifdef _PR2
+         .equiv  Pr2, _PR2
+  .endif
+.endif
+.ifndef  Pr3
+.ifdef _PR3
+         .equiv  Pr3, _PR3
+  .endif
+.endif
+.ifndef  Pr4
+.ifdef _PR4
+         .equiv  Pr4, _PR4
+  .endif
+.endif
+.ifndef  Pr5
+.ifdef _PR5
+         .equiv  Pr5, _PR5
+  .endif
+.endif
+.ifndef  Psvpag
+.ifdef _PSVPAG
+         .equiv  Psvpag, _PSVPAG
+  .endif
+.endif
+.ifndef  Ptcon
+.ifdef _PTCON
+         .equiv  Ptcon, _PTCON
+  .endif
+.endif
+.ifndef  Ptmr
+.ifdef _PTMR
+         .equiv  Ptmr, _PTMR
+  .endif
+.endif
+.ifndef  Ptper
+.ifdef _PTPER
+         .equiv  Ptper, _PTPER
+  .endif
+.endif
+.ifndef  Pwmcon1
+.ifdef _PWMCON1
+         .equiv  Pwmcon1, _PWMCON1
+  .endif
+.endif
+.ifndef  Pwmcon2
+.ifdef _PWMCON2
+         .equiv  Pwmcon2, _PWMCON2
+  .endif
+.endif
+.ifndef  Qeicon
+.ifdef _QEICON
+         .equiv  Qeicon, _QEICON
+  .endif
+.endif
+.ifndef  Rcon
+.ifdef _RCON
+         .equiv  Rcon, _RCON
+  .endif
+.endif
+.ifndef  Rcount
+.ifdef _RCOUNT
+         .equiv  Rcount, _RCOUNT
+  .endif
+.endif
+.ifndef  Sevtcmp
+.ifdef _SEVTCMP
+         .equiv  Sevtcmp, _SEVTCMP
+  .endif
+.endif
+.ifndef  Spi1buf
+.ifdef _SPI1BUF
+         .equiv  Spi1buf, _SPI1BUF
+  .endif
+.endif
+.ifndef  Spi1con
+.ifdef _SPI1CON
+         .equiv  Spi1con, _SPI1CON
+  .endif
+.endif
+.ifndef  Spi1stat
+.ifdef _SPI1STAT
+         .equiv  Spi1stat, _SPI1STAT
+  .endif
+.endif
+.ifndef  Spi2buf
+.ifdef _SPI2BUF
+         .equiv  Spi2buf, _SPI2BUF
+  .endif
+.endif
+.ifndef  Spi2con
+.ifdef _SPI2CON
+         .equiv  Spi2con, _SPI2CON
+  .endif
+.endif
+.ifndef  Spi2stat
+.ifdef _SPI2STAT
+         .equiv  Spi2stat, _SPI2STAT
+  .endif
+.endif
+.ifndef  Splim
+.ifdef _SPLIM
+         .equiv  Splim, _SPLIM
+  .endif
+.endif
+.ifndef  Sr
+.ifdef _SR
+         .equiv  Sr, _SR
+  .endif
+.endif
+.ifndef  T1con
+.ifdef _T1CON
+         .equiv  T1con, _T1CON
+  .endif
+.endif
+.ifndef  T2con
+.ifdef _T2CON
+         .equiv  T2con, _T2CON
+  .endif
+.endif
+.ifndef  T3con
+.ifdef _T3CON
+         .equiv  T3con, _T3CON
+  .endif
+.endif
+.ifndef  T4con
+.ifdef _T4CON
+         .equiv  T4con, _T4CON
+  .endif
+.endif
+.ifndef  T5con
+.ifdef _T5CON
+         .equiv  T5con, _T5CON
+  .endif
+.endif
+.ifndef  Tblpag
+.ifdef _TBLPAG
+         .equiv  Tblpag, _TBLPAG
+  .endif
+.endif
+.ifndef  Tmr1
+.ifdef _TMR1
+         .equiv  Tmr1, _TMR1
+  .endif
+.endif
+.ifndef  Tmr2
+.ifdef _TMR2
+         .equiv  Tmr2, _TMR2
+  .endif
+.endif
+.ifndef  Tmr3
+.ifdef _TMR3
+         .equiv  Tmr3, _TMR3
+  .endif
+.endif
+.ifndef  Tmr3hld
+.ifdef _TMR3HLD
+         .equiv  Tmr3hld, _TMR3HLD
+  .endif
+.endif
+.ifndef  Tmr4
+.ifdef _TMR4
+         .equiv  Tmr4, _TMR4
+  .endif
+.endif
+.ifndef  Tmr5
+.ifdef _TMR5
+         .equiv  Tmr5, _TMR5
+  .endif
+.endif
+.ifndef  Tmr5hld
+.ifdef _TMR5HLD
+         .equiv  Tmr5hld, _TMR5HLD
+  .endif
+.endif
+.ifndef  Trisa
+.ifdef _TRISA
+         .equiv  Trisa, _TRISA
+  .endif
+.endif
+.ifndef  Trisb
+.ifdef _TRISB
+         .equiv  Trisb, _TRISB
+  .endif
+.endif
+.ifndef  Trisc
+.ifdef _TRISC
+         .equiv  Trisc, _TRISC
+  .endif
+.endif
+.ifndef  Trisd
+.ifdef _TRISD
+         .equiv  Trisd, _TRISD
+  .endif
+.endif
+.ifndef  Trise
+.ifdef _TRISE
+         .equiv  Trise, _TRISE
+  .endif
+.endif
+.ifndef  Trisf
+.ifdef _TRISF
+         .equiv  Trisf, _TRISF
+  .endif
+.endif
+.ifndef  Trisg
+.ifdef _TRISG
+         .equiv  Trisg, _TRISG
+  .endif
+.endif
+.ifndef  U1brg
+.ifdef _U1BRG
+         .equiv  U1brg, _U1BRG
+  .endif
+.endif
+.ifndef  U1mode
+.ifdef _U1MODE
+         .equiv  U1mode, _U1MODE
+  .endif
+.endif
+.ifndef  U1rxreg
+.ifdef _U1RXREG
+         .equiv  U1rxreg, _U1RXREG
+  .endif
+.endif
+.ifndef  U1sta
+.ifdef _U1STA
+         .equiv  U1sta, _U1STA
+  .endif
+.endif
+.ifndef  U1txreg
+.ifdef _U1TXREG
+         .equiv  U1txreg, _U1TXREG
+  .endif
+.endif
+.ifndef  U2brg
+.ifdef _U2BRG
+         .equiv  U2brg, _U2BRG
+  .endif
+.endif
+.ifndef  U2mode
+.ifdef _U2MODE
+         .equiv  U2mode, _U2MODE
+  .endif
+.endif
+.ifndef  U2rxreg
+.ifdef _U2RXREG
+         .equiv  U2rxreg, _U2RXREG
+  .endif
+.endif
+.ifndef  U2sta
+.ifdef _U2STA
+         .equiv  U2sta, _U2STA
+  .endif
+.endif
+.ifndef  U2txreg
+.ifdef _U2TXREG
+         .equiv  U2txreg, _U2TXREG
+  .endif
+.endif
+.ifndef  Wreg0
+.ifdef _WREG0
+         .equiv  Wreg0, _WREG0
+  .endif
+.endif
+.ifndef  Wreg1
+.ifdef _WREG1
+         .equiv  Wreg1, _WREG1
+  .endif
+.endif
+.ifndef  Wreg10
+.ifdef _WREG10
+         .equiv  Wreg10, _WREG10
+  .endif
+.endif
+.ifndef  Wreg11
+.ifdef _WREG11
+         .equiv  Wreg11, _WREG11
+  .endif
+.endif
+.ifndef  Wreg12
+.ifdef _WREG12
+         .equiv  Wreg12, _WREG12
+  .endif
+.endif
+.ifndef  Wreg13
+.ifdef _WREG13
+         .equiv  Wreg13, _WREG13
+  .endif
+.endif
+.ifndef  Wreg14
+.ifdef _WREG14
+         .equiv  Wreg14, _WREG14
+  .endif
+.endif
+.ifndef  Wreg15
+.ifdef _WREG15
+         .equiv  Wreg15, _WREG15
+  .endif
+.endif
+.ifndef  Wreg2
+.ifdef _WREG2
+         .equiv  Wreg2, _WREG2
+  .endif
+.endif
+.ifndef  Wreg3
+.ifdef _WREG3
+         .equiv  Wreg3, _WREG3
+  .endif
+.endif
+.ifndef  Wreg4
+.ifdef _WREG4
+         .equiv  Wreg4, _WREG4
+  .endif
+.endif
+.ifndef  Wreg5
+.ifdef _WREG5
+         .equiv  Wreg5, _WREG5
+  .endif
+.endif
+.ifndef  Wreg6
+.ifdef _WREG6
+         .equiv  Wreg6, _WREG6
+  .endif
+.endif
+.ifndef  Wreg7
+.ifdef _WREG7
+         .equiv  Wreg7, _WREG7
+  .endif
+.endif
+.ifndef  Wreg8
+.ifdef _WREG8
+         .equiv  Wreg8, _WREG8
+  .endif
+.endif
+.ifndef  Wreg9
+.ifdef _WREG9
+         .equiv  Wreg9, _WREG9
+  .endif
+.endif
+.ifndef  Xbrev
+.ifdef _XBREV
+         .equiv  Xbrev, _XBREV
+  .endif
+.endif
+.ifndef  Xmodend
+.ifdef _XMODEND
+         .equiv  Xmodend, _XMODEND
+  .endif
+.endif
+.ifndef  Xmodsrt
+.ifdef _XMODSRT
+         .equiv  Xmodsrt, _XMODSRT
+  .endif
+.endif
+.ifndef  Ymodend
+.ifdef _YMODEND
+         .equiv  Ymodend, _YMODEND
+  .endif
+.endif
+.ifndef  Ymodsrt
+.ifdef _YMODSRT
+         .equiv  Ymodsrt, _YMODSRT
+  .endif
+.endif

@@ -1,0 +1,165 @@
+;   ***************************************************************
+;   * Copyright (C) 2018, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32_fixu_ins"]] then
+  /const fp32_fixu_ins bool = true
+
+.section .code_fp32_fixu, code
+;*******************************************************************************
+;
+;   C function FP32_FIXU (FP, FB)
+;
+;   Convert a floating point value to 32 bit unsigned fixed point.  FP is the
+;   floating point value with FLOAT data type.  FB is the number of fraction
+;   bits the resulting fixed point number should have.  FB is a signed 16 bit
+;   integer.  Negative values of FB indicate that the binary point is that many
+;   bits to the right of the returned value.
+;
+;   The result is rounded to the nearest representable value.
+;
+;   Assembler interface:
+;
+;     The floating point value is passed in W1:W0, and the number of fraction
+;     bits in W2.  The fixed point result is returned in W1:W0.  All other
+;     registers are preserved, even though XC16 would allow trashing W2-W7.
+;
+         glbsubd fp32_fixu, regf2 | regf3 | regf4
+
+         btsc    w1, #15     ;input value is positive ?
+         jump    fixu_min    ;negative, underflow, return min possible value
+;
+;   Compute the total number of bits to shift the mantissa left from its
+;   starting position.  The mantissa, as positioned in the original floating
+;   point number with the vestigual 1 bit added, is shifted 23 bits left from
+;   its integer representation.  The power of 2 floating point exponent
+;   indicates more bits to shift left.  The raw exponent field has 127 added
+;   to it as stored in the floating point number.  The final computation for
+;   how many bits to shift left is shown below.  EXP is the power of 2 exponent,
+;   and EXPF the 0-255 exponent field value.  W2 is contains the FB call
+;   argument.
+;
+;     shift left bits
+;
+;       = W2 + EXP - 23
+;
+;       = W2 + (EXPF - 127) - 23
+;
+;       = W2 + EXPF - 150
+;
+         lsr     w1, #7, w3  ;extract EXPF into W3
+         sub     #150, w3
+         add     w2, w3, w2  ;make final left-shift amount in W2
+         bra     n, fixu_shiftr ;negative, need to shift right ?
+;
+;   W2 contains the number of bits to shift the mantissa left from its position
+;   in the floating point number.  W2 is guaranteed to be 0 or positive.
+;
+         cp      w2, #8      ;compare to max value before overflow
+         bra     gt, fixu_max ;overflow, return max possible value
+
+         and     #0x7F, w1   ;mask in just the mantissa bits
+         bset    w1, #7      ;add the implied 1 integer part
+
+         cp0     w2
+         bra     z, fixu_leave ;no shift, return the value as is ?
+         ;
+         ;   Shifting 1 to 8 bits left.
+         ;
+         sl      w1, w2, w1  ;move bits from high word into place
+         subr    w2, #16, w3 ;make 16-shift in W3
+         lsr     w0, w3, w3  ;high word bits from low word into W3
+         ior     w1, w3, w1  ;merge them into the high word
+         sl      w0, w2, w0  ;make final low word value
+         jump    fixu_leave
+;
+;   W2 contains the negative of the number of bits to shift the mantissa right
+;   from its position in the floating point number.  W2 is guaranteed to be -1
+;   or less.
+;
+fixu_shiftr:
+         subr    w2, #0, w2  ;make positive number of bits to shift right
+         cp      w2, #24     ;compare to min value that shifts out all bits
+         bra     gt, fixu_min ;underflow, return minimum result ?
+         bra     z, fixu_1   ;integer value just shifted out, return rounded result ?
+         ;
+         ;   Shifting 1 to 23 bits right.
+         ;
+         and     #0x7F, w1   ;mask in just the mantissa bits
+         bset    w1, #7      ;add the implied 1 integer part
+         cp      w2, #16     ;compare to whole low word shifted off
+         bra     lt, fixu_right_lt16 ;whole low word not shifted off ?
+         bra     z, fixu_right_16 ;shifting exactly 16 bits right ?
+         ;
+         ;   Shifting 17 to 23 bits right.  Only the high word matters to the
+         ;   result, which is the high word shifted 1 to 7 bits right.
+         ;
+         sub     #17, w2     ;make shift value to leave rounding bit in LSB
+         lsr     w1, w2, w1  ;leave W1 shifted 1 bit left from result
+         lsr     w1, #1, w0  ;move original bits into place in low word
+         btst.c  w1, #0      ;get rounding bit into C
+         addc    #0, w0      ;do the rounding
+         mov     #0, w1      ;set fixed value of the result high word
+         jump    fixu_leave
+         ;
+         ;   Shifting exactly 16 bits right.  The high word will be the result,
+         ;   after rounding to the high bit of the low word.
+         ;
+fixu_right_16:
+         btst.c  w0, #15     ;move the rounding bit into C
+         addc    w1, #0, w0  ;do the rouding and move word into position
+         mov     #0, w1      ;set fixed value of the result high word
+         jump    fixu_leave
+         ;
+         ;   Shifting 1 to 15 bits right.
+         ;
+fixu_right_lt16:
+         sub     w2, #1, w3  ;make one less bits to shift in W3
+         lsr     w0, w3, w3  ;save rounding bit in LSB of W3
+         lsr     w0, w2, w0  ;shift low word into position
+         subr    w2, #16, w4 ;make shift amount for high word into low word
+         sl      w1, w4, w4  ;make fragment of high word that goes into low word
+         ior     w0, w4, w0  ;merge it into the low word
+         lsr     w1, w2, w1  ;shift high word into place
+         btst.c  w3, #0      ;move the rounding bit into C
+         addc    #0, w0      ;do the rounding
+         addc    #0, w1
+
+fixu_leave:                  ;final result is in W1:W0
+         leaverest
+;
+;   Underflow.  Return the minimum representable value of 0.
+;
+fixu_min:
+         mov     #0, w0
+         mov     #0, w1
+         jump    fixu_leave
+;
+;   Overflow.  Return the maximum representable value of FFFFFFFFh.
+;
+fixu_max:
+         mov     #0xFFFF, w0
+         mov     #0xFFFF, w1
+         jump    fixu_leave
+;
+;   Return exactly 1.  This is the result if the highest bit is shifted right
+;   just past the LSB.  Due to rounding, this always results in 1.
+;
+fixu_1:
+         mov     #1, w0
+         mov     #0, w1
+         jump    fixu_leave
+
+  /endif

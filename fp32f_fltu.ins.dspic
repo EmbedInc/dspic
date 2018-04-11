@@ -1,0 +1,87 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32f_fltu_ins"]] then
+  /const fp32f_fltu_ins bool = true
+
+.section .code_fp32f_fltu, code
+;*******************************************************************************
+;
+;   Subroutine FP32F_FLTU
+;
+;   Convert the 32 bit unsigned fixed point value in W1:W0 to floating point.
+;   W2 indicates the number of fraction bits in W1:W0.  W2 may be negative to
+;   indicate extra 0 bits to the right of W1:W0 before the point.  The floating
+;   point result is left in W1:W0.
+;
+         glbsub  fp32f_fltu, regf2 | regf3
+
+         ior     w0, w1, w3
+         bra     z, flt_0    ;input number is 0 ?
+
+         mov     #32, w3
+         sub     w3, w2, w2  ;init exponent for point left of the 32 bits
+         bra     ov, flt_0   ;return 0 on exponent underflow
+         ff1l    w1, w3      ;find most significant 1 in high word
+         bra     nc, flt_have1 ;found the highest 1 ?
+         ;
+         ;   The high word contains no 1.  Shift the low word into the high
+         ;   word, adjust the exponent accordingly, and find the first 1 in
+         ;   the new high word.  This word is guaranteed to contain a 1 because
+         ;   the entire value was previously found to be non-zero.
+         ;
+         sub     #16, w2     ;update the exponent accordingly
+         bra     ov, flt_0   ;return 0 on exponent underflow
+         mov     w0, w1      ;shift W1:W0 left 16 bits
+         mov     #0, w0
+         ff1l    w1, w3      ;find the first 1 in the new high word
+flt_have1:                   ;W3 is the 1-16 index of first 1 bit in high word
+;
+;   W3 contains the number of bits to shift W1:W0 left so that the first 1 bit
+;   is is shifted out.  W2 contains the exponent for W1:W0 with the point
+;   immediately to the left of the highest bit in W1:W0.
+;
+;   Shift W1:W0 left by W3 bits.  The resulting high word (W1) will be the
+;   mantissa field with the low word (W0) unused.  The shift therefore need
+;   not produce the correct result in W0.  The exponent value in W2 is updated
+;   according to the amount shifted.
+;
+         sub     w2, w3, w2  ;adjust exponent to amount that will be shifted
+         bra     ov, flt_0   ;return 0 on exponent underflow
+         sl      w1, w3, w1  ;get bits from high word into place
+         subr    w3, #16, w3 ;make low word right shift amount
+         lsr     w0, w3, w0  ;move contribution from low word into position
+         ior     w1, w0, w0  ;merge to make final mantissa value
+
+         mov     #16384, w1
+         add     w2, w1, w1  ;make final exponent field value
+         btsc    w1, #15     ;exponent field didn't overflow ?
+         jump    flt_max     ;did overflow, return max possible value
+
+flt_leave:                   ;common exit point
+         leaverest
+
+flt_0:                       ;return zero
+         mov     #0, w1
+         mov     #0, w0
+         jump    flt_leave
+
+flt_max:                     ;return maximum value
+         mov     #0x7FFF, w1
+         mov     #0xFFFF, w0
+         jump    flt_leave
+
+  /endif

@@ -1,0 +1,125 @@
+;   ***************************************************************
+;   * Copyright (C) 2012, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Implements the required basics of a EmCan host controller, as apposed to a
+;   end device.  There must be exactly one host controller on a EmCan bus.
+;   EmCan is Embed Inc's multiple-device protocol layered on CAN.  This module
+;   requires a procedural interface to the CAN bus to be available, such as is
+;   exported by the the standard CAN module.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   emcan_reset = ""    ;routine to call after bus reset
+/const   emcan_assign = ""   ;routine to call on assignment or enumeration
+/const   emcan_unassign = "" ;routine to call on adr unassign
+/const   emcan_appframe = "" ;routine to process app-level received frame
+/const   emcan_multierr = "" ;routine to call on multi-host error
+/const   emcan_strin_reset = "" ;call when stream from node is reset
+/const   emcan_strin_start = "" ;call before stream bytes from bus node
+/const   emcan_strin_byte = "" ;call each stream byte from a bus node
+/const   emcan_strin_end = "" ;call after stream bytes from a bus node
+
+/include "(cog)src/dspic/emcanh.ins.dspic"
+
+;*******************************************************************************
+;
+;   CAN frames dispatch tables.
+;
+;   There are separate tables for different types of CAN frames, as defined in
+;   the EmCan specification.  Each table proivdes the addresses of routines to
+;   run to process frames for the opcodes within its range.
+;
+;   The name of each table must remain as shown, and each table must be ended
+;   with TBL_END_APP.
+;
+;   To implement a command, add its entry to the appropriate table with the
+;   CANCMD macro.  This macro takes two parameters, the opcode and the address
+;   of the frame processing routine to run.  The processing routine should be
+;   external to this module.  Application code should not be added to this
+;   module since there is no guarantee what local symbol names may be defined in
+;   the EMCAN.INS.ASPIC include file, which is included above.
+;
+;   For example, a valid table entry would be:
+;
+;      cancmd  12, ccmd_dostuff
+;
+;   In this example, when a frame is received with opcode 12 and that meets the
+;   conditions specified for the particular table, the EmCan task will jump to
+;   CCMD_DOSTUFF to process the CAN frame.
+;
+;   The tables below are for the commands reserved for application use by EmCan.
+;   The commands used by EmCan are handled in the EMCANH.INS.ASPIC file and not
+;   surfaced here.
+;
+;   If not matching opcode is found the table that applies to a particular
+;   frame, then the generic application frame processing routine will be called
+;   if one was provided by setting the preprocessor string constant
+;   EMCAN_APPFRAME to the name of the routine.  If no such routine is supplied
+;   and no entry found in the appropriate table, then the received CAN frame is
+;   discarded.
+;
+
+;***************************************
+;
+;   Node-specific standard (11 bit ID) data frames.  The opcode is the high 4
+;   bits of the frame ID, so can be 0-15.
+;
+tbl_std:
+         tbl_end_app
+;
+;   Remote request frames for the above.
+;
+tbl_stdrtr:
+         tbl_end_app
+
+;***************************************
+;
+;   Broadcast frames.  These are extended (29 bit ID) data frames with the node
+;   address field in the ID set to 0.  The opcode is the high 10 bits of the ID,
+;   so can be 0-1023.
+;
+tbl_extb:
+         tbl_end_app
+;
+;   Remote request frames for the above.
+;
+tbl_extbrtr:
+         tbl_end_app
+
+;***************************************
+;
+;   Node-specific extended (29 bit ID) data frames.  The opcode is the high 10
+;   bits of the ID.
+;
+;   The last 16 opcodes (1008 - 1023) are reserved for use by the EmCan
+;   subsystem.  EmCan-specific frames are handled separately and are not
+;   dispatched thru these tables.  Valid opcodes for these tables are therefore
+;   0 - 1007.  Opcodes 992 - 1007 are reserved for test mode, not normal
+;   operation.
+;
+tbl_ext:
+         tbl_end_app
+;
+;   Remote request frames for the above.
+;
+tbl_extrtr:
+         tbl_end_app
+
+.end

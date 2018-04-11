@@ -1,0 +1,391 @@
+;   ***************************************************************
+;   * Copyright (C) 2010, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Task management.
+;
+;   The routines in this module implement a cooperative multi-tasking system.
+;   For context switching speed, each task has its own stack.
+;
+;   The task scheduler is of the "round robin" type.  Each call to TASK_YIELD
+;   switches the context to the next task in the list in a circular fashion.
+;
+;   The constant TSKSAVE defined in the include file indicates which registers
+;   will be preserved accross a task switch.
+;
+;   The following preprocessor state can be set to customize this module:
+;
+;     MAXTASKS, integer
+;
+;       The maximum number of tasks to support, must be 0 to 31.  The default is
+;       4.
+;
+;     GLBTASKNUM, bool
+;
+;       When TRUE, the global variable CURRTASK is created and will be
+;       maintained to contain the current task number.  The current task number
+;       is always 0 to MAXTASKS-1.  The default is TRUE.
+;
+;     ENDLIM, integer
+;
+;       Set up the system to create a stack error trap when only this many bytes
+;       are left on the stack and a push is attempted.  The default is 6.
+;
+
+;*******************************************************************************
+;
+;   Derived constants.
+;
+/if [not [exist "maxtasks"]] then
+  /const maxtasks integer = 4
+  /endif
+/if [not [exist "glbtasknum"]] then
+  /const glbtasknum bool = true
+  /endif
+/if [not [exist "endlim"]] then
+  /const endlim integer = 6
+  /endif
+
+.equiv   c30save, 0x7F00     ;mask of registers C30 requires subroutines to save
+.equiv   xc16save, 0x7F00    ;mask of registers XC16 requires subroutines to save
+.equiv   endlim, [v endlim]
+;
+;   Data structure for the static state kept per task.
+;
+/call struct_start
+         field   tsk_stkpnt  ;stack pointer to resume task
+         field   tsk_splim   ;appropriate SPLIM value for task's stack
+
+.equiv   tsksize, struct_offset ;size of the per-task data structure
+;
+;   Derived constants.
+;
+.equiv   maxtasks, [v maxtasks]
+.equiv   glbtasknum, [if glbtasknum 1 0]
+
+/show "  Configured for up to " maxtasks " concurrent tasks"
+/show "  CURRTASK " [if glbtasknum "enabled" "disabled"]
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_task, bss
+
+.if glbtasknum
+allocg   currtask, 2, 2      ;0-N number of currently running task
+  .endif
+
+;*******************
+;
+;   Local state.
+;
+alloc    tasks,  tsksize * maxtasks, 2 ;tasks table, per-task state for each task
+alloc    after_p, 0, 2       ;first address after tasks table
+
+alloc    task_p, 2, 2        ;adr of task table entry for current task
+alloc    last_p, 2, 2        ;pointer to last used task table entry
+
+.if debug
+         .global tasks
+         .global task_p
+         .global last_p
+  .endif
+
+
+.section .code_task, code
+;*******************************************************************************
+;
+;   Subroutine TASK_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;   This must be the first call made to this module.  The first task slot
+;   will be reserved for the task making this call.  The remaining task
+;   slots will be initialized to empty.  Calls to TASK_YIELD are allowed
+;   after TASK_INIT, although no task switching will take place until
+;   at least one other task is created by calling TASK_NEW.
+;
+         glbsub  task_init, regf0
+
+         mov     #tasks, w0
+         mov     w0, task_p  ;init pointer to table entry for current task
+         mov     w0, last_p  ;init pointer to last valid table entry
+         mov     Splim, w0   ;set saved stack limit value for this task
+         mov     w0, tasks + tsk_splim
+
+.if glbtasknum
+         mov     #0, w0
+         mov     w0, currtask ;indicate task 0 is now running
+  .endif
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TASK_NEW
+;
+;   Create a new task.  The current values of the registers indicated by TSKSAVE
+;   will be the intial values of those registers in the task.  These registers
+;   can be used to pass parameters to the task.
+;
+;   Software error ERR_NOTASK is signalled if no empty task slot is available.
+;
+;   The call parameters are:
+;
+;     W13  -  Size of new task stack, must be even.
+;     W14  -  Stack start address for the new task.
+;
+;   The new task start address will be immediately after the call to TASK_NEW.
+;   TASK_NEW will return 2 instruction words (4 addresses) after the call.  This
+;   provides an opportunity to put a GOTO immediately after the TASK_NEW call.
+;   The first instruction executed by the new task will be the GOTO, whereas
+;   TASK_NEW will return to immediately after the GOTO.
+;
+;   The existing task will continue to run until TASK_YIELD is called.
+;
+         glbsub  task_new, regf0 | regf14
+;
+;   Update LAST_P to the next unused task table entry.  Abort if LAST_P is
+;   already at the last allocated task table entry.
+;
+         mov     last_p, w0  ;get pointer to current last table entry
+         add     #tsksize, w0 ;make pointer to next table entry
+         mov     #after_p, w14 ;get first address past end of table
+         cp      w0, w14     ;compare new table entry address to past table adr
+         bra     geu, tkn_abort ;task table is already full ?
+         mov     w0, last_p  ;update pointer to last used task table entry
+;
+;   Initialize the stack of the new task.  The stack will be set up so that to
+;   restart the task, the registers indicated by TSKSAVE are restored, then a
+;   RETURN is performed.  This means the task start address is pushed first,
+;   then the TSKSAVE registers.
+;
+;   Our stack currently looks like this:
+;
+;     [W15 - 8] --> return address low word
+;     [W15 - 6] --> return address high word
+;     [W15 - 4] --> saved W0
+;     [W15 - 2] --> saved W14 (start of new task stack)
+;     [W15]     --> empty
+;
+         ;
+         ;   Push the task start address onto the task stack.
+         ;
+         mov     [w15 - 2], w14 ;set W14 as stack pointer for the new task
+         mov     [w15 - 8], w0 ;get task start address low word
+         mov     w0, [w14++] ;push it onto new task stack
+         mov     [w15 - 6], w0 ;get task start address high word
+         mov     w0, [w14++] ;push it onto new task stack
+         ;
+         ;   Push the registers saved accross task switches onto the stack
+         ;   of the new task.
+         ;
+         mov     [w15 - 4], w0 ;restore original W0 value
+
+.irp     ii,     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 ;once for each reg W0-W13
+.if tsksave & (1 << \ii)     ;this register will be saved ?
+         mov     w\ii, [w14++] ;push this register onto task stack
+  .endif
+         .endr
+
+.if tsksave & (1 << 14)      ;W14 needs to be saved on new stack ?
+         mov     [w15 - 2], w0 ;get original W14 value
+         mov     w0, [w14++] ;push it onto the new task stack
+  .endif
+         ;
+         ;   Push any application specific data that is to be saved accross
+         ;   task swaps onto the new task stack.  W14 is the stack pointer
+         ;   and W0 is available for scratch.
+         ;
+
+;
+;   Fill in the task descriptor for the new task.  LAST_P is pointing to the
+;   task descriptor.
+;
+         mov     last_p, w0  ;point W0 to the task descriptor
+         mov     w14, [w0 + tsk_stkpnt] ;save the task stack pointer
+         mov     [w15 - 2], w14 ;get start address of new task stack
+         add     w14, w13, w14 ;make first address past end of stack
+         sub     #endlim, w14 ;make SPLIM value for this stack
+         mov     w14, [w0 + tsk_splim] ;save it in the task descriptor
+;
+;   Return to 4 addresses after the call.
+;
+         mov     [w15 - 8], w0 ;get return address low word
+         add     #4, w0      ;make new return address low word
+         mov     w0, [w15 - 8] ;replace it on the stack
+
+         mov     [w15 - 6], w0 ;get return address high word
+         addc    #0, w0      ;make new return address high word
+         mov     w0, [w15 - 6] ;replace it on the stack
+
+         leaverest
+;
+;   The task table was already full.  Signal software error ERR_NOTASK.
+;
+tkn_abort:
+         swerr   err_notask  ;signal the error
+
+;*******************************************************************************
+;
+;   Subroutine TASK_YIELD
+;
+;   End the time slice of the current task, run all other tasks for a time
+;   slice, then resume the caller's task and return.  Only those registers
+;   indicated by TSKSAVE will be preserved.
+;
+/if using_c30 then
+.if ((tsknsave & c30save) == 0) ;TASK_YIELD saves all registers required by C30 ?
+         glbent  _task_yield ;C callable TASK_YIELD is synonym for ASM TASK_YIELD
+  .endif
+  /endif
+
+/if using_xc16 then
+.if ((tsknsave & xc16save) == 0) ;TASK_YIELD saves all registers required by XC16 ?
+         glbent  _task_yield ;C callable TASK_YIELD is synonym for ASM TASK_YIELD
+  .endif
+  /endif
+
+.if (tsknsave == 0)          ;all registers already saved by TASK_YIELD ?
+         glbent  task_yield_save
+  .endif
+         glbsub  task_yield
+;
+;   Save all old task state that is saved accross task swaps onto the stack.
+;
+         ;
+         ;   Save all the registers listed in TSKSAVE.
+         ;
+.irp     ii,     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 ;once for each reg
+.if tsksave & (1 << \ii)     ;this register will be saved ?
+         push    w\ii        ;push this register onto the stack
+  .endif
+         .endr
+         ;
+         ;   Push any application specific data that is to be saved accross
+         ;   task swaps onto the stack.
+         ;
+
+;
+;   Save the stack pointer and SPLIM value in the task table entry for this task.
+;
+         mov     task_p, w0  ;point W0 to table entry for the current task
+         mov     w15, [w0 + tsk_stkpnt] ;write the stack pointer into the table entry
+         mov     Splim, w1
+         mov     w1, [w0 + tsk_splim] ;write the SPLIM value into the table entry
+;
+;   Advance to the task pointer to the next task.  W0 is the task pointer for
+;   the current task.
+;
+.if glbtasknum
+         mov     currtask, w2 ;get 0-N number of the current task
+  .endif
+
+         mov     last_p, w1  ;get pointer to last entry in the table
+         cp      w0, w1      ;compare current pointer to last pointer
+         bra     geu, ylast  ;currently at the last task ?
+         ;
+         ;   Not at last task in table, advance to next.
+         ;
+         add     #tsksize, w0 ;make pointer to next table entry
+.if glbtasknum
+         add     #1, w2      ;update number for this task table entry
+  .endif
+         bra     ynew        ;now at next task
+         ;
+         ;   At last task in table, wrap back to first.
+         ;
+ylast:
+         mov     #tasks, w0  ;point to first task in the table
+.if glbtasknum
+         mov     #0, w2      ;first task table entry is task number 0
+  .endif
+
+ynew:                        ;W0 points to task table entry of the new task
+.if glbtasknum
+         mov     w2, currtask ;update global current task number
+  .endif
+         mov     w0, task_p  ;update pointer to task table entry for current task
+         disi    #3
+         mov     [w0 + tsk_splim], w1 ;get the SPLIM value for this stack
+         mov     w1, Splim   ;set the hardware limit for this stack
+         mov     [w0 + tsk_stkpnt], w15 ;switch to the stack of the new task
+;
+;   Restore the registers indicated by TSKSAVE and other per-task saved state
+;   from the stack, and return from the TASK_YIELD call made by this task.
+;
+         ;
+         ;   Pop any application specific data that is saved accross task
+         ;   swaps off the stack.
+         ;
+
+         ;
+         ;   Restore all the registers listed in TSKSAVE.
+         ;
+.irp     ii,     14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 ;once for each reg
+.if tsksave & (1 << \ii)     ;this register will be saved ?
+         pop     w\ii        ;pop this register from the stack
+  .endif
+         .endr
+         return              ;return from TASK_YIELD of the resumed task
+
+;*******************************************************************************
+;
+;   Subroutine TASK_YIELD_SAVE
+;
+;   Like TASK_YIELD except that all the W registers are preserved, not just the
+;   ones listed in TSKSAVE.
+;
+;   If TASK_YIELD saves all registers, then TASK_YIELD_SAVE has already been
+;   defined as a synonym for TASK_YIELD.
+;
+.if tsknsave
+         glbsub  task_yield_save, tsknsave
+         mcall   task_yield
+         leaverest
+  .endif
+
+;*******************************************************************************
+;
+;   Subroutine _TASK_YIELD
+;
+;   This is the TASK_YIELD entry point visible to C30.  C30 only requires W8-W14
+;   to be preserved by a subroutine.  If the assembler TASK_YIELD preserves
+;   these, then _TASK_YIELD has already been defined as a synonym to TASK_YIELD.
+;   If not, then the C30 callable routine is defined here to save the additional
+;   registers required to be saved by C30 that TASK_YIELD does not save.  The
+;   assembler constant C30SAVE is the mask of registers C30 requires to be
+;   saved.  The preprocessor constant USING_C30 is TRUE if this firmware
+;   includes C30 modules, and _TASK_YIELD must therefore be defined.
+;
+/if using_c30 then           ;this firmware includes C30 modules ?
+.if ((tsknsave & c30save) != 0)
+         glbsub  _task_yield, (tsknsave & c30save)
+         mcall   task_yield
+         leaverest
+  .endif
+  /endif
+
+/if using_xc16 then          ;this firmware includes XC16 modules ?
+.if ((tsknsave & xc16save) != 0)
+         glbsub  _task_yield, (tsknsave & xc16save)
+         mcall   task_yield
+         leaverest
+  .endif
+  /endif

@@ -1,0 +1,9 @@
+;   Define global symbols and possibly additional build-time setup required by
+;   the EMCANH library file.  This file is intended to be included from the main
+;   include file of a project using the EMCANH library module.
+;
+/include "emcan_defs.ins.dspic" ;general definitions for EmCan
+
+/flag    emcanres            ;have EmCan layer reset CAN bus next opportunity
+/flag    emcanenum           ;enumerate the known CAN bus nodes
+/flag    emcanmulti          ;multi-host error detected
