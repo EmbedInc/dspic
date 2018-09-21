@@ -21,8 +21,8 @@
 ;   commands is in the CMD module.
 ;
 ;   The interface to all command routines is the same.  The entry point to each
-;   command processing routine is named CM_xxx.  This naming convention is
-;   not be used elsewhere in the system except for command processing routines.
+;   command processing routine is named CM_xxx.  This naming convention is not
+;   used elsewhere in the system except for command processing routines.
 ;
 ;   Each command processing routine must follow these rules:
 ;

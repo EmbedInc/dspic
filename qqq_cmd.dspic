@@ -26,7 +26,7 @@
 ;
 /const   bufsize integer = 32 ;size of buffer for temp saving command data
 /const   sendnnop integer = 16 ;number of NOP responses to send at startup
-/const   uart_name string = "" ;name given to the UART to use for command stream
+/const   uart_name string = "" ;name of the UART to use for cmd/rsp streams
 .equiv   stacksz, 128        ;UART command processing task stack size
 ;
 ;   Derived constants.
@@ -245,9 +245,9 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   buffer.  Nothing is done if the buffer is already full.  NCMDBUF is udpated
 ;   as appropriate to contain the total number of bytes in the buffer.  Note
 ;   that the buffer is automatically reset to empty before each command routine
-;   is run.  This buffer may only be used by the command processing task in
-;   this module.  It is made global so that command processing routines can be
-;   in other modules.
+;   is run.  This buffer may only be used by the command processing task.  The
+;   buffer is made global so that command processing routines can be in other
+;   modules.
 ;
 /if [> bufsize 0] then
          glbsub  cmd_putbuf, regf1 | regf2
@@ -409,10 +409,6 @@ loop_nop:
 ;
 ;   All command routines are named CM_xxx.  Most simple commands are in the CMDS
 ;   module.
-;
-;   The default CM_NOP dispatch point is in this module (above).  This is the
-;   same as CMD_DONE, where all command processing routines must go to when
-;   done.
 ;
 ;   See the header comments in the CMDS module for the details of the interface
 ;   to command processing routines.

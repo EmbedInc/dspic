@@ -118,7 +118,7 @@ d_tick100ms:
 
 d_tick1s:
 ;
-;   Done checking all event.
+;   Done checking all events.
 ;
          jump    loop_main   ;done with this iteration of this task
 .end

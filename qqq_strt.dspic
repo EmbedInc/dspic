@@ -70,8 +70,8 @@ config   __FGS,  0b1111111111111111
 
 ;*******************************************************************************
 ;
-;   Reserve RAM for the ICD2.  It needs exclusive control over the first
-;   80 bytes.
+;   Reserve RAM for the ICD2.  It needs exclusive control over the first 80
+;   bytes.
 ;
 /if debug_icdram then
 .equiv   __ICD2RAM, 1        ;linker reserves ICD RAM when this symbol defined
