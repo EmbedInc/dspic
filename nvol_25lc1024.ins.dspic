@@ -754,3 +754,5 @@ upd_leave:
          leaverest
 
   /endif                     ;end of create short address routines
+
+/include "(cog)src/dspic/nvol_comm.ins.dspic"

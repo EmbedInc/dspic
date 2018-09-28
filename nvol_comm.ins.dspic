@@ -1,0 +1,89 @@
+;   ***************************************************************
+;   * Copyright (C) 2018, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   This file contains additional routines that are common to all non-volatile
+;   memory implementations.  The C functions are only created if the USING_XC16
+;   pre-processor constant exists and is set to TRUE.
+;
+/if [not [exist "using_xc16"]] then
+  /const using_xc16 bool = False
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine NVOL_SIZE
+;
+;     Return the total number of non-volatile memory bytes in W1:W0.
+;
+;   C function NVOL_SIZE
+;
+;     The 32 bit function value is the size of the non-volatile memory in bytes.
+;
+/if using_xc16
+  /then
+         glbsubd nvol_size
+  /else
+         glbsub  nvol_size
+  /endif
+
+         mov     #[and nvbytes 16#FFFF], w0
+         mov     #[shiftr nvbytes 16], w1
+         leaverest
+
+;*******************************************************************************
+;
+;   C function NVOL_READ (&ADR)
+;
+;   Return the byte value at the non-volatile memory address ADR.  ADR is 32
+;   bits, and will be incremented by 1.  Successive calls to this routine will
+;   therefore return successive bytes.
+;
+/if using_xc16
+  /then
+         glbsubc nvol_read
+
+         mov     w0, w3      ;save pointer to the 32 bit address
+         mov     [w3++], w1  ;get the address into W2:W1
+         mov     [w3--], w2
+         gcall   nvol_read   ;get byte into W0, increment adr in W2:W1
+         mov     w1, [w3++]  ;update caller's address
+         mov     w2, [w3]
+
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   C subroutine NVOL_WRITE (&ADR, B)
+;
+;   Write the byte B to the non-volatile memory at address ADR.  ADR will be
+;   incremented by 1.
+;
+/if using_xc16
+  /then
+         glbsubc nvol_write
+
+         mov     w0, w3      ;save pointer to the 32 bit address
+         mov     w1, w0      ;get the data byte into W0
+
+         mov     [w3++], w1  ;get the address into W2:W1
+         mov     [w3--], w2
+         gcall   nvol_write  ;write the byte in W0 to adr in W2:W1, inc adr
+         mov     w1, [w3++]  ;update caller's address
+         mov     w2, [w3]
+
+         leaverest
+  /endif

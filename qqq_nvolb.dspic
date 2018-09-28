@@ -35,8 +35,8 @@
 ;
 ;       Read the non-volatile byte at the address in W2:W1 into W0.  Results are
 ;       undefined when W2:W1 contains a address past the end of the non-volatile
-;       words.  W2:W1 is incremented by one.  Successive calls to this routine
-;       therefore return successive non-volatile bytes.
+;       words.  W2:W1 is incremented by one after the read.  Successive calls to
+;       this routine therefore return successive non-volatile bytes.
 ;
 ;       Implementations that have less than 65536 bytes of non-volatile memory
 ;       are allowed to ignore W2, including when incrementing the combined W2:W1
@@ -48,15 +48,15 @@
 ;
 ;       Like NVOL_READ, but reads a whole word (two bytes) into W0.  The words
 ;       are assumed to be stored in least to most significant byte order.  The
-;       address in W2:W1 is incremented by 2.
+;       address in W2:W1 is incremented by 2 after the read.
 ;
 ;     NVOL_WRITE
 ;
 ;       Write the byte in the low 8 bits of W0 to the non-volatile address in
-;       W2:W1.  W2:W1 will be incremented by one.  Successive calls to this
-;       routine therefore write to successive non-volatile bytes.  The write is
-;       not performed if W2:W1 indicates a address past the end of the
-;       non-volatile memory.
+;       W2:W1.  W2:W1 will be incremented by one after the write.  Successive
+;       calls to this routine therefore write to successive non-volatile bytes.
+;       The write is not performed if W2:W1 indicates a address past the end of
+;       the non-volatile memory.
 ;
 ;       Data written with this routine may be cached.  Cached data is not
 ;       guaranteed to be written to the physical non-volatile memory until
@@ -65,7 +65,8 @@
 ;     NVOL_WRITEW
 ;
 ;       Like NVOL_WRITE except that it writes the whole word (2 bytes) in W0.
-;       The two bytes are written in least to most significant order.
+;       The two bytes are written in least to most significant order.  W2:W1
+;       is incremented by 2 after the write.
 ;
 ;     NVOL_SREAD
 ;     NVOL_SREADW
@@ -75,7 +76,7 @@
 ;       Like the routines above except that short addresses are used.  Instead
 ;       of the byte address being 32 bits wide in W2:W1, it is 16 bits wide in
 ;       only W1.  By default, these routines only exist when there are 65536
-;       EEPROM bytes or less.
+;       non-volatile bytes or less.
 ;
 ;       These routines always exist when the constant NVOL_SHORTRW is set to
 ;       TRUE.  In that case only the first 65536 bytes of non-volatile memory
@@ -89,8 +90,8 @@
 ;       all data written with NVOL_WRITE is physically committed to the
 ;       non-volatile memory.  However, all data written with NVOL_WRITE will be
 ;       immediately reflected by NVOL_READ, whether locally cached or written to
-;       the physical memory or not.  After NVOL_FLUSH returns, all current data
-;       will be recoverable after a power down.
+;       the physical memory.  After NVOL_FLUSH returns, all current data will be
+;       recoverable after a power down.
 ;
 ;     NVOL_UPDATE
 ;
@@ -215,8 +216,8 @@
 ;
 ;       STARTADR
 ;
-;         The explicit program memory starting address of the non-volatile.
-;         This must be a multiple of the erase block size.
+;         The explicit program memory starting address of the non-volatile
+;         memory.  This must be a multiple of the erase block size.
 ;
 ;         Both ENDFREE and STARTADR may be defined, but a error results if they
 ;         do not specify the same starting address.  The default is ENDFREE = 1.
@@ -276,7 +277,7 @@
 ;
 ;       NDEVS, integer
 ;
-;         Number of phyisical EEPROMs supported.  More than one EEPROM can be
+;         Number of physical EEPROMs supported.  More than one EEPROM can be
 ;         connected to the SPI bus to increase the overall memory size.  The
 ;         default is 1.
 ;
@@ -404,11 +405,11 @@
 
 //////////////////////////////
 //
-//   Using xternal 24xx32 compatible EEPROM connected via IIC.
+//   Using external 24xx32 compatible EEPROM connected via IIC.
 //
 /const   eetype  = "24AA32A" ;specific EEPROM type, 4096 bytes
 ;/const   eetype = "24LC32A"  ;specific EEPROM type, 4096 bytes
-;/const   devadr integer = ?? ;EEPROM chip 7-bit IIC bus address
+/const   devadr integer = ?? ;EEPROM chip 7-bit IIC bus address
 /const   busname = ""        ;unique name of IIC routines to use
 
 /include "(cog)src/dspic/nvol_24xx32.ins.dspic" ;external IIC EEPROM
@@ -416,10 +417,15 @@
 ;*******************************************************************************
 ;
 ;   Initial values for the non-volatile data.  The non-volatile data will be set
-;   to these values when the HEX file is programmed into the chip.
+;   to these values when the HEX file is programmed into the chip, if the
+;   non-volatile memory is implemented as internal EEPROM or program memory.
 ;
 ;   All the non-volatile bytes need not be defined here.  The remaining non-
 ;   volatile bytes will be initialized to FFh.
+;
+;   For implementations where the HEX file can not specify the non-volatile
+;   memory contents, the effect of this section is only to define the address
+;   offset constants for various fields.
 ;
 ;   The following macros can be used to define the initial value of the
 ;   non-volatile memory:

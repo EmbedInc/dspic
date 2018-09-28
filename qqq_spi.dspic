@@ -31,7 +31,7 @@
 ;       The received byte is returned in W0.
 ;
 ;     SPI_WRITE  -  Writes the byte in the low 8 bits of W0 onto the SPI bus.
-;       The received byte is discarded.
+;       The received byte is discarded.  W0 is preserved.
 ;
 ;     SPI_READ  -  Writes a 0 byte to the SPI bus.  The received byte is
 ;       returned in W0.
@@ -48,11 +48,11 @@
 ;     NAME, string
 ;
 ;       Unique name for the exported symbols.  May be the empty string.  This
-;       string is immediately appended to "SPI" in each exported symbol name.
-;       For example, the routine SPI_BYTE will be called SPI_XYZ_BYTE when NAME
-;       is set to "xyz".  This mechanism is intended for supporting multiple SPI
-;       busses in a system.  This would generally be the empty string when only
-;       one SPI is used.  Default is the empty string.
+;       string is appended to "SPI_" in each exported symbol name.  For example,
+;       the routine SPI_BYTE will be called SPI_XYZ_BYTE when NAME is set to
+;       "xyz".  This mechanism is intended for supporting multiple SPI busses in
+;       a system.  This would generally be the empty string when only one SPI is
+;       used.  Default is the empty string.
 ;
 ;     UN, integer
 ;

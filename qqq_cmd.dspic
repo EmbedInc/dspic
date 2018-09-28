@@ -417,8 +417,8 @@ cmd_tbl:
          .pword  cmd_done    ;0 - NOP, command explicitly ignored
          .pword  cm_ping     ;1 - PING, send PONG response
          .pword  cmd_fwinfo  ;2 - FWINFO, send FWINFO response
-         .pword  cmd_done    ;3
-         .pword  cmd_done    ;4
+         .pword  cm_nameset  ;3 - NAMESET, sets non-volatile name (ignored)
+         .pword  cm_nameget  ;4 - NAMEGET, gets non-volatile name
          .pword  cmd_done    ;5
          .pword  cmd_done    ;6
          .pword  cmd_done    ;7

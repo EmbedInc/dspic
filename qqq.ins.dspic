@@ -33,7 +33,7 @@
 ;
 ;   Application configuration parameters
 ;
-
+/const   devname string = "QQ2" ;fixed Embed 10 name of this device
 ;
 ;   Priority levels for each of the interrupts.
 ;
@@ -46,6 +46,7 @@
 /const   rsp_nop integer = 0 ;NOP
 /const   rsp_pong integer = 1 ;response to PING command
 /const   rsp_fwinfo integer = 2 ;firmware type, version, and sequence
+/const   rsp_name integer = 3 ;reports unit name string
 
 /loop symbols symq const     ;define response opcodes as ASM30 constants too
   /var local sym string

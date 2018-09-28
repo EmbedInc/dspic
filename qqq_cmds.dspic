@@ -210,6 +210,57 @@ allocg   usb_fwseq           ;USB converter firmware sequence number
 
 ;*******************************************************************************
 ;
+;   Command NAMESET n string
+;
+;   Sets the non-volatile name of this unit.  This command is required by the
+;   Embed device 10 spec.
+;
+;   This device does not support a user-settable name string.  This command is
+;   accepted, but ignored.
+;
+         glbent  cm_nameset
+
+         gcall   cmd_get8    ;get the number of name characters following
+         gcall   cmd_putbufn ;read the name string bytes (which are then ignored)
+         return
+
+;*******************************************************************************
+;
+;   Command NAMEGET
+;
+;   Sends the NAME response, which reports the non-volatile name of this
+;   device.  This command is required by the Embed device 10 spec.
+;
+;   This device has a fixed name set at build time.  The name is set by the
+;   DEVNAME preprocessor string constant, set in the project include file.
+;
+devname  rawstring [v devname] ;put name string in program memory
+
+         glbent  cm_nameget
+
+         gcall   cmd_lock_out
+         mov     #rsp_name, w0
+         gcall   cmd_put8    ;send NAME response opcode
+         mov     #[slen devname], w0
+         gcall   cmd_put8    ;send length of string to follow
+         cp0     w0
+         skip_nz
+         return              ;quit here if no string characters to send
+
+         mov     w0, w1      ;get number of string characters left to send
+         mov     #tbloffset(devname), w12 ;get string address into W13:W12
+         mov     #tblpage(devname), w13
+         and     #0x0F, w13
+nameget_byte:                ;back here to send each new string byte
+         gcall   pgbyte_read ;get this string byte into W0, advance adr
+         gcall   cmd_put8    ;send the string byte
+         sub     #1, w1      ;count one less byte left to do
+         bra     gtu, nameget_byte ;back to do next byte
+
+         return
+
+;*******************************************************************************
+;
 ;   Command USTAT stat [parm ... parm]
 ;
 ;   This command is not sent by the host, but by a serial to USB converter
