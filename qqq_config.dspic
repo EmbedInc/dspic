@@ -1,0 +1,70 @@
+;   ***************************************************************
+;   * Copyright (C) 2018, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   This module provides a procedural interface to static configuration data
+;   for individual modules or subsystems.  The configuration data is stored in
+;   non-volatile memory.  This module is layered on the standard NVOL_xxx
+;   routines.
+;
+;   Configuration information is stored in non-volatile memory for each module
+;   that has any configuration options.  Such modules typically include
+;   configuration routines that are called during system startup.  Each module
+;   configures itself according to the static configuration information for
+;   that module.  Such configuration can indicate that the module is not used at
+;   all.  In that case, the module becomes just unused instructions after the
+;   configuration routine returns.
+;
+;   A unique ID is assigned to each configurable module.  The configuration
+;   routine for a module inquires the configuration data for its ID, then
+;   configures its module accordingly.  Configuration IDs are 8-bit values in
+;   the range 0 to 254.  The special value of 255 is reserved for internal use
+;   by this configuration code.
+;
+;   Exported routines
+;
+;     CONFIG_INIT
+;
+;       Must be first call into this module.
+;
+;     CONFIG_GET
+;
+;       Get the configuration for the module ID in the low 8 bits of W0.  The
+;       number of configuration bytes is returned in W0, and W2:W1 is set to the
+;       non-volatile memory address of the first data byte.  When there is no
+;       configuration data for a module (W0 is returned 0), the module must
+;       disable itself.
+;
+;     Additional C functions are exported.  See the "Configuration" section in
+;     qqq.h for details.
+;
+;   Pre-processor configuration parameters:
+;
+;     CONFIG_START, integer
+;
+;       The non-volatile memory address of where the configuration data starts.
+;       The default is 0.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   config_start integer = 0 ;nvol address of first byte of config structure
+
+/include "(cog)src/dspic/config.ins.dspic"
+
+.end

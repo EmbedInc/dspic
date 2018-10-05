@@ -1,0 +1,330 @@
+;   ***************************************************************
+;   * Copyright (C) 2018, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Canned code for the CONFIG module.  See the header comments in
+;   QQQ_CONFIG.DSPIC for a description of the possible configuration parameters.
+;
+;   Configuration Data Format
+;
+;     The static configuration is stored in non-volatile memory starting at
+;     the fixed address indicated by the CONFIG_START constant.  The
+;     configuration data is a sequence of bytes:
+;
+;       ID
+;
+;         The ID of a particular module or subystem.  The IDs 0 - 254 indicate
+;         specific modules.  The special ID of 255 indicates the end of the
+;         configuration data.
+;
+;         Note that a fully erased non-volatile memory (all bytes set to 255)
+;         therefore specifies no configuration data at all.
+;
+;       OPC
+;
+;         The high 3 bits of this byte are a opcode.  The remaining low 5 bits
+;         are interpreted uniquely according to the opcode.  The following
+;         opcodes are defined:
+;
+;           0  -  Immediate data.
+;
+;             The low 5 bits of OPC indicate the number of data bytes following,
+;             minus 1.  This opcode is therefore always followed by 1 to 32 data
+;             bytes.  These data bytes are the configuration data for the ID
+;             preceeding the OPC byte.
+;
+;           1  -  Indirect data, 21 bit address.
+;
+;             The low 5 bits of the opcode byte and the following two bytes form
+;             a 21 bit address.  The configuration data for this ID is stored
+;             starting at that address.  The 16 bits immediately at the address
+;             indicate the number of data bytes to follow.
+;
+;           2  -  Indirect data, 29 bit address.
+;
+;             The low 5 bits of the opcode byte and the following three bytes
+;             form a 29 bit address.  The configuration data for this ID is
+;             stored starting at that address.  The 16 bits immediately at the
+;             address indicate the number of data bytes to follow.
+;
+;           3  -  Extended opcode.
+;
+;             The low 5 bits of the OPC byte are interpreted as a opcode.  The
+;             following opcodes are defined:
+;
+;               0  -  Indirect data, 32 bit address.
+;
+;                 The following four bytes form a 32 bit address.  The
+;                 configuration data for this ID is stored starting at that
+;                 address.  The 16 bits immediately at the address indicate the
+;                 number of data bytes to follow.
+;
+;           4, 5, 6, 7  -  Indirect data, 15 bit address.
+;
+;             The low 7 bits of the opcode byte and the following byte form a 15
+;             bit address.  The configuration data for this ID is stored
+;             starting at that address.  The 16 bits immediately at the address
+;             indicate the number of data bytes to follow.
+;
+;             Note that this opcode is indicated whenever the high bit of the
+;             OPC byte is set.
+;
+;         Undefined opcodes are errors, and cause the system to stop reading
+;         the configuration.
+;
+;       The next byte after all data following a OPC byte is another ID byte.
+;       This pattern repeats until the special ID of 255 is encountered, which
+;       indicates end of configuration data.
+;
+;     Multi-byte data is stored in most to least significant byte order.
+;
+;     The module IDs can appear in any order.  There is no meaning to the
+;     storage order of module IDs, and the order is not exported to the rest of
+;     the system.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/if [not [exist "config_start"]] then
+  /const config_start integer = 0
+  /endif
+;
+;   Derived constants.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_config, bss    ;variables in normal RAM
+
+
+;*******************
+;
+;   Local state.
+;
+
+
+;
+;   Local state in near memory.
+;
+.section .near_config, bss, near ;varibles in near RAM
+
+
+.section .code_config, code
+;*******************************************************************************
+;
+;   Subroutine CONFIG_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  config_init
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_GET
+;
+;   Get the configuration data for a particular subsystem ID.  The ID is passed
+;   in the low 8 bits of W0.
+;
+;   W0 is returned the number of configuration bytes for the indicated ID.  Note
+;   that this can be 0, which indicates the subsystem is not used.
+;
+;   When W0 is non-zero, W2:W1 is returned the non-volatile memory address of
+;   the first configuration byte for the ID.  The remaining configuration bytes
+;   are stored sequentially.  W2:W1 is undefined when W0 is returned 0.
+;
+         glbsub  config_get, regf3 | regf4 | regf5 | regf6
+
+         ze      w0, w3      ;save target ID in W3
+
+         load32  w1, [v config_start] ;init non-volatile memory address
+cfgg_id:                     ;back here each new ID in the list
+         gcall   nvol_read   ;get the ID for this record into W0
+         cp      w0, #0xFF   ;compare to special end of list ID
+         bra     z, cfgg_nfnd ;no data found for the target ID ?
+         mov     w0, w4      ;save the ID of this record in W4
+
+         gcall   nvol_read   ;get the opcode byte into W0
+         lsr     w0, #5, w5  ;extract just the opcode into W5
+         bra     z, cfgg_opc0 ;opcode 0 ?
+         cp      w5, #1
+         bra     z, cfgg_opc1 ;opcode 1 ?
+         cp      w5, #2
+         bra     z, cfgg_opc2 ;opcode 2 ?
+         cp      w5, #3
+         bra     z, cfgg_opc3 ;opcode 3 ?
+         jump    cfgg_opc4   ;opcodes 4-7
+;
+;   Separate code to process each opcode.  Register contents:
+;
+;     W0  -  Complete OPC byte.
+;
+;     W2:W1  -  Next non-volatile memory address after the OPC byte.
+;
+;     W3  -  Target configuration ID from caller.
+;
+;     W4  -  The configuration ID of this record.
+;
+;     W5  -
+;
+;     W6  -
+;
+;
+;   Opcode 0.  Immediate data follows opcode byte.
+;
+cfgg_opc0:
+/if debug_icd then
+         nop
+         nop
+  /endif
+         and     w0, #0x1F, w0 ;make number of following data bytes in W0
+         add     #1, w0
+         cp      w4, w3      ;check the ID of this record
+         bra     z, cfgg_leave ;ID matches, return with config data ?
+         ;
+         ;   Not this ID, skip over data bytes.
+         ;
+         add     w1, w0, w1  ;skip over the number of bytes in W0
+         addc    #0, w2
+         jump    cfgg_id     ;back to process next ID record
+;
+;   Opcode 1.  Indirect data, 21 bit address.  2 address bytes follow.
+;
+cfgg_opc1:
+/if debug_icd then
+         nop
+         nop
+  /endif
+         and     w0, #0x1F, w5 ;save high 5 bits of indirect adr in W5
+         gcall   nvol_readw  ;get low 16 bits of indirect address into W0
+         cp      w4, w3      ;check the ID of this record
+         bra     nz, cfgg_id ;not this ID record, go back for next ?
+         ;
+         ;   This record is for the requested ID.
+         ;
+         swap    w0          ;get low 16 address bits into correct format in W0
+         mov     w0, w1      ;jump to the remote address
+         mov     w5, w2
+         ;
+         ;   Common code to read the 16 bit number of data bytes, then return to
+         ;   the caller.  The nvol address of the length word is in W2:W1.
+         ;
+cfgg_retlen:
+         gcall   nvol_readw  ;get number of config data bytes into W0
+         swap    w0
+         jump    cfgg_leave  ;return with config data
+;
+;   Opcode 2.  Indirect data, 29 bit address.  3 address bytes follow.
+;
+cfgg_opc2:
+/if debug_icd then
+         nop
+         nop
+  /endif
+         and     w0, #0x1F, w5 ;save high 5 bits of indirect adr in W5
+         gcall   nvol_readw  ;get next 16 address bits into W6
+         mov     w0, w6
+         gcall   nvol_read   ;get low 8 address bits into W0
+         cp      w4, w3      ;check the ID of this record
+         bra     nz, cfgg_id ;not this ID record, go back for next ?
+         ;
+         ;   This record is for the requested ID.
+         ;
+         mov     w0, w1      ;init nvol address with bits <7:0>
+         mov     #0xFF00, w0 ;merge in nvol address bits <15:8>
+         and     w6, w0, w0
+         ior     w1, w0, w1
+         and     #0xFF, w6   ;set nvol address bits <23:16>
+         mov     w6, w2
+         sl      w5, #8, w5  ;merge in nvol address bits <28:24>
+         ior     w2, w5, w2
+         jump    cfgg_retlen ;get data length and return to caller
+;
+;   Opcode 3.  Extended opcode.  The low 5 bits of OPC are the opcode.
+;
+cfgg_opc3:
+/if debug_icd then
+         nop
+         nop
+  /endif
+         and     #0x1F, w0   ;make 5 bit opcode in W0
+         bra     z, cfgg_xopc_0 ;extended opcode 0 ?
+         jump    cfgg_nfnd   ;unrecognized opcode, abort
+;
+;   Extended opcode 0.  Indirect data, 32 bit address.  4 address bytes follow.
+;
+cfgg_xopc_0:
+/if debug_icd then
+         nop
+         nop
+  /endif
+         gcall   nvol_readw  ;save high 16 address bits in W5
+         mov     w0, w5
+         gcall   nvol_readw  ;get low 16 address bits into W0
+         cp      w4, w3      ;check the ID of this record
+         bra     nz, cfgg_id ;not this ID record, go back for next ?
+         ;
+         ;   This record is for the requested ID.
+         ;
+         swap    w0          ;jump to the indicated address
+         mov     w0, w1
+         swap    w5
+         mov     w5, w2
+         jump    cfgg_retlen ;get data length and return to caller
+;
+;   Opcodes 4, 5, 6, or 7.  Indirect data, 15 bit address.  1 address byte
+;   follows.
+;
+/if debug_icd then
+         nop
+         nop
+  /endif
+cfgg_opc4:
+         and     #0x7F, w0   ;save high 7 bits of address in W5
+         mov     w0, w5
+         gcall   nvol_read   ;get low 8 bits of address into W0
+         cp      w4, w3      ;check the ID of this record
+         bra     nz, cfgg_id ;not this ID record, go back for next ?
+         ;
+         ;   This record is for the requested ID.
+         ;
+         mov     w0, w1      ;set low 8 bits of address
+         sl      w5, #8, w5  ;get next 7 address bits into position
+         ior     w1, w5, w1  ;merge them into low address word
+         mov     #0, w2      ;upper address word is always 0
+         jump    cfgg_retlen ;get data length and return to caller
+;
+;   No config data for the requested ID was found.
+;
+cfgg_nfnd:
+         mov     #0, w0      ;indicate no data
+
+cfgg_leave:                  ;return to caller, W0 and W2:W1 all set
+         leaverest
