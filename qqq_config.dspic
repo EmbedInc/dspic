@@ -45,7 +45,8 @@
 ;       number of configuration bytes is returned in W0, and W2:W1 is set to the
 ;       non-volatile memory address of the first data byte.  When there is no
 ;       configuration data for a module (W0 is returned 0), the module must
-;       disable itself.
+;       disable itself.  The Z flag is set according to whether there is
+;       configuration data (Z set according to value of W0).
 ;
 ;     Additional C functions are exported.  See the "Configuration" section in
 ;     qqq.h for details.

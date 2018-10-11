@@ -28,7 +28,7 @@
 ;       This callback feature is disabled when this constant is the empty
 ;       string.  This is also the default.
 ;
-;     CALLBACK_RECV, string
+;     CALLBACK_RECVUS, string
 ;
 ;       Like CALLBACK_RECV except the routine will only be called with packets
 ;       addressed to us.  Note that this distinction is only meaningful when

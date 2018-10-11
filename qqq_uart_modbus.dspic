@@ -1,0 +1,273 @@
+;   ***************************************************************
+;   * Copyright (C) 2015, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   UART handler customized to support Modbus.
+;
+;   This file references the generic UART_MODBUS.INS.DSPIC library file that
+;   contains the actual code.  This library file is configured with preprocessor
+;   constants.  These must be set appropriately before the library file is
+;   included.
+;
+;   The following library files must also be included.  These are usually
+;   included from the main project file so that the symbols are available
+;   globally.
+;
+;     UART_SETUP.INS.DSPIC
+;     UART_MODBUS_SETUP.INS.DSPIC
+;
+;   The main difference between the interface to this UART and a normal (not
+;   Modbus) UART, is that the UART_GET returns a event instead of just received
+;   UART data.  UART_GET returns a 16 bit value.  The upper byte contains flag
+;   bits (see UART_MODBUS_SETUP.INS.DSPIC) identifying the event.  When the
+;   event includes a received data byte, that byte is in the low 8 bits of the
+;   word.
+;
+;   This UART handler includes a means of timing the gap between received bytes,
+;   as required to identify the start of Modbus packets.  It also includes a
+;   means of waiting the required time between transmitted bytes to indicate the
+;   start of a new packet.
+;
+;   The UART_TICK subroutine must be called regularly to provide timing to this
+;   module.  See the UART_TICK description below.
+;
+;   The exported symbols are listed below.  The generic names of the exported
+;   symbols are used here.  These are the names when NAME is set to the empty
+;   string.  For example, the initialization routine is called UART_INIT when
+;   NAME is empty, and UART_ABC_INIT when NAME is set to ABC.
+;
+;   Subroutines:
+;
+;     UART_INIT
+;
+;       Initialize the hardware and state managed by this module.  Must be first
+;       access into the module.
+;
+;     UART_LOCK
+;     UART_UNLOCK
+;
+;       These two routines implement a mutex associated with the UART.  The
+;       remaining code does not enforce the use of this mutex.  It is up to the
+;       application to ensure that all actions that need to be single threaded
+;       are performed only when the lock is held.
+;
+;       When active, the lock is assigned to a specific task.  Only that task
+;       can release the lock.  Calls to UART_UNLOCK by a task not holding the
+;       lock are ignored.  UART_LOCK returns immediately if the calling task is
+;       already holding the lock.  When the lock is held by another task,
+;       UART_LOCK waits indefinitely until the lock is available.  The current
+;       task is guaranteed to hold the lock when UART_LOCK returns.
+;
+;     UART_PUT
+;
+;       Cause the UART to send the byte in the low 8 bits of W0.  Bytes may be
+;       buffered up to the size of the output FIFO.  This routine returns
+;       "quickly" when the FIFO is not full.  When the FIFO is full, this
+;       routine waits until at least one slot is available, then writes the byte
+;       into the FIFO and returns.
+;
+;     UART_WAIT_SEND
+;
+;       Waits for the transmitter to be idle for long enough so that the next
+;       character would be interpreted as the start of a new packet according to
+;       the Modbus specification.
+;
+;     UART_GET
+;
+;       Gets the next received event into W0.  This routine waits indefinitely
+;       until a event is available.
+;
+;       The high byte of W0 will contain flag bits describing the event.  When
+;       the event includes a data byte, it will be in the low 8 bits of W0.
+;       Constants are provided for the individual flag bits.  These constants
+;       are the 8-15 bit number in the returned W0 word:
+;
+;       UMODBUS_RX_ERR
+;
+;         A hard error has occured, like overrun, framing error, etc.
+;
+;       UMODBUS_RX_PERR
+;
+;         Parity error.  The data is returned as received.
+;
+;       UMODBUS_RX_PACK
+;
+;         A inter-packet gap has occured.  This means that if using the Modbus
+;         protocol, that the last packet has ended, and that the next received
+;         byte should be interpreted as the start of a new packet.
+;
+;       When none of the flag bits are set (upper byte = 0), then a received
+;       data byte is returned in the low 8 bits.
+;
+;     UART_GET_READY
+;
+;       Sets Z if no received byte is immediately available, and clears it
+;       it otherwise.  When returning with Z cleared, UART_GET will return with
+;       a new event without waiting.
+;
+;     UART_BAUD_SET
+;
+;       Set the baud rate from the unsigned integer value in W1:W0.  The global
+;       variable UART_BAUD will be set to the actual baud rate.  This routine
+;       only exists if runtime baud rate switching is enabled.
+;
+;     UART_PARITY_EVEN
+;     UART_PARITY_ODD
+;     UART_PARITY_ONE
+;     UART_PARITY_NONE
+;
+;       Configure the UART to use the indicated parity scheme.  The UART is
+;       switched off, the parity setting changed, and the UART turned on again.
+;       Note that the FIFOs are reset to empty due to switching the uart on/off.
+;
+;       The remaining configuration is 8 data bits, 1 stop bit.  Note that
+;       parity ONE is the same as no parity with 2 stop bits.
+;
+;     UART_PARITY
+;
+;       Returns the ID of the current parity configuration in W0.  Preprocessor
+;       constants for the IDs are defined in UART_SETUP.INS.DSPIC.  These are:
+;
+;       UART_PARITY_NONE
+;       UART_PARITY_EVEN
+;       UART_PARITY_ODD
+;       UART_PARITY_ZERO
+;       UART_PARITY_ONE
+;
+;     UART_OFF
+;
+;       Turn off the UART, minimizing power draw.  The input FIFO can continue
+;       to be drained.  UART_PUT should not be called when the UART is off.
+;
+;     UART_ON
+;     UART_RESET
+;
+;       Reset the UART hardware, FIFOs, associated state, and make sure the UART
+;       is on.  UART_ON should only be called when the UART is off.  UART_RESET
+;       can be called at any time.
+;
+;     UART_ACTIVE
+;
+;       Sets the Z flag iff the UART is idle.  Being idle means:
+;
+;       1 - The input buffer is empty.
+;
+;       2 - The output buffer is empty.
+;
+;       3 - The hardware is not sending a character.
+;
+;       4 - The UART mutex is not held by any task.
+;
+;     UART_ACTIVITY
+;
+;       Reports on activity since the last call.  W0 is set to a word with
+;       individual bits indicating a specific type of activity.  Preprocessor
+;       constants for the 0 to 15 bit numbers are defined in
+;       UART_SETUP.INS.DSPIC.  These are:
+;
+;       UART_ACT_RECV
+;
+;         A character was received.
+;
+;       UART_ACT_SEND
+;
+;         A character was sent.
+;
+;     UART_TICK
+;
+;       This routine must be called with a regular period.  That period should
+;       be a few bits times or less.  The preprocessor constant UTICKT must be
+;       set to the call period in seconds.
+;
+;       Calls to this routine is how the UART module performs timing.  This is
+;       used, for example, for the Modbus packet start detection.  The call period
+;       should be no more than a few bit times.  Bit timing at some common baud
+;       rates are:
+;
+;           1200 baud: 833   us
+;           2400 baud: 417   us
+;           9600 baud: 104   us
+;          19200 baud:  52   us
+;         115200 baud:   8.7 us
+;
+;       For example, when 115.2 kBaud is used, calling UART_TICK with a regular
+;       period in the 10 to 25 us range would be reasonable.
+;
+;   Global variables:
+;
+;     TASK_UART
+;
+;       ID of the task that has the UART output locked.  The MSB set to 1 means
+;       the UART output is not locked by any task, and is immediately available.
+;
+;     UART_BAUD
+;
+;       Actual baud rate, 32 bit unsigned integer.  Only exists when runtime
+;       baud setting is enabled.
+;
+;       The baud rate hardware can only acheive a discrete set of baud rates,
+;       depending on the clock frequency.  When the baud rate is set, the
+;       nearest achievable baud rate is chosen.  This variable reports that
+;       actual baud rate, not the desired baud rate.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   name    string = "" ;unique name for exported symbols, may be empty
+/const   un      integer = 1 ;1-N number of UART handled by this module
+/const   baud    real = 19200 ;desired baud rate (19200 is Modbus default)
+/const   runtime_baud bool = true ;allow changing baud rate at run time
+/const   parity  string = "EVEN" ;EVEN, ODD, ZERO, ONE, or NONE
+/const   runtime_parity bool = true ;allow changing parity at run time
+
+/const   prio_reg_rx string = "Ipc2" ;register containing RX intr priority
+/const   prio_bit_rx integer = 12 ;low bit of priority field within register
+/const   rxpin   integer = 0 ;RPn pin number of receive line, 0 for not used
+/const   rxpinreg = "Rpinr18+0" ;reg to select RPn number for RX function
+
+/const   prio_reg_tx string = "Ipc3" ;register containing TX intr priority
+/const   prio_bit_tx integer = 0 ;low bit of priority field within register
+/const   txpinreg = "Rpor5+1" ;byte adr of reg for remappable output pin func ID
+/const   txpinid integer = 2#000001 ;remappable output ID for UART TX function
+
+/const   fifoi_sz integer = 256 ;software input FIFO size, capacity in words
+/const   fifoo_sz integer = 256 ;software output FIFO size, capacity in words
+/const   altpins bool = False ;do not use alternate UART pins
+/const   handle_overrun = "" ;routine to call from RX intr on hardware overrun
+/const   handle_framerr = "" ;routine to call from RX intr on framing error
+/const   handle_rfull = ""   ;routine to call from RX intr on software FIFO full
+
+/const   lready  = ""        ;signal we assert when ready to receive
+/const   lready_n integer = 8 ;not ready when input FIFO has this room or less
+
+/const   rready  = ""        ;input signal driven low when remote device ready to recv
+/const   rrint_rp integer = 0 ;RPn number RREADY signal comes in on, 0 = none
+/const   rready_high bool = false ;RREADY signal goes low to indicate ready
+/const   rrint   integer = 1 ;number of INTn interrupt used for RREADY
+/const   rrint_prioreg = "Ipc5" ;register holding receive ready INTn intr priority
+/const   rrint_priobit integer = 0 ;low bit of priority field within register
+/const   rrint_flgregn integer = 1 ;IFSn and IECn reg number for RR INTn interrupt
+/const   rrint_rpreg = "Rpinr0+1" ;byte reg to select RRINT remappable pin number
+
+/const   txdrive = ""        ;output line to assert during sending
+/const   txdrive_rts bool = true ;drive UART RTS output low when sending
+
+/const   callback_recv = ""  ;routine to call from UART_GET on event, must save regs
+
+/include "(cog)src/dspic/uart_modbus.ins.dspic"
+         .end

@@ -2115,6 +2115,31 @@ typedef  signed  int machine_ints_t;
     /endif
   /endsub
 
+/////////////////////
+//
+//   Macro START_TASK name
+//
+//   Start a new task.  Several symbols must exist:
+//
+//     STACKSZ_name  -  Size of net task's stack, bytes.
+//
+//     STACK_name  -  Start of stack area for the new task.
+//
+//     TASK_name_START  -  Execution start point of the new task.
+//
+//   W13 and W14 are trashed.
+//
+/macro start_task
+  /write
+  /write "         ;   Start " [ucase [qstr [arg 1]]] " task."
+  /write "         ;"
+         mov     #[v stacksz_[arg 1]], w13 ;pass stack size
+         mov     #stack_[arg 1], w14 ;pass start address of stack
+         call    task_new    ;create the new task
+         goto    task_[arg 1]_start ;start point of the new task
+  /write
+  /endmac
+
 ;*******************************************************************************
 ;
 ;   Subroutine and other entry point linkage.

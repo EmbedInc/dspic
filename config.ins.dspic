@@ -15,7 +15,7 @@
 ;   ***************************************************************
 ;
 ;   Canned code for the CONFIG module.  See the header comments in
-;   QQQ_CONFIG.DSPIC for a description of the possible configuration parameters.
+;   QQQ_CONFIG.DSPIC for a overview of the configuration mechanism.
 ;
 ;   Configuration Data Format
 ;
@@ -200,10 +200,6 @@ cfgg_id:                     ;back here each new ID in the list
 ;   Opcode 0.  Immediate data follows opcode byte.
 ;
 cfgg_opc0:
-/if debug_icd then
-         nop
-         nop
-  /endif
          and     w0, #0x1F, w0 ;make number of following data bytes in W0
          add     #1, w0
          cp      w4, w3      ;check the ID of this record
@@ -218,10 +214,6 @@ cfgg_opc0:
 ;   Opcode 1.  Indirect data, 21 bit address.  2 address bytes follow.
 ;
 cfgg_opc1:
-/if debug_icd then
-         nop
-         nop
-  /endif
          and     w0, #0x1F, w5 ;save high 5 bits of indirect adr in W5
          gcall   nvol_readw  ;get low 16 bits of indirect address into W0
          cp      w4, w3      ;check the ID of this record
@@ -244,10 +236,6 @@ cfgg_retlen:
 ;   Opcode 2.  Indirect data, 29 bit address.  3 address bytes follow.
 ;
 cfgg_opc2:
-/if debug_icd then
-         nop
-         nop
-  /endif
          and     w0, #0x1F, w5 ;save high 5 bits of indirect adr in W5
          gcall   nvol_readw  ;get next 16 address bits into W6
          mov     w0, w6
@@ -270,10 +258,6 @@ cfgg_opc2:
 ;   Opcode 3.  Extended opcode.  The low 5 bits of OPC are the opcode.
 ;
 cfgg_opc3:
-/if debug_icd then
-         nop
-         nop
-  /endif
          and     #0x1F, w0   ;make 5 bit opcode in W0
          bra     z, cfgg_xopc_0 ;extended opcode 0 ?
          jump    cfgg_nfnd   ;unrecognized opcode, abort
@@ -281,10 +265,6 @@ cfgg_opc3:
 ;   Extended opcode 0.  Indirect data, 32 bit address.  4 address bytes follow.
 ;
 cfgg_xopc_0:
-/if debug_icd then
-         nop
-         nop
-  /endif
          gcall   nvol_readw  ;save high 16 address bits in W5
          mov     w0, w5
          gcall   nvol_readw  ;get low 16 address bits into W0
@@ -302,10 +282,6 @@ cfgg_xopc_0:
 ;   Opcodes 4, 5, 6, or 7.  Indirect data, 15 bit address.  1 address byte
 ;   follows.
 ;
-/if debug_icd then
-         nop
-         nop
-  /endif
 cfgg_opc4:
          and     #0x7F, w0   ;save high 7 bits of address in W5
          mov     w0, w5
@@ -327,4 +303,5 @@ cfgg_nfnd:
          mov     #0, w0      ;indicate no data
 
 cfgg_leave:                  ;return to caller, W0 and W2:W1 all set
+         cp0     w0          ;Z iff no config data
          leaverest

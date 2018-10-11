@@ -1,5 +1,5 @@
 ;   ***************************************************************
-;   * Copyright (C) 2010, Embed Inc (http://www.embedinc.com)     *
+;   * Copyright (C) 2015, Embed Inc (http://www.embedinc.com)     *
 ;   *                                                             *
 ;   * Permission to copy this file is granted as long as this     *
 ;   * copyright notice is included in its entirety at the         *
@@ -17,8 +17,8 @@
 ;   UART handler customized for the MODBUS protocol.
 ;
 ;   This generic library code is customized to particular applications by a set
-;   of pre-processor constant.  See the QQQ_UART.DSPIC file for a description
-;   of these constants.
+;   of pre-processor constant.  See the QQQ_UART_MODBUS.DSPIC file for a
+;   description of these constants.
 ;
 ;*******************************************************************************
 ;
@@ -64,10 +64,10 @@
   /endif
 
 /if [not [exist "fifoi_sz"]] then
-  /const fifoi_sz integer = 16
+  /const fifoi_sz integer = 256
   /endif
 /if [not [exist "fifoo_sz"]] then
-  /const fifoo_sz integer = 16
+  /const fifoo_sz integer = 256
   /endif
 
 /if [not [exist "altpins"]] then
@@ -239,6 +239,7 @@
     /else
       /set s [str s ", name """ [ucase name] """ added to exported symbols"]
     /endif
+  /set s [str s ", Tick time " [eng utickt] "s"]
   /show "  " s
   /endblock
 
@@ -398,7 +399,7 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
          mov     w0, parityid
     /endif
 
-  /const tpc real = [/ 11 [* baud tickt]] ;ticks per character time
+  /const tpc real = [/ 11 [* baud utickt]] ;ticks per character time
 
   /set r [* tpc mintxgap]    ;ticks per TX gap
   /set r [+ r 0.999]         ;guarantee minimum
@@ -547,12 +548,18 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;   Acquire the exclusive lock for writing to the UART output stream.  This
 ;   routine waits indefinitely until the UART output stream is available.
 ;
-         glbsub  uart[chars uname]_lock, regf0
+         glbsub  uart[chars uname]_lock, regf0 | regf1
 
 lock_wait:                   ;back here until lock is available
          mov     task_uart[chars uname], w0 ;get ID of task that has UART locked
          btsc    w0, #15     ;lock is in use ?
          jump    lock_take   ;no, go take it
+         ;
+         ;   The lock is active.
+         ;
+         mov     currtask, w1 ;get the ID of this task
+         cp      w1, w0      ;compare to ID of task hold the lock
+         bra     z, lock_leave ;this task is already holding the lock ?
          gcall   task_yield_save ;give other tasks a chance to run
          jump    lock_wait   ;back to check lock again
 
@@ -560,6 +567,7 @@ lock_take:                   ;the lock is available
          mov     currtask, w0 ;get our task ID
          mov     w0, task_uart[chars uname] ;indicate we have the lock now
 
+lock_leave:
          leaverest
 
 ;*******************************************************************************
@@ -873,20 +881,26 @@ recv_leave:                  ;common exit point for UART receive interrupt
 ;
 ;   Subroutine UART_GET
 ;
-;   Return the next byte from the UART in W0.  If no byte is immediately
-;   available, then this routine waits indefinitely until one is.
+;   Return the next received UART event in W0.  If no event is pending, then
+;   this routine waits until one occurs.
+;
+;   The high 8 bits of the returned word are flags indicating the event.  UART
+;   received data, if appropriate for the event, is returned in the low 8 bits.
+;
+;   See the UART_MODBUS_SETUP.INS.DSPIC file for definition of the event flag
+;   bits.
 ;
          glbsub  uart[chars uname]_get, regf1 | regf2
 
-get_wait:                    ;back here until a char is available from the FIFO
-         fifow_jump_notempty fifoi, get_byte ;a character is available ?
+get_wait:                    ;back here until a evebt is available from the FIFO
+         fifow_jump_notempty fifoi, get_event ;event is available ?
          gcall   task_yield_save ;no, give other tasks a chance to run
          jump    get_wait
 ;
-;   At least one byte is available in the software input FIFO.  Get the byte
+;   At least one event is available in the software input FIFO.  Get the event
 ;   from the FIFO into W0.
 ;
-get_byte:
+get_event:
          fifow_get fifoi     ;get the next FIFO word into W0
 ;
 ;   Set the LREADY output line according to how much room is now in the FIFO.
@@ -899,7 +913,7 @@ get_byte:
   /endif
 ;
 ;   Call the callback routine before returning, if a callback routine is
-;   defined.
+;   defined.  The event is passed in W0.  All registers must be preserved.
 ;
 /if [<> callback_recv ""]
   /then                      ;callback routine is defined
@@ -1080,13 +1094,13 @@ act_leave:                   ;common exit point, Z flag already set
 ;   Compute the number of ticks per character time in W5:W4.  This is a
 ;   intermediate value that will be used in two subsequent calculations.
 ;
-;                 11
-;     W5:W4 = ------------
-;             BAUD * TICKT
+;                  11
+;     W5:W4 = -------------
+;             BAUD * UTICKT
 ;
-;   Note that 11 and TICKT are constants known at build time.
+;   Note that 11 and UTICKT are constants known at build time.
 ;
-         fpload  w0, [/ 11 tickt] ;get 11 / TICKT
+         fpload  w0, [/ 11 utickt] ;get 11 / UTICKT
          mov.d   w4, w2      ;get BAUD
          gcall   fp32f_div   ;compute the result
          mov.d   w0, w4      ;save it in W5:W4
@@ -1144,9 +1158,7 @@ act_leave:                   ;common exit point, Z flag already set
 ;
 ;   The following preprocessor constants must exist:
 ;
-;     TICKCY  -  Number of instruction cycles per tick, integer.
-;
-;     TICKT  -  Tick period in seconds.
+;     UTICKT  -  Tick period in seconds.
 ;
 ;   This routine is safe to call from interrupt code.  It is intended to be
 ;   called from a clock tick interrupt.
