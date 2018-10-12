@@ -182,6 +182,41 @@
 ;   The interrupt routine in AD2.INS.DSPIC uses the fast register save area.
 ;   This means no other interrupts can use it (use PUSH.S and POP.S).
 ;
+;   Custom application code can be run in the A/D interrupt routine immediately
+;   after the A/D is serviced, and at the end of the interrupt.  This can be
+;   used, for example, to generate system timing from.  Each macro has different
+;   restrictions, advantages, and disadvantages:
+;
+;     ADINTR_BEFORE
+;
+;       Runs after the conversion result has been read from the A/D hardware
+;       and before it is processed.
+;
+;       W2, W3 may be trashed.  All other registers must be preserved.  W1:W0
+;       can  be restored by loading the 32 bit local variable READING:
+;
+;         mov     reading+0, w0 ;restore W1:W0
+;         mov     reading+2, w1
+;
+;       This macro has no timing jitter from the start of the interrupt.
+;       However, when multiple A/D channels are being scanned, it runs before
+;       the A/D is set up to acquire the next channel.  This macro must complete
+;       "quickly", so that the A/D has time to acquire the new channel before
+;       the next conversion is started.
+;
+;     ADINTR_AFTER
+;
+;      Runs at the end of the interrupt routine after all processing has been
+;      completed.
+;
+;      W0-W3 may be trashed.  All other registers must be preserved.
+;
+;      This macro may have some timing jitter relative to the start of the A/D
+;      interrupt.
+;
+;   It is recommended to use ADINTR_AFTER instead of ADINTR_BEFORE, unless the
+;   timing jitter of ADINTR_AFTER can not be tolerated.
+;
 /include "qq2.ins.dspic"
 
 //******************************************************************************
@@ -226,6 +261,45 @@
   /call configure_channel
 
   /endblock
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro ADINTR_BEFORE
+//
+//   Code in this macro runs near the start of the A/D conversion done interrupt
+//   after the A/D conversion result has been read from the hardware.  There is
+//   no timing jitter relative to the start of the interrupt.
+//
+//   When the A/D scans multiple inputs, this code runs before the A/D is setup
+//   up to acquire the next channel.  The code here must therefore be "quick",
+//   to still allow sufficient acquisition time before the next conversion
+//   start.
+//
+//   W2 and W3 may be trashed.  All other registers must be preserved.  W1:W0
+//   can be restore by loading them from the 32 bit local variable READING:
+//
+//     mov    reading+0, w0 ;restore W1:W0
+//     mov    reading+2, w1
+//
+/macro adintr_before
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro ADINTR_AFTER
+//
+//   Code in this macro runs at the end of the A/D conversion done interrupt,
+//   after all other processing for that interrupt has been performed.
+//
+//   There may be some timing jitter relative to the start of the interrupt.
+//   This is particularly true when multiple inputs are being scanned, and
+//   different inputs are filtered with different numbers of filter poles.
+//   Otherwise, the jitter is only a few cycles.
+//
+//   W0-W3 may be trashed.  All other registers must be preserved.
+//
+/macro adintr_after
+  /endmac
 
 /include "(cog)src/dspic/ad2.ins.dspic"
 

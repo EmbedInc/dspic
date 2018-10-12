@@ -265,4 +265,5 @@
 /const   runtime_baud bool = false ;don't include code for runtime baudrate setting
 
 /include "(cog)src/dspic/uart.ins.dspic"
-         .end
+
+.end

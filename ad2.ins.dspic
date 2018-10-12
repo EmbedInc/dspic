@@ -467,7 +467,7 @@ alloc    an[v ch]f[v f], 4
          mov     w2, Ad1chs0
          bset    Ad1con1, #Samp ;start sampling
 
-  /if [> nchan 0] then       ;scanning multiple channels ?
+  /if [> nchan 1] then       ;scanning multiple channels ?
          mov     #tbloffset([chars "dochan" ch]), w2 ;update dispatch vector
          mov     w2, chvect+0
          mov     #tblpage([chars "dochan" ch]), w2
@@ -634,7 +634,16 @@ ini_fword:
          mov     w0, reading+0 ;save the normalized reading in READING
          mov     w1, reading+2
 //
+//   Run the application macro ADINTR_BEFORE, if defined.
 //
+/if [= [sym "adintr_before" type] "MACRO"] then
+  /write
+  /write ";   ADINTR_BEFORE macro."
+  /write ";"
+         adintr_before
+  /write
+  /endif
+
 /if [> nchan 1] then
 ;
 ;   Dispatch to the routine to handle this reading.  The local variable CHVECT
@@ -771,6 +780,19 @@ dochan[v ch]:
 ;   Common code after done with the channel-specific processing.
 ;
 done_chan:
+//
+//   Run the application macro ADINTR_AFTER, if defined.
+//
+/if [= [sym "adintr_after" type] "MACRO"] then
+  /write
+  /write ";   ADINTR_AFTER macro."
+  /write ";"
+         adintr_after
+  /write
+  /endif
+;
+;   Restore state and leave.
+;
          pop.s               ;restore W0-W3 from shadow registers
          disi    #2
          retfie              ;return from the interrupt
