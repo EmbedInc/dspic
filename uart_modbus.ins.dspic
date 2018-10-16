@@ -110,6 +110,10 @@
   /const txdrive = ""
   /endif
 
+/if [not [exist "txdrive_rts"]] then
+  /const txdrive_rts bool = false
+  /endif
+
 /if [not [exist "runtime_baud"]] then
   /const runtime_baud bool = false
   /endif
@@ -438,6 +442,10 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;           ------------0--- low speed baud rate mode (16x bit clock)
 ;           -------------XX- init to 8 bit data, no parity, filled in below
 ;           ---------------X init to 1 stop bit, filled in below
+  /if txdrive_rts then
+    /set ii [or ii [shiftl 1 11]] ;RTS in simplex mode, not flow control
+    /set ii [or ii [shiftl 2#01 8]] ;drive TX, RX, RTS, not CTS
+    /endif
   /if altpins then
     /set ii [or ii [shiftl 1 10]] ;select alternate RX and TX pins
     /endif
