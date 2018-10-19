@@ -14,77 +14,28 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   Utility routines for implementing Modbus over serial protocol.  These
-;   routines are needed by the MODBUS_SER library code.  The MODBUS_SER
-;   library code may be replicated to implement multiple Modbusses in a system,
-;   but there is only one instance of this module in a system.
+;   Modbus over serial utility routines.  The exported subroutines are:
+;
+;     MODBUS_CRC_INIT
+;
+;       Initialize the Modbus CRC checksum in W0.
+;
+;     MODBUS_CRC_BYTE
+;
+;       Add the byte in the low bits of W1 into the Modbus checksum in W0.
+;
+;     MODBUS_CRC_BUF
+;
+;       Add a buffer of bytes to Modbus checksum in W0.  Call parameters:
+;
+;         W0  -  Modbus checksum.  Will be updated.
+;
+;         W1  -  Pointer to the first byte to add to the checksum.
+;
+;         W2  -  Number of bytes to add to the cheksum.
 ;
 /include "qq2.ins.dspic"
 
-;*******************************************************************************
-;
-;   Constants.
-;
-/const   crcpoly integer = 16#A001 ;XOR mask for computing CRC checksum
-
-
-.section .code_modbus_ser_util, code
-;*******************************************************************************
-;
-;   Subroutine MODBUS_CRC_INIT
-;
-;   Initialize the CRC accumulator for computing the checksum of a Modbus serial
-;   packet.  W0 will be set, which must be preserved between the various
-;   MODBUS_CRC_xxx routines in this module.
-;
-         glbsub  modbus_crc_init
-
-         mov     #0xFFFF, w0 ;init the CRC accumulator
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine MODBUS_CRC_BYTE
-;
-;   Add the byte in the low 8 bits of W1 to the CRC checksum being built in W0.
-;
-         glbsub  modbus_crc_byte, regf1 | regf2
-
-         mov     #0xFF, w2   ;mask in only the data byte
-         and     w1, w2, w1
-         xor     w0, w1, w0  ;XOR the data byte into the accumulator
-
-         mov     #8, w1      ;init number of bits left to do in W1
-         mov     #[v crcpoly], w2 ;get the XOR mask ready in W2
-crc_bit:                     ;back here each bit in this byte
-         bclr    Sr, #C      ;set bit to shift in
-         rrc     w0, w0      ;shift 0 into MSB, LSB into C
-         skip_ncarr          ;LSB was 0, don't apply XOR mask ?
-         xor     w0, w2, w0  ;LSB was 1, apply the XOR mask
-         sub     #1, w1      ;count one less bit left to do
-         bra     nz, crc_bit ;back to do next bit
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine MODBUS_CRC_BUF
-;
-;   Add all the bytes in a buffer to the CRC checksum being built in W0.  W1 is
-;   pointing to the start of the buffer, and W2 contains the number of bytes.
-;
-;   W2 must be at least 1.  Results are undefined when W2 is 0.
-;
-         glbsub  modbus_crc_buf, regf1 | regf2 | regf3
-
-         mov     w0, w3      ;init pointer to next byte in W3
-cbuf_byte:                   ;back here each new byte
-         mov.b   [w3++], w1  ;get this data byte
-         mcall   modbus_crc_byte ;add it to the CRC checksum
-         sub     #1, w2      ;count one less byte left to do
-         bra     nz, cbuf_byte ;back to do next byte
-
-         leaverest
+/include "(cog)src/dspic/modbus_ser_util.ins.dspic"
 
 .end

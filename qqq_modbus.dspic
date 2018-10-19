@@ -1,9 +1,131 @@
+;   ***************************************************************
+;   * Copyright (C) 2015, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
 ;   Modbus packet sending and receiving interface.
 ;
 ;   This is the top file of the module.  This file includes a library module
 ;   that contains the actual code.  Preprocessor constants are set here first to
-;   configure the generic library file.  The preprocessor constants for
-;   configuring the library file are:
+;   configure the generic library file.
+;
+;   The exported symbols can have a unique name added to them (see NAME
+;   configuration constant, below).  The name is inserted after the leading
+;   "MODBUS_", followed by another underscore.  For example, the generic routine
+;   MODBUS_INIT would actually be MODBUS_XYZ_INIT when NAME is set to "XYZ".
+;   The descriptions of the exported symbols use the generic name (result when
+;   NAME set to the empty string).
+;
+;   The exported subroutines are:
+;
+;     MODBUS_INIT
+;
+;       Initialize the module.  This must be the first call into the library
+;       code.
+;
+;     MODBUS_STATS_CLEAR
+;
+;       Reset all the statistics counters to 0.  All counters are originally
+;       initialized to 0.
+;
+;     MODBUS_ADR_SET
+;
+;       Configure the module to slave mode, and set the slave address.  The new
+;       slave address is passed in W0.  The valid range is 1 to 247.
+;
+;       The special value of 0 indicates this is a slave with no slave address
+;       assigned.  Only broadcast packets are received, and attempts to transmit
+;       packets are ignored.
+;
+;     MODBUS_MASTER
+;
+;       Configure the module to master mode.
+;
+;     MODBUS_STARTCHAR
+;
+;       Configure to a special character preceeds all packets.  This character
+;       is passed in the low byte of W0.  This character is automatically sent
+;       before all outgoing packets, and is required to preceed all received
+;       packets.
+;
+;       Adding a special start character before packets is not standard Modbus.
+;       In fact, doing so prevents interoperability with proper Modbus systems.
+;       However, some implementations do this anyway.  This feature supports
+;       those non-standard applications.
+;
+;     MODBUS_STARTCHAR_OFF
+;
+;       Disables the non-standard feature of preceeding all packets with a
+;       special character.
+;
+;     MODBUS_START
+;
+;       Start the Modbus packet receiving background task.
+;
+;     MODBUS_PACK_GET
+;
+;       Get the next valid received Modbus packet or timeout.  Input parameters:
+;
+;         W0  -  Max ms to wait.
+;
+;       Output parameters:
+;
+;         W1  -  Pointer to packet (Modbus PDU).  0 on timeout.
+;
+;         W2  -  Number of bytes in the packet.  0 on timeout.
+;
+;         W3  -  Slave address in packet.
+;
+;     MODBUS_PACK_RELEASE
+;
+;       Release the last-received packet.  The packet returned by
+;       MODBUS_PACKET_GET is held in the buffer until this routine is called.
+;       This routine allows the buffer to be re-used.
+;
+;       Only one packet can be held at a time.  There must be exactly one call
+;       to this routine following every call to MODBUS_PACKET_GET.
+;
+;     MODBUS_PACK_PUT
+;
+;       Send a Modbus packet.  Call parameters:
+;
+;         W0  -  Packet address, for master mode only.  In slave mode, the
+;           previously-set slave address is used automatically.
+;
+;         W1  -  Pointer to start of Modbus PDU data.  Note that this does not
+;           include additional bytes specific to some transports, like a slave
+;           address or checksum.  These are added automatically as needed.
+;
+;         W2  -  Number of bytes pointed to by W1.  Must be 1-253.
+;
+;       This call is multi-task safe.  A internal mutex is used to ensure a
+;       single task receives a whole packet at a time.
+;
+;     MODBUS_ACTIVITY
+;
+;       Indicates the activity that occured since the last call.  W0 is returned
+;       a set of bits, each indicating a specific type of event detected.
+;       Constants that are the bit numbers are defined in MODBUS_SETUP.INS.DSPIC.
+;       The bits within W0 mean:
+;
+;         MODBUS_EV_RBYTE  -  Received valid packet byte
+;         MODBUS_EV_RPACK  -  Received valid packet
+;         MODBUS_EV_RPACKUS  -  Received valid packet for this slave
+;         MODBUS_EV_SBYTE  -  Sent packet byte
+;         MODBUS_EV_SPACK  -  Sent whole packet
+;
+;   The preprocessor constants for configuring the module are:
 ;
 ;     NAME, string
 ;
@@ -14,7 +136,16 @@
 ;
 ;     MASTER, bool
 ;
-;       This device is the master, not a slave.  The default is FALSE.
+;       Initialize to master mode, not slave.  The default is FALSE.
+;
+;     STARTCHAR, string
+;
+;       Character to preceed all Modbus packets.  The default is the empty
+;       string, which causes no character to be added.  STARTCHAR can be set to
+;       a single character at most.
+;
+;       Adding a character in front of all packets is not standard Modbus.  This
+;       feature supports some non-standard Modbus-like implementations.
 ;
 ;     CALLBACK_RECV, string
 ;
@@ -31,8 +162,7 @@
 ;     CALLBACK_RECVUS, string
 ;
 ;       Like CALLBACK_RECV except the routine will only be called with packets
-;       addressed to us.  Note that this distinction is only meaningful when
-;       this device is a slave.
+;       addressed to us.  Called for every packet when in master mode.
 ;
 ;     CALLBACK_SEND, string
 ;
@@ -53,6 +183,7 @@
 ;
 /const   name    string = "" ;unique name for exported symbols, may be empty
 /const   master  bool = false ;we are not the bus master
+/const   startchar string = "" ;no additional char preceeding all packets
 /const   callback_recv string = "" ;no routine to call on packet received
 /const   callback_recvus string = "" ;no routine to call on packet for us
 /const   callback_send string = "" ;no routine to call when sending packet

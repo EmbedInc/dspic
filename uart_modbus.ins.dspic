@@ -879,7 +879,7 @@ recv_leave:                  ;common exit point for UART receive interrupt
 ;   returns with the Z flag reset, then the next call to UART_GET is guaranteed
 ;   to return immediately with a new byte.
 ;
-         glbsub  uart[chars uname]_get_ready, regf0
+         glbsub  uart[chars uname]_get_ready, regf0 | regf1
 
          fifow_z_empty fifoi ;set Z iff no byte available
 
