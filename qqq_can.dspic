@@ -44,7 +44,7 @@
 ;
 ;     CAN_SEND_DAT16  -  Adds the word in W0 to the output CAN frame.
 ;
-;     CAN_SEND_DAT24  -  Adds the low 24 bits if W1:W0 to the output CAN frame.
+;     CAN_SEND_DAT24  -  Adds the low 24 bits of W1:W0 to the output CAN frame.
 ;
 ;     CAN_SEND_DAT32  -  Adds the 4 bytes of W1:W0 to the output CAN frame.
 ;
@@ -138,7 +138,7 @@
 ;       string.
 ;
 ;     DEBUG_CANCFG  -  Preprocessor constant, type BOOL.  TRUE causes detailed
-;       information to be shown about the automatic CAN bit timing
+;       information to be shown about the preprocssor CAN bit timing
 ;       configuration calculations.  The default is FALSE, which just shows the
 ;       final result.
 ;
@@ -185,7 +185,7 @@
 /const   canin_callback = "" ;routine to call when CAN frame received
 /const   canout_callback = "" ;routine to call when CAN frame sent
 /const   debug_cancfg bool = false ;no extra output during build about CAN config
-/const   ncanbuf integer = 16 ;number of DMA buffers for CAN messages
+/const   ncanbuf integer = 8 ;number of DMA buffers for CAN messages
 /const   dma_canrecv integer = 0 ;DMA channel to use for receiving
 /const   dma_canxmit integer = 1 ;DMA channel to use for transmitting
 /const   dmaram  bool = False ;processor has no special region of RAM for DMA
