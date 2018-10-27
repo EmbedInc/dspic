@@ -72,7 +72,7 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;   Main loop.
 ;
 loop_main:
-         call    task_yield  ;give all other tasks a chance to run
+         gcall   task_yield  ;give all other tasks a chance to run
 ;
 ;   Handle new 1 ms clock tick.
 ;

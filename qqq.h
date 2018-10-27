@@ -80,6 +80,8 @@ machine_intu_t cmd_get8u (void);       //get command stream integer values
 machine_ints_t cmd_get8s (void);
 machine_intu_t cmd_get16u (void);
 machine_ints_t cmd_get16s (void);
+int32u_t cmd_get24u (void);
+int32s_t cmd_get24s (void);
 int32u_t cmd_get32u (void);
 int32s_t cmd_get32s (void);
 
@@ -91,6 +93,8 @@ void cmd_put8u (machine_intu_t);       //write integers to response stream
 void cmd_put8s (machine_ints_t);
 void cmd_put16u (machine_intu_t);
 void cmd_put16s (machine_ints_t);
+void cmd_put24u (int32u_t);
+void cmd_put24s (int32s_t);
 void cmd_put32u (int32u_t);
 void cmd_put32s (int32s_t);
 

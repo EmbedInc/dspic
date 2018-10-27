@@ -14,8 +14,6 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   Task management.
-;
 ;   The routines in this module implement a cooperative multi-tasking system.
 ;   For context switching speed, each task has its own stack.
 ;
@@ -23,26 +21,16 @@
 ;   switches the context to the next task in the list in a circular fashion.
 ;
 ;   The constant TSKSAVE defined in the include file indicates which registers
-;   will be preserved accross a task switch.
+;   will be preserved accross a task switch.  Each bit in TSKSAVE indicates one
+;   register.  Bit 0 is for W0, bit 1 for W1, etc.
 ;
-;   The following preprocessor state can be set to customize this module:
+
+;*******************************************************************************
 ;
-;     MAXTASKS, integer
+;   Constants that reflect external realities.
 ;
-;       The maximum number of tasks to support, must be 0 to 31.  The default is
-;       4.
-;
-;     GLBTASKNUM, bool
-;
-;       When TRUE, the global variable CURRTASK is created and will be
-;       maintained to contain the current task number.  The current task number
-;       is always 0 to MAXTASKS-1.  The default is TRUE.
-;
-;     ENDLIM, integer
-;
-;       Set up the system to create a stack error trap when only this many bytes
-;       are left on the stack and a push is attempted.  The default is 6.
-;
+/const   c30save integer = 16#7F00 ;mask of registers C30 subroutines must save
+/const   xc16save integer = 16#7F00 ;mask of registers XC16 subroutines must save
 
 ;*******************************************************************************
 ;
@@ -51,62 +39,104 @@
 /if [not [exist "maxtasks"]] then
   /const maxtasks integer = 4
   /endif
-/if [not [exist "glbtasknum"]] then
-  /const glbtasknum bool = true
-  /endif
 /if [not [exist "endlim"]] then
   /const endlim integer = 6
   /endif
 
-.equiv   c30save, 0x7F00     ;mask of registers C30 requires subroutines to save
-.equiv   xc16save, 0x7F00    ;mask of registers XC16 requires subroutines to save
-.equiv   endlim, [v endlim]
+/if [< maxtasks 1] then
+  /show "  MAXTASKS is " maxtasks ", must be at least 1."
+         .error  "MAXTASKS"
+         .end
+  /stop
+  /endif
 ;
-;   Data structure for the static state kept per task.
+;   Tasks table.
+;
+;   The tasks table holds the information to restart tasks when they are
+;   dormant.  The data structure is optimized for quickly changing from the
+;   current task to the next task (TASK_YIELD).  It is acceptable if other
+;   operations, like starting and ending a task are less efficient.
+;
+;   The tasks table is statically allocated to a fixed maximum number of active
+;   tasks (MAXTASKS).  The table starts at TASKS, with entries stored
+;   sequentially.  Each entry is the descriptor for one task, and is ENTSIZE
+;   bytes in size.  ENTSIZE is derived automatically by declaring the fields in
+;   a task descriptor, below.
+;
+;   The TSK_xxx contants are the byte offsets for each field from the start of
+;   the descriptor.  The fields are:
+;
+;     TSK_STKPNT
+;
+;       Stack pointer (W15) value for this task.
+;
+;     TSK_SPLIM
+;
+;       The SPLIM register value for this task.  This is set to ENDLIM bytes
+;       from the end of the stack when the task is created.
+;
+;     TSK_ID
+;
+;       The ID for this task.  An effort is made to minimize re-use of task IDs
+;       when a new task is created.  However, the only guarantee is that a
+;       task's ID is unique only over the lifetime of that task.  Put another
+;       way, all currently-active tasks have different IDs.  It is possible for
+;       a new task to be assigned the same ID as a previously existing, but no
+;       longer existing, task.  Once created, a task's ID does not change.
+;
+;   To optimize task switching (TASK_YIELD), all used table entries are
+;   contiguous at the start of the table.  The local variable LAST_P points to
+;   the last-used table entry.  Therefore, all table entries from the start of
+;   the table thru the one pointed to by LAST_P contain data for active tasks.
+;   All the table entries after the one pointed to by LAST_P to the end of the
+;   table are unused.
 ;
 /call struct_start
-         field   tsk_stkpnt  ;stack pointer to resume task
-         field   tsk_splim   ;appropriate SPLIM value for task's stack
+         field   tsk_stkpnt  ;stack pointer for this task
+         field   tsk_splim   ;SPLIM value for this task
+         field   tsk_id      ;16 bit unique ID for this task
 
-.equiv   tsksize, struct_offset ;size of the per-task data structure
+/const   entsize integer = struct_size ;size of each tasks table entry, bytes
+/const   entsizew integer = [div entsize 2] ;entry size in 16 bit words
 ;
 ;   Derived constants.
 ;
-.equiv   maxtasks, [v maxtasks]
-.equiv   glbtasknum, [if glbtasknum 1 0]
+.equiv   c30save, [v c30save] ;mask of registers C30 requires subroutines to save
+.equiv   xc16save, [v xc16save] ;mask of registers XC16 requires subroutines to save
+.equiv   endlim, [v endlim]  ;Splim offset from end of stack
+.equiv   entsize, [v entsize] ;size of each tasks table entry, bytes
 
 /show "  Configured for up to " maxtasks " concurrent tasks"
-/show "  CURRTASK " [if glbtasknum "enabled" "disabled"]
 
 ;*******************************************************************************
 ;
 ;   Variables.
 ;
+
 ;*******************
 ;
 ;   Global state.
 ;
-.section .ram_task, bss
+.section .ram_task, bss      ;variables in normal RAM
 
-.if glbtasknum
-allocg   currtask, 2, 2      ;0-N number of currently running task
-  .endif
+allocg   currtask            ;0-N number of currently running task
 
 ;*******************
 ;
-;   Local state.
+;   Local state in normal RAM.
 ;
-alloc    tasks,  tsksize * maxtasks, 2 ;tasks table, per-task state for each task
-alloc    after_p, 0, 2       ;first address after tasks table
+alloc    tasks,  [* entsize maxtasks] ;tasks table, descriptor for each possible task
+alloc    after_tasks, 0, 2   ;first address after tasks table
 
-alloc    task_p, 2, 2        ;adr of task table entry for current task
-alloc    last_p, 2, 2        ;pointer to last used task table entry
+;*******************
+;
+;   Local state in near RAM.
+;
+.section .near_task, bss, near ;varibles in near RAM
 
-.if debug
-         .global tasks
-         .global task_p
-         .global last_p
-  .endif
+alloc    curr_p              ;adr of tasks table entry for current task
+alloc    last_p              ;pointer to last used tasks table entry
+alloc    nextid              ;ID to try to assign to a new task next
 
 
 .section .code_task, code
@@ -114,25 +144,28 @@ alloc    last_p, 2, 2        ;pointer to last used task table entry
 ;
 ;   Subroutine TASK_INIT
 ;
-;   Initialize the hardware and software state managed by this module.
-;   This must be the first call made to this module.  The first task slot
-;   will be reserved for the task making this call.  The remaining task
-;   slots will be initialized to empty.  Calls to TASK_YIELD are allowed
-;   after TASK_INIT, although no task switching will take place until
-;   at least one other task is created by calling TASK_NEW.
+;   Initialize the hardware and software state managed by this module.  This
+;   must be the first call made to this module.  The first task slot will be
+;   reserved for the task making this call.  The remaining task slots will be
+;   initialized to empty.  Calls to TASK_YIELD are allowed after TASK_INIT,
+;   although no task switching will take place until at least one other task is
+;   created by calling TASK_NEW.
 ;
          glbsub  task_init, regf0
+;
+;   Save the information for this task.  This always goes into the first tasks
+;   table slot.
+;
+         mov     #0, w0      ;the ID of this first task is always 0
+         mov     w0, tasks + tsk_id ;save ID in task descriptor
+         mov     w0, currtask ;set ID of the currently-running task
 
          mov     #tasks, w0
-         mov     w0, task_p  ;init pointer to table entry for current task
-         mov     w0, last_p  ;init pointer to last valid table entry
-         mov     Splim, w0   ;set saved stack limit value for this task
-         mov     w0, tasks + tsk_splim
+         mov     w0, curr_p  ;init pointer to entry for current task
+         mov     w0, last_p  ;init pointer to last used table entry
 
-.if glbtasknum
-         mov     #0, w0
-         mov     w0, currtask ;indicate task 0 is now running
-  .endif
+         mov     #1, w0
+         mov     w0, nextid  ;init ID to try to assign to the next-created task
 
          leaverest
 
@@ -149,7 +182,7 @@ alloc    last_p, 2, 2        ;pointer to last used task table entry
 ;   The call parameters are:
 ;
 ;     W13  -  Size of new task stack, must be even.
-;     W14  -  Stack start address for the new task.
+;     W14  -  Start address of new task stack, must be even.
 ;
 ;   The new task start address will be immediately after the call to TASK_NEW.
 ;   TASK_NEW will return 2 instruction words (4 addresses) after the call.  This
@@ -161,15 +194,16 @@ alloc    last_p, 2, 2        ;pointer to last used task table entry
 ;
          glbsub  task_new, regf0 | regf14
 ;
-;   Update LAST_P to the next unused task table entry.  Abort if LAST_P is
-;   already at the last allocated task table entry.
+;   Update LAST_P to point to the task slot for the new task.  The NOTASK error
+;   is signalled if there are no free task slots available.
 ;
-         mov     last_p, w0  ;get pointer to current last table entry
-         add     #tsksize, w0 ;make pointer to next table entry
-         mov     #after_p, w14 ;get first address past end of table
-         cp      w0, w14     ;compare new table entry address to past table adr
-         bra     geu, tkn_abort ;task table is already full ?
-         mov     w0, last_p  ;update pointer to last used task table entry
+         mov     last_p, w0  ;get existing pointer
+         add     #entsize, w0 ;advance to next tasks table entry
+         mov     #after_tasks, w14 ;get first address past tasks table
+         cp      w0, w14     ;compare new address to first invalid
+         bra     geu, tkn_abort ;no free task slot available ?
+
+         mov     w0, last_p  ;update pointer to last-used table entry
 ;
 ;   Initialize the stack of the new task.  The stack will be set up so that to
 ;   restart the task, the registers indicated by TSKSAVE are restored, then a
@@ -184,10 +218,18 @@ alloc    last_p, 2, 2        ;pointer to last used task table entry
 ;     [W15 - 2] --> saved W14 (start of new task stack)
 ;     [W15]     --> empty
 ;
+;   Register usage in this section.
+;
+;     W0  -  Scratch.
+;
+;     W13  -  Size of new task stack, must be preserved.
+;
+;     W14  -  Stack pointer for the new stack.
+;
+         mov     [w15 - 2], w14 ;point to start of the new task's stack
          ;
          ;   Push the task start address onto the task stack.
          ;
-         mov     [w15 - 2], w14 ;set W14 as stack pointer for the new task
          mov     [w15 - 8], w0 ;get task start address low word
          mov     w0, [w14++] ;push it onto new task stack
          mov     [w15 - 6], w0 ;get task start address high word
@@ -208,22 +250,51 @@ alloc    last_p, 2, 2        ;pointer to last used task table entry
          mov     [w15 - 2], w0 ;get original W14 value
          mov     w0, [w14++] ;push it onto the new task stack
   .endif
-         ;
-         ;   Push any application specific data that is to be saved accross
-         ;   task swaps onto the new task stack.  W14 is the stack pointer
-         ;   and W0 is available for scratch.
-         ;
-
 ;
-;   Fill in the task descriptor for the new task.  LAST_P is pointing to the
-;   task descriptor.
+;   Fill in most of the task descriptor for the new task.  LAST_P is pointing to
+;   the task descriptor.  W14 is the stack pointer for the new task.
 ;
          mov     last_p, w0  ;point W0 to the task descriptor
          mov     w14, [w0 + tsk_stkpnt] ;save the task stack pointer
+
          mov     [w15 - 2], w14 ;get start address of new task stack
          add     w14, w13, w14 ;make first address past end of stack
          sub     #endlim, w14 ;make SPLIM value for this stack
          mov     w14, [w0 + tsk_splim] ;save it in the task descriptor
+;
+;   Assign the task ID for this task.  Task IDs are assigned sequentially, with
+;   NEXTID holding the next ID to assign.  However, since NEXTID will eventually
+;   wrap back to the first IDs assigned, the NEXTID value must be checked for
+;   not being currently in use.  If the NEXTID value is found to already be in
+;   use, then the value is incremented by one and checked again.
+;
+;   LAST_P is pointing to the descriptor of the new task.  Therefore, valid
+;   existing entries are from the start of the table up to but no including the
+;   one pointed to by LAST_P.
+;
+         jump    checkid     ;go check the current NEXTID value
+
+nextid_dup:                  ;jump here if NEXTID is found to already be in use
+         inc     nextid      ;try the next sequential value
+checkid:                     ;check the current NEXTID value for being unique
+         mov     #tasks, w14 ;init pointer to current task table entry
+check_ent:                   ;back here each new entry in table
+         mov     [w14 + tsk_id], w0 ;get ID from this entry
+         cp      nextid      ;compare it to the candidate new ID
+         bra     z, nextid_dup ;ID already in use, back to try next ?
+
+         add     #entsize, w14 ;point to next tasks table entry
+         mov     last_p, w0  ;get pointer to first invalid entry
+         cp      w14, w0
+         bra     ltu, check_ent ;not hit end of used entries yet ?
+         ;
+         ;   The task ID in NEXTID is not currently in use.
+         ;
+         mov     last_p, w14 ;point to descriptor for the new task
+         mov     nextid, w0  ;get the ID
+         mov     w0, [w14 + tsk_id] ;assign the ID of the new task
+
+         inc     nextid      ;update first ID to try next time
 ;
 ;   Return to 4 addresses after the call.
 ;
@@ -235,12 +306,13 @@ alloc    last_p, 2, 2        ;pointer to last used task table entry
          addc    #0, w0      ;make new return address high word
          mov     w0, [w15 - 6] ;replace it on the stack
 
-         leaverest
+         leaverest           ;normal return point
 ;
 ;   The task table was already full.  Signal software error ERR_NOTASK.
 ;
 tkn_abort:
          swerr   err_notask  ;signal the error
+         reset               ;in case SWERR macro falls thru
 
 ;*******************************************************************************
 ;
@@ -249,6 +321,12 @@ tkn_abort:
 ;   End the time slice of the current task, run all other tasks for a time
 ;   slice, then resume the caller's task and return.  Only those registers
 ;   indicated by TSKSAVE will be preserved.
+;
+;   This routine was measured on a 33EP series dsPIC to take 25 instruction
+;   cycles plus two cycles for every register listed in TSKSAVE.  This is from
+;   the call in one task to the first instruction after TASK_YIELD in the next
+;   task.  When all registers (W0-W14) are saved (TSKSAVE = 7FFFh), this routine
+;   takes 55 cycles.  At 70 MHz instruction rate, that is 786 ns.
 ;
 /if using_c30 then
 .if ((tsknsave & c30save) == 0) ;TASK_YIELD saves all registers required by C30 ?
@@ -267,83 +345,62 @@ tkn_abort:
   .endif
          glbsub  task_yield
 ;
-;   Save all old task state that is saved accross task swaps onto the stack.
+;   Save all the registers listed in TSKSAVE.
 ;
-         ;
-         ;   Save all the registers listed in TSKSAVE.
-         ;
 .irp     ii,     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 ;once for each reg
 .if tsksave & (1 << \ii)     ;this register will be saved ?
          push    w\ii        ;push this register onto the stack
   .endif
          .endr
-         ;
-         ;   Push any application specific data that is to be saved accross
-         ;   task swaps onto the stack.
-         ;
-
+;
+;   The registers W0 - W14 may now be trashed.
 ;
 ;   Save the stack pointer and SPLIM value in the task table entry for this task.
 ;
-         mov     task_p, w0  ;point W0 to table entry for the current task
+         mov     curr_p, w0  ;point W0 to table entry for the current task
          mov     w15, [w0 + tsk_stkpnt] ;write the stack pointer into the table entry
          mov     Splim, w1
          mov     w1, [w0 + tsk_splim] ;write the SPLIM value into the table entry
 ;
-;   Advance to the task pointer to the next task.  W0 is the task pointer for
-;   the current task.
+;   Run the next sequential task from the current.  W0 is pointing to the
+;   descriptor for the current task.
 ;
-.if glbtasknum
-         mov     currtask, w2 ;get 0-N number of the current task
-  .endif
+;   The registers W0-W14 may be trashed.  W15 is currently the stack pointer for
+;   the previous task.  W15 must be kept pointing to a valid stack since it is
+;   used asynchronously by interrupts.
+;
+         add     #entsize, w0 ;point to next table entry
+         cp      last_p      ;compare last valid entry to this entry
+         skip_geu            ;still within valid entries ?
+         mov     #tasks, w0  ;no, wrap back to first entry
+;
+;   W0 is pointing to the descriptor of the task to run.
+;
+         mov     w0, curr_p  ;make this new task current
 
-         mov     last_p, w1  ;get pointer to last entry in the table
-         cp      w0, w1      ;compare current pointer to last pointer
-         bra     geu, ylast  ;currently at the last task ?
-         ;
-         ;   Not at last task in table, advance to next.
-         ;
-         add     #tsksize, w0 ;make pointer to next table entry
-.if glbtasknum
-         add     #1, w2      ;update number for this task table entry
-  .endif
-         bra     ynew        ;now at next task
-         ;
-         ;   At last task in table, wrap back to first.
-         ;
-ylast:
-         mov     #tasks, w0  ;point to first task in the table
-.if glbtasknum
-         mov     #0, w2      ;first task table entry is task number 0
-  .endif
-
-ynew:                        ;W0 points to task table entry of the new task
-.if glbtasknum
-         mov     w2, currtask ;update global current task number
-  .endif
-         mov     w0, task_p  ;update pointer to task table entry for current task
-         disi    #3
+;*****************************
+;
+;   Internal entry point RUN_THIS.
+;
+;   Run the task pointed to by CURR_P and W0.
+;
+run_this:                    ;run task at CURR_P and W0
          mov     [w0 + tsk_splim], w1 ;get the SPLIM value for this stack
+         disi    #2
          mov     w1, Splim   ;set the hardware limit for this stack
          mov     [w0 + tsk_stkpnt], w15 ;switch to the stack of the new task
+         mov     [w0 + tsk_id], w1 ;get the ID of this task
+         mov     w1, currtask ;update the global current task ID variable
 ;
-;   Restore the registers indicated by TSKSAVE and other per-task saved state
-;   from the stack, and return from the TASK_YIELD call made by this task.
+;   Restore the registers indicated by TSKSAVE.
 ;
-         ;
-         ;   Pop any application specific data that is saved accross task
-         ;   swaps off the stack.
-         ;
-
-         ;
-         ;   Restore all the registers listed in TSKSAVE.
-         ;
 .irp     ii,     14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 ;once for each reg
 .if tsksave & (1 << \ii)     ;this register will be saved ?
          pop     w\ii        ;pop this register from the stack
   .endif
          .endr
-         return              ;return from TASK_YIELD of the resumed task
+
+         return              ;restart the new task
 
 ;*******************************************************************************
 ;
@@ -389,3 +446,128 @@ ynew:                        ;W0 points to task table entry of the new task
          leaverest
   .endif
   /endif
+
+;*******************************************************************************
+;
+;   Routine TASK_EXIT
+;
+;   End the currently running task.
+;
+;   This routine can be called like a subroutine, but it will never return.
+;   Either the next task will be run, or the processor will be reset if there is
+;   no next task.
+;
+         glbsubd task_exit
+;
+;   Reset the processor if the last-used task slot is also the first.
+;
+         mov     #tasks, w0  ;get address of first tasks table entry
+         cp      last_p      ;compare to address of last-used entry
+         skip_nz             ;not trying to delete the last task ?
+         reset               ;exiting the last task, reset the processor
+;
+;   Delete the current task.  TSK_DELETE will not return, and instead run the
+;   next task.
+;
+         mov     curr_p, w0  ;point to the task to delete
+         ;fall thru to TSK_DELETE
+
+;*******************************************************************************
+;
+;   Local subroutine TSK_DELETE
+;
+;   This code must immediately follow TASK_EXIT.
+;
+;   Delete the task with the descriptor at where W0 is pointing.  The last tasks
+;   table entry will be copied into the slot being vacated.  LAST_P is updated
+;   accordingly.
+;
+;   If the current task is being deleted, then the next sequential task is run,
+;   and this routine does not return.  Otherwise, this routine returns with the
+;   same task running.
+;
+;   There must be at least one remaining task after the deletion (LAST_P must
+;   not be pointing to the first table entry when this routine is called).
+;
+;   W0, W1 are trashed when this routine returns.
+;
+         locsub  tsk_delete
+
+         mov     last_p, w1  ;get pointer to last entry in list
+         cp      w0, w1
+         bra     nz, edel_nlast ;not deleting the last entry ?
+;
+;   The entry to delete is the last entry in the list.
+;
+;   W0 and W1 are pointing to this entry.
+;
+         sub     #entsize, w1 ;update pointer to last entry in list
+         mov     w1, last_p
+
+         cp      curr_p      ;compare deleted task to current
+         skip_z              ;deleted the current task ?
+         return              ;no
+         ;
+         ;   The current task was deleted.  Since this was the last task in the
+         ;   list, the next task to run is the first in the list.
+         ;
+         mov     #tasks, w0  ;point W0 and CURR_P to next task to run
+         mov     w0, curr_p
+         jump    run_this    ;go run it
+;
+;   The entry to delete is not the last entry in the list.
+;
+;     W0  -  Pointer to the entry to delete.
+;
+;     W1  -  Pointer to the last entry in the list.
+;
+edel_nlast:
+/loop with ii n entsizew     ;once for each entry word to copy
+  /if [= ii 1]
+    /then
+         mov     [w1++], [w0++] ;copy last entry into vacated entry
+    /else
+         mov     [w1++], [w0++]
+    /endif
+  /endloop
+         sub     #[* entsize 2], w1 ;update pointer to last entry in list
+         mov     w1, last_p
+         sub     #entsize, w0 ;point back to the entry that was deleted
+         cp      curr_p      ;compare to pointer to current task
+         skip_z              ;deleted the current task ?
+         return              ;no
+         ;
+         ;   The current task was deleted.  The last entry in the tasks list was
+         ;   moved into the vacated slot, which is where CURR_P is still
+         ;   pointing.  To continue, the new task at CURR_P is run.
+         ;
+         mov     curr_p, w0  ;W0 and CURR_P point to the task to run
+         jump    run_this    ;go run it
+
+;*******************************************************************************
+;
+;   Subroutine TASK_KILL
+;
+;   End the task with the ID in W0.  Nothing is done if no task has that ID.  If
+;   the only task is ended, then the processor is reset.
+;
+         glbsubd task_kill, regf0 | regf1 | regf2
+;
+;   Scan the active tasks looking for the one with the ID in W0.
+;
+         mov     w0, w1      ;save the target task ID in W1
+         mov     #tasks, w0  ;init pointer to first task descriptor in the list
+tkl_desc:                    ;back here to check each new descriptor
+         mov     [w0 + tsk_id], w2 ;get the ID of this task
+         cp      w2, w1      ;compare it to the target ID
+         bra     z, tkl_found ;found the task to delete ?
+         cp      last_p
+         bra     z, tkl_leave ;done scanning whole list ?
+         add     #entsize, w0 ;point to the next list entry
+         bra     tkl_desc    ;back to check this new list entry
+
+tkl_found:                   ;W0 is pointing to the task to delete
+         mcall   tsk_delete  ;delete the task at where W0 is pointing
+
+tkl_leave:                   ;common exit point
+         leaverest

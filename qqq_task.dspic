@@ -14,13 +14,61 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   Cooperative task manager.
+;   Cooperative task manager.  The exported resources are:
+;
+;     TASK_INIT
+;
+;       Initializes the state.  Must be first call into this module.
+;
+;     TASK_NEW
+;
+;       Create a new task.  Call parameters:
+;
+;         W13  -  Size of the new task stack in bytes, must be even.
+;
+;         W14  -  Start address of the task for the new stack.
+;
+;       The new task starts immediately after CALL TASK_NEW instructions.  It
+;       is intended that a GOTO be put there.  The call returns 2 instruction
+;       words after the call, skipping over the GOTO intended to be immediately
+;       after the call.
+;
+;       Example call:
+;
+;         mov    #<stack size>, w13
+;         move   #<stack>, w14
+;         call   task_new
+;         goto   <new task start point>
+;
+;     TASK_YIELD
+;
+;       Gives all other tasks a chance to run.  Registers listed in TSKSAVE are
+;       preserved.
+;
+;     TASK_YIELD_SAVE
+;
+;       Like TASK_YIELD, except that all registers are preserved.
+;
+;     TASK_EXIT
+;
+;       Entry point to end the current task.  The task state slot becomes
+;       unused, and may be re-used by a future call to TASK_NEW.  This entry
+;       point can be CALLed, but will not return.  The stack state is
+;       irrelevant on entry to TASK_EXIT.  The processor is reset on attempt
+;       to exit the only task.
+;
+;     TASK_KILL
+;
+;       Kill the task with the ID in W0.  Nothing is done is the ID matches no
+;       task.  If the current task is killed, this routine will not return.  The
+;       processor is reset on attempt to kill the only task.
+;
 ;
 ;   The tasks are:
 ;
 ;     0  -  Original task.  This runs the main event loop after initialization.
 ;
-;     1  -  Processes responses from the host.
+;     1  -  *** fill in here ***
 ;
 /include "qq2.ins.dspic"
 
@@ -28,8 +76,7 @@
 ;
 ;   Configuration constants.
 ;
-/const   maxtasks integer = 2 ;maximum number of concurrent tasks supported (0-31)
-/const   glbtasknum bool = true ;maintain global curr task number in CURRTASK
+/const   maxtasks integer = 4 ;maximum number of concurrent tasks supported
 /const   endlim  integer = 6 ;stack err trap when push with this many bytes left on stack
 
 /include "(cog)src/dspic/task.ins.dspic"
