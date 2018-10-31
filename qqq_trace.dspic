@@ -48,7 +48,7 @@
 ;
 ;     TRACE_TRIGPOS
 ;
-;       Susbroutine that sets the trigger position within the trace buffer.  W0
+;       Subroutine that sets the trigger position within the trace buffer.  W0
 ;       contains 0-65535, which maps linearly from the start to the end of the
 ;       buffer.  Any current trigger condition is reset.
 ;

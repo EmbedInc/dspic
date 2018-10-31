@@ -15,7 +15,7 @@
 //   ***************************************************************
 //
 //   C include file for the QQ2 firmware.  This include file defines the
-//   capabilities of the underlying system available to C code.
+//   capabilities of the underlying system that are available to C code.
 //
 #include "qq2_machine.h"               //define machine-dependent data types
 #include "qq2_const.h"                 //define constants from asm environment
@@ -41,19 +41,62 @@
 //     fwver_k  -  1-N firmware version number within type
 //     fwseq_k  -  1-N firmare build sequence number within type/version
 //
+
+void __attribute__((noreturn))
+  system_reset (void);                 //reset the whole system
+
+//******************************************************************************
+//
+//   Clock and general timing.
+//
 machine_intu_t clock_1ms (void);       //get 1 ms clock tick counter
 machine_intu_t clock_10ms (void);      //get 10 ms clock tick counter
 machine_intu_t clock_100ms (void);     //get 100 ms clock tick counter
 int32u_t clock_seconds (void);         //get seconds since powerup or reset, 136 year range
 int16u_t clock_seconds16 (void);       //faster simpler 16 bit seconds, 18.2 hour range
 
-void __attribute__((noreturn))
-  system_reset (void);                 //reset the whole system
-
-void task_yield (void);                //let other tasks run for a while
-
 void waitms (                          //wait fixed time while letting other tasks run
   machine_intu_t);                     //time to wait in milliseconds
+
+//******************************************************************************
+//
+//   Cooperative multi-tasking system.
+//
+typedef
+  void (*task_function) (              //template for top routine of a task
+    void *,                            //arbitrary arguments passed from TASK_NEW
+    machine_intu_t);
+
+//   Functions.
+//
+void __attribute__((noreturn))
+task_exit (void);                      //end this task
+
+machine_intu_t                         //task ID
+task_id (void);                        //get ID of the current task
+
+void task_kill (                       //end a specific task
+  machine_intu_t);                     //ID of the task to end, ignored if invalid
+
+machine_intu_t
+task_n_curr (void);                    //get number of tasks that currently exist
+
+machine_intu_t
+task_n_max (void);                     //get maximum number of tasks supported
+
+machine_intu_t                         //ID of the new task
+task_new (                             //start a new task
+  task_function,                       //function to run, task ends on return
+  void *,                              //pointer to start of stack for new task
+  machine_intu_t,                      //size of stack for new task, bytes
+  void *,                              //arbitrary arguments passed to task routine
+  machine_intu_t);
+
+machine_intu_t                         //true or false
+task_exist (                           //check whether a task exists
+  machine_intu_t);                     //task ID
+
+void task_yield (void);                //let other tasks run for a while
 
 //******************************************************************************
 //
@@ -98,6 +141,9 @@ void cmd_put24s (int32s_t);
 void cmd_put32u (int32u_t);
 void cmd_put32s (int32s_t);
 
+void debug0 (                          //send debug info to host
+  const char *);                       //string to show as debug output
+
 void debug1 (                          //send debug info to host
   machine_intu_t,                      //16 bit value
   const char *);                       //string that will be shown with value
@@ -112,10 +158,13 @@ void debug2 (                          //send debug info to host
 //   and words to/from a buffer.  These kinds of buffers are used as low level
 //   facilities by various sub-systems.
 //
-//   The code is in the standard XC16 assembler module.
-//
 machine_intu_t                         //0-255 byte value
 buf_get8u (                            //get next byte value from buffer
+  int8u_t * *,                         //pointer to buffer byte, updated
+  machine_intu_t *);                   //bytes left to read from buffer, updated
+
+machine_ints_t                         //-128 to +127 byte value
+buf_get8s (                            //get next byte value from buffer
   int8u_t * *,                         //pointer to buffer byte, updated
   machine_intu_t *);                   //bytes left to read from buffer, updated
 
@@ -160,7 +209,8 @@ void buf_put16s (                      //write word into byte buffer, high-low o
 //   Data that is written to the non-volatile memory may be cached transparently
 //   to the application.  Reads will always return the latest written data,
 //   whether that has been physically written to the non-volatile memory or not.
-//   Cached changed data will be automatically written to the physical memory
+//
+//   Cached changed data may be automatically written to the physical memory
 //   in the background within a minimum time after the last write.  The
 //   application can call NVOL_FLUSH to force all changes to be written to the
 //   non-volatile memory immediately.  NVOL_FLUSH does not return until any such

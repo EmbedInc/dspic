@@ -5,9 +5,9 @@
 /include "qq2.ins.dspic"
 
 /call write_c_machine "qq2_machine.h" ;define machine-specific types
-/call write_c_consts "qq2_const.h" ;define preprocessor constants in C
-/call write_c_flags "qq2_flags.h" ;make H file that defines flag bits
-/call write_c_iopins "qq2_iopins.h" ;make H file that defines I/O pins
+;/call write_c_consts "qq2_const.h" ;define all preprocessor constants in C
+;/call write_c_flags "qq2_flags.h" ;make H file that defines flag bits
+;/call write_c_iopins "qq2_iopins.h" ;make H file that defines I/O pins
 
 ;*******************************************************************************
 ;
@@ -20,6 +20,8 @@
 /call write_c_const fwver
 /call write_c_const fwseq
 
+//   Define the RSP_xxx response opcodes.
+//
 /loop symbols sym const      ;write out all response stream opcode constants
   /var local name string
   /set name [sym sym name]   ;get bare symbol name

@@ -137,6 +137,7 @@ alloc    after_tasks, 0, 2   ;first address after tasks table
 alloc    curr_p              ;adr of tasks table entry for current task
 alloc    last_p              ;pointer to last used tasks table entry
 alloc    nextid              ;ID to try to assign to a new task next
+alloc    ntasks              ;number of tasks currently defined
 
 
 .section .code_task, code
@@ -166,6 +167,7 @@ alloc    nextid              ;ID to try to assign to a new task next
 
          mov     #1, w0
          mov     w0, nextid  ;init ID to try to assign to the next-created task
+         mov     w0, ntasks  ;init number of current tasks
 
          leaverest
 
@@ -204,6 +206,7 @@ alloc    nextid              ;ID to try to assign to a new task next
          bra     geu, tkn_abort ;no free task slot available ?
 
          mov     w0, last_p  ;update pointer to last-used table entry
+         inc     ntasks      ;update the number of current tasks
 ;
 ;   Initialize the stack of the new task.  The stack will be set up so that to
 ;   restart the task, the registers indicated by TSKSAVE are restored, then a
@@ -422,14 +425,15 @@ run_this:                    ;run task at CURR_P and W0
 ;
 ;   Subroutine _TASK_YIELD
 ;
-;   This is the TASK_YIELD entry point visible to C30.  C30 only requires W8-W14
-;   to be preserved by a subroutine.  If the assembler TASK_YIELD preserves
-;   these, then _TASK_YIELD has already been defined as a synonym to TASK_YIELD.
-;   If not, then the C30 callable routine is defined here to save the additional
-;   registers required to be saved by C30 that TASK_YIELD does not save.  The
-;   assembler constant C30SAVE is the mask of registers C30 requires to be
-;   saved.  The preprocessor constant USING_C30 is TRUE if this firmware
-;   includes C30 modules, and _TASK_YIELD must therefore be defined.
+;   This is the TASK_YIELD entry point visible to XC16 (and C30).  XC16 only
+;   requires W8-W14 to be preserved by a subroutine.  If the assembler
+;   TASK_YIELD preserves these, then _TASK_YIELD has already been defined as a
+;   synonym to TASK_YIELD.  If not, then the XC16 callable routine is defined
+;   here to save the additional registers required to be saved by XC16 that
+;   TASK_YIELD does not save.  The assembler constant XC16SAVE is the mask of
+;   registers XC16 requires to be saved.  The preprocessor constant USING_XC16
+;   is TRUE if this firmware includes XC16 modules, and _TASK_YIELD must
+;   therefore be defined.
 ;
 /if using_c30 then           ;this firmware includes C30 modules ?
 .if ((tsknsave & c30save) != 0)
@@ -493,6 +497,8 @@ run_this:                    ;run task at CURR_P and W0
 ;
          locsub  tsk_delete
 
+         dec     ntasks      ;update number of current tasks
+
          mov     last_p, w1  ;get pointer to last entry in list
          cp      w0, w1
          bra     nz, edel_nlast ;not deleting the last entry ?
@@ -553,6 +559,14 @@ edel_nlast:
 ;
          glbsubd task_kill, regf0 | regf1 | regf2
 ;
+;   Reset the processor if the last-used task slot is also the first.
+;
+         mov     #tasks, w1  ;get pointer to first tasks table entry
+         mov     last_p, w2  ;get pointer to last-used tasks table entry
+         cp      w1, w2
+         skip_nz             ;not trying to delete the last task ?
+         reset               ;exiting the last task, reset the processor
+;
 ;   Scan the active tasks looking for the one with the ID in W0.
 ;
          mov     w0, w1      ;save the target task ID in W1
@@ -571,3 +585,190 @@ tkl_found:                   ;W0 is pointing to the task to delete
 
 tkl_leave:                   ;common exit point
          leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TASK_ID
+;
+;   Get the ID of the current task.
+;
+         glbsubd task_id
+
+         mov     currtask, w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TASK_N_MAX
+;
+;   Get the maximum number of tasks configured for into W0.
+;
+         glbsubd task_n_max
+
+         mov     #[v maxtasks], w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TASK_N_CURR
+;
+;   Get the number of tasks that currently exist into W0.
+;
+         glbsubd task_n_curr
+
+         mov     ntasks, w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TASK_EXIST
+;
+;   Determine whether the task with ID in W0 exists.  Z is cleared if the task
+;   exists and set otherwise.
+;
+         glbsub  task_exist, regf0 | regf1
+
+         mov     w0, w1      ;save target ID in W1
+         mov     #tasks + tsk_id, w0 ;init pointer to ID of first task
+tex_task:                    ;back here each new task to check
+         cp      w1, [w0]    ;compare target against this task ID
+         bra     z, tex_nz   ;found the target task ?
+         cp      last_p      ;compare to last entry in list
+         bra     leu, tex_nfound ;just did last entry ?
+         add     #entsize, w0 ;advance to next task in list
+         jump    tex_task    ;back to check this new task descriptor
+
+tex_nfound:                  ;the task was not found
+         bclr    Sr, #Z      ;cause to return indicating not found
+tex_nz:                      ;Z is set opposite of desired
+         btg     Sr, #Z      ;flip Z
+tex_leave:                   ;common exit point, Z all set
+         leaverest
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Additional interface for XC16, if use of XC16 is enabled in this project.
+;   The XC16 interface is defined in the QQQ.H template file.
+;
+/if using_xc16 then
+
+;*******************************************************************************
+;
+;   Function TASK_NEW (TASK_FUNCTION, STACK_PNT, STACK_SIZE, &II, JJ)
+;
+;   C interface to TASK_NEW, which creates a new task.
+;
+;   TASK_FUNCTION is a pointer to the top level task routine.  It will be called
+;   like a subroutine.  If this subroutine returns, the task will be ended.
+;
+;   STACK_PNT is a pointer to start of the stack area for the new task, and
+;   STACK_SIZE is its length in bytes.
+;
+;   II and JJ are arbitrary arguments that will be passed to the new task.
+;   These will be the call parameters to the task function.
+;
+;   The function returns the ID of the new task.  The system is reset if the new
+;   task can not be created.  This can occur if the tasks table is already full.
+;
+;   Registers on entry:
+;
+;     W0  -  Program memory address of the task routine.  This is a 16 bit
+;       address, even though program memory addresses are 24 bits.  The compiler
+;       and linker work together to create stubs as necessary in the first 64 kB
+;       of program memory so that a routine can always be referenced by a 16 bit
+;       address.
+;
+;     W1  -  Start address of the stack for the new task.
+;
+;     W2  -  Length of the new stack in bytes.
+;
+;     W3, W4  -  Arbitrary arguments to pass to the task routine in W0,W1.
+;
+;     W5, W6, W7  -  May be trashed.
+;
+;     W8, W9, W10, W11, W12, W13, W14  -  Must be preserved.
+;
+         glbsubc task_new, regf13 | regf14
+;
+;   The stack must be word-aligned.  Truncate any odd bytes at either end.
+;
+;   The caller really should be specifying a stack that starts on a word
+;   boundary, and that is whole words long.  The code here is defensive because
+;   it is better than the alternative, which is a address error trap later.
+;
+         btss    w1, #0      ;stack start is not properly aligned ?
+         jump    tn_adreven  ;is properly aligned, skip this section
+         add     #1, w1      ;skip over the first byte at the odd address
+         sub     #1, w2      ;update the stack length to the unused byte
+tn_adreven:                  ;the stack start is word-aligned
+
+         bclr    w2, #0      ;truncate any odd byte at the end of the stack
+;
+;   Initialize the stack with two return addresses.
+;
+;   The first (last pushed onto the stack) is the start address of the task
+;   routine.  The new task actually starts in the two instruction words
+;   immediately following the call to the assembler routine TASK_NEW.  Normally
+;   a GOTO is placed there.  In this case, we put a RETURN there.  This causes
+;   execution to go to the task routine.
+;
+;   The second (first pushed) return address is to TASK_EXIT.  This causes the
+;   task to automatically end itself if the task routine ever returns.
+;
+;   W1 is currently the stack pointer for the new task.
+;
+         ;
+         ;   Seed the address of TASK_EXIT onto the task stack.
+         ;
+         mov     #tbloffset(task_exit), w5 ;get low address word
+         mov     w5, [w1++]  ;push it
+         mov     #tblpage(task_exit), w5 ;get high address word
+         and     #0x7F, w5   ;clean it, TBLPAGE leaves droppings on some machines
+         mov     w5, [w1++]  ;push the cleaned version
+         ;
+         ;   Push the task start address onto the task stack.
+         ;
+         mov     w0, [w1++]  ;push start address low word
+         clr     [w1++]      ;push start address high word
+
+         sub     #8, w2      ;reduce available stack size due to pushed data
+;
+;   Pass the call arguments to the assembler TASK_NEW routine, and create the
+;   new task.
+;
+         mov     w1, w14     ;pass task stack address
+         mov     w2, w13     ;pass task stack size
+         mov     w3, w0      ;pass first parameter to task routine
+         mov     w4, w1      ;pass second parameter to task routine
+
+         call    task_new    ;create the new task
+         return              ;task start point, will jump to task routine
+         nop                 ;second unused instruction word of task start
+;
+;   Return the ID of the new task.
+;
+         mov     last_p, w1  ;point W1 to the descriptor of the new task
+         mov     [w1 + tsk_id], w0 ;get the ID of the new task
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Function TASK_EXIST (ID)
+;
+;   Returns TRUE if a task with the indicated ID exists, FALSE otherwise.
+;
+         glbsubc task_exist
+
+         mcall   task_exist  ;set Z to indicate task existance
+         mov     #0, w0      ;init all bits of the return value to FALSE
+         mov     #0, w1      ;bit number to write not-Z into
+         bsw.z   w0, w1      ;set low bit iff task exists
+
+         leaverest
+
+  /endif                     ;end of XC16 is in use case

@@ -1,0 +1,169 @@
+;   ***************************************************************
+;   * Copyright (C) 2018, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Routines for reading/writing sequentially to/from a byte buffer.
+;
+
+.section .code_buf, code
+;*******************************************************************************
+;
+;   C subroutines BUF_PUT8U (&BUF_P, &NBUF, DAT)
+;                 BUF_PUT8S (&BUF_P, &NBUF, DAT)
+;
+;   Write a byte into a buffer.  BUF_P is the pointer to where to write the
+;   byte.  It will be updated to point to the next byte.  NBUF is the number of
+;   bytes in the buffer, which will be incremented by 1.  DAT is the byte to
+;   write into the buffer.
+;
+         glbent  _buf_put8s
+         glbsubc buf_put8u
+;
+;   Register contents:
+;
+;     W0  -  Address of BUF_P.
+;
+;     W1  -  Address of NBUF.
+;
+;     W2  -  Data byte in low 8 bits.
+;
+         mov     [w0], w3    ;get pointer to where to write the byte
+         mov.b   w2, [w3++]  ;write the byte, advance pointer
+         mov     w3, [w0]    ;update caller's pointer variable
+         inc     [w1], [w1]  ;update callers byte counter
+
+         leaverest
+
+;*******************************************************************************
+;
+;   C subroutines BUF_PUT16U (&BUF_P, &NBUF, DAT)
+;                 BUF_PUT16S (&BUF_P, &NBUF, DAT)
+;
+;   Write a 16 bit word into a byte buffer.  The word is written in most to
+;   least significant byte order.  The word in the buffer may be arbitrarily
+;   aligned.
+;
+;   BUF_P points to where to write the word on entry.  It will be updated to
+;   point to immediately after the word.  NBUF is the number of bytes in the
+;   buffer, and will be incremented by 2.  DAT is the word to write.
+;
+         glbent  _buf_put16s
+         glbsubc buf_put16u
+;
+;   Register contents:
+;
+;     W0  -  Address of BUF_P.
+;
+;     W1  -  Address of NBUF.
+;
+;     W2  -  Data word.
+;
+         mov     [w0], w3    ;get pointer to where to write first byte
+         swap    w2          ;get high byte into position
+         mov.b   w2, [w3++]  ;write high byte, advance pointer
+         swap    w2          ;get low byte into position
+         mov.b   w2, [w3++]  ;write low byte, advance pointer
+         mov     w3, [w0]    ;update caller's pointer variable
+         inc2    [w1], [w1]  ;update callers byte counter
+
+         leaverest
+
+;*******************************************************************************
+;
+;   C function BUF_GET8U (&BUF_P, &NBUF)
+;
+;   Read a byte from a buffer.  BUF_P is pointing to where to read the byte
+;   from.  It will be advanced to past the byte.  NBUF is the number of bytes
+;   left to read in the buffer, and will be decremented by 1.
+;
+;   If NBUF is 0 on entry, then no byte is read, 0 is returned, and neither
+;   BUF_P nor NBUF are altered.
+;
+;   The 0-255 byte value is returned as a whole word.
+;
+         glbsubc buf_get8u
+;
+;   Register contents:
+;
+;     W0  -  Address of BUF_P.
+;
+;     W1  -  Address of NBUF.
+;
+         mov     #0, w2      ;init return value for when buffer is exhausted
+         cp0     [w1]
+         bra     z, bget8_ret ;buffer is exhausted, go return 0 in W2
+;
+;   There is at least one byte left.
+;
+         mov     [w0], w3    ;get address of where to read byte from
+         ze      [w3++], w2  ;read the byte, advance the address
+         mov     w3, [w0]    ;update caller's pointer variable
+         dec     [w1], [w1]  ;update caller's byte counter
+
+bget8_ret:                   ;return the value in W2
+         mov     w2, w0
+         leaverest
+
+;*******************************************************************************
+;
+;   C function BUF_GET8S (&BUF_P, &NBUF)
+;
+;   Same as BUF_GET8U except that the byte is interpreted as signed instead of
+;   unsigned.
+;
+         glbsubc buf_get8s
+
+         mcall   buf_get8u   ;get the byte into low bits of W0
+         se      w0, w0      ;sign extend into into all of W0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   C functions BUF_GET16U (&BUF_P, &NBUF)
+;               BUF_GET16S (&BUF_P, &NBUF)
+;
+;   Read a 16 bit word from a byte buffer.  The word may be arbitrarily aligned.
+;   The word is assumed to be stored in most to least significant byte order.
+;
+;   BUF_P is the pointer to the start of the word in the buffer.  It will be
+;   udpated to immediately after the word.  NBUF is the number of bytes left to
+;   read from the buffer.  It will be decremented by 2.
+;
+;   When the buffer has been fully read (NBUF = 0), no new bytes are read, NBUF
+;   and BUF_P are not updated, and 0 is substituted for the byte value.
+;
+         glbent  _buf_get16s
+         glbsubc buf_get16u
+;
+;   Register contents:
+;
+;     W0  -  Address of BUF_P.
+;
+;     W1  -  Address of NBUF.
+;
+         push    w0          ;temp save registers
+         push    w1
+         mcall   _buf_get8u  ;read high byte into W0
+         sl      w0, #8, w2  ;get high byte into position, save in W2
+         pop     w1          ;restore original W0, W1
+         pop     w0
+
+         push    w2          ;save word with high byte
+         mcall   _buf_get8u  ;read low byte into W0
+         pop     w1          ;get high byte into w1
+         ior     w0, w1, w0  ;make full word value in W0
+
+         leaverest

@@ -27,7 +27,7 @@
 /const   bufsize integer = 32 ;size of buffer for temp saving command data
 /const   sendnnop integer = 16 ;number of NOP responses to send at startup
 /const   uart_name string = "" ;name of the UART to use for cmd/rsp streams
-.equiv   stacksz, 128        ;UART command processing task stack size
+/const   stacksz_cmd integer = 128 ;command processing task stack size
 ;
 ;   Derived constants.
 ;
@@ -61,7 +61,7 @@ allocg   cmdbuf, [v bufsize] ;temp buffer for use during individual commands
 ;
 ;   Local state.
 ;
-alloc    stack_cmd, stacksz, 2 ;command processing task stack
+alloc    stack_cmd, [v stacksz_cmd], 2 ;command processing task stack
 
 
 .section .code_cmd, code
@@ -82,7 +82,7 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   Lock the output stream for this command processing task.  The output stream
 ;   must be locked by command processing routines before sending any responses.
 ;
-         glbsub  cmd_lock_out
+         glbsubd cmd_lock_out
 
          gcall   [chars uname]_lock ;set the lock
 
@@ -94,7 +94,7 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;
 ;   Release any command output stream lock held by this command processing task.
 ;
-         glbsub  cmd_unlock_out
+         glbsubd cmd_unlock_out
 
          gcall   [chars uname]_unlock ;release the lock
 
@@ -107,9 +107,27 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   Get the next 8 bit byte from the command input stream into W0.  This routine
 ;   waits indefinitely until a byte is available.
 ;
+/if using_xc16 then
+         glbent  _cmd_get8u
+  /endif
+
          glbsub  cmd_get8
 
          gcall   [chars uname]_get ;get the byte from the UART
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CMD_GET8S
+;
+;   Get the next 8 bit byte from the command input stream as a signed integer
+;   into W0.
+;
+         glbsubd cmd_get8s
+
+         mcall   cmd_get8    ;get the byte in the low bits of W0
+         se      w0, w0      ;sign-extend low byte into all of W0
 
          leaverest
 
@@ -120,6 +138,11 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   Get the next two bytes from the command input stream as a 16 bit value into
 ;   W0.  The bytes are assumed to be in most to least significant order.
 ;
+/if using_xc16 then
+         glbent  _cmd_get16u
+         glbent  _cmd_get16s
+  /endif
+
          glbsub  cmd_get16, regf1
 
          mcall   cmd_get8    ;get the high byte into W0
@@ -137,7 +160,7 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   integer into W1:W0.  The bytes are assumed to be in most to least
 ;   significant order.
 ;
-         glbsub  cmd_get24u
+         glbsubd cmd_get24u
 
          mcall   cmd_get8    ;get the high byte
          mov     w0, w1
@@ -153,11 +176,11 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   integer into W1:W0.  The bytes are assumed to be in most to least
 ;   significant order.
 ;
-         glbsub  cmd_get24s
+         glbsubd cmd_get24s
 
-         mcall   cmd_get8    ;get the high byte into W0
+         mcall   cmd_get8    ;get the high byte
          se      w0, w1      ;sign extend and save it in W1
-         mcall   cmd_get16   ;get the low word into W0
+         mcall   cmd_get16   ;get the low word
 
          leaverest
 
@@ -168,6 +191,11 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   Get the next four bytes from the command input stream as a 32 bit value into
 ;   W1:W0.  The bytes are assumed to be in most to least significant order.
 ;
+/if using_xc16 then
+         glbent  _cmd_get32u
+         glbent  _cmd_get32s
+  /endif
+
          glbsub  cmd_get32
 
          mcall   cmd_get16   ;get the high word
@@ -183,6 +211,11 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   Write the byte in the low 8 bits of W0 to the response stream for this
 ;   command processing task.
 ;
+/if using_xc16 then
+         glbent  _cmd_put8u
+         glbent  _cmd_put8s
+  /endif
+
          glbsub  cmd_put8
 
          gcall   [chars uname]_put ;write the byte to the UART
@@ -196,6 +229,11 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   Write the 16 bit word in W0 to the response stream.  The bytes are written
 ;   in most to least significant order.
 ;
+/if using_xc16 then
+         glbent  _cmd_put16u
+         glbent  _cmd_put16s
+  /endif
+
          glbsub  cmd_put16
 
          swap    w0
@@ -212,6 +250,11 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   Write the 24 low bits of W1:W0 to the response stream.  The bytes are
 ;   written in most to least significant order.
 ;
+/if using_xc16 then
+         glbent  _cmd_put24u
+         glbent  _cmd_put24s
+  /endif
+
          glbsub  cmd_put24
 
          exch    w0, w1
@@ -228,6 +271,11 @@ alloc    stack_cmd, stacksz, 2 ;command processing task stack
 ;   Write the 32 bit word in W1:W0 to the response stream.  The bytes are
 ;   written in most to least significant order.
 ;
+/if using_xc16 then
+         glbent  _cmd_put32u
+         glbent  _cmd_put32s
+  /endif
+
          glbsub  cmd_put32
 
          exch    w0, w1
@@ -275,6 +323,9 @@ pbuf_leave:                  ;common exit point
 ;   Get the next N bytes from the command stream and save them into the command
 ;   routines scratch buffer, CMDBUF.  N is passed in W0.
 ;
+;   N bytes are always read from the command stream.  However, bytes are not
+;   saved after the buffer is full.
+;
 /if [> bufsize 0] then
          glbsub  cmd_putbufn, regf0 | regf1
 
@@ -320,10 +371,7 @@ pbn_done:                    ;done copying all the bytes
 ;
          glbsub  cmd_start, regf13 | regf14
 
-         mov     #stacksz, w13 ;pass size of data stack
-         mov     #stack_cmd, w14 ;pass start address of data stack
-         call    task_new    ;create command processing task
-         goto    cmd_task    ;start point of the new task
+         start_task cmd
 
          leaverest
 
@@ -334,7 +382,7 @@ pbn_done:                    ;done copying all the bytes
 ;   This code is run in a separate task.  The task reads the command stream,
 ;   processes the commands, and possibly sends responses.
 ;
-cmd_task:                    ;task starts here
+cmd_task_start:              ;task starts here
 ;
 ;   Send a bunch of NOP responses so that the host will be in sync with our
 ;   response stream.  The number of NOPs to send is set by the constant SENDNNOP

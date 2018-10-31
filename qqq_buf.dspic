@@ -1,0 +1,25 @@
+;   ***************************************************************
+;   * Copyright (C) 2018, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Routines for reading/writing sequentially to/from a byte buffer.
+;
+;   The C interface is defined in QQQ.H.
+;
+/include "qq2.ins.dspic"
+
+/include "(cog)src/dspic/buf.ins.dspic"
+
+         .end

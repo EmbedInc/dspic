@@ -2125,7 +2125,7 @@ typedef  signed  int machine_ints_t;
 //
 //     STACK_name  -  Start of stack area for the new task.
 //
-//     TASK_name_START  -  Execution start point of the new task.
+//     name_TASK_START  -  Execution start point of the new task.
 //
 //   W13 and W14 are trashed.
 //
@@ -2136,7 +2136,7 @@ typedef  signed  int machine_ints_t;
          mov     #[v stacksz_[arg 1]], w13 ;pass stack size
          mov     #stack_[arg 1], w14 ;pass start address of stack
          call    task_new    ;create the new task
-         goto    task_[arg 1]_start ;start point of the new task
+         goto    [arg 1]_task_start ;start point of the new task
   /write
   /endmac
 
