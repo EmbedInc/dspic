@@ -1,0 +1,40 @@
+;   ***************************************************************
+;   * Copyright (C) 2005, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Management of the non-volatile memory.  This module is layered on the
+;   procedural access to the non-volatile memory provided by the NVOLB module.
+;
+;   The following routines are exported:
+;
+;     NVMEM_CHECK
+;
+;       Performs the checksum test on the non-volatile memory.  The last 4 bytes
+;       of the nv memory are reserved for the checksum.  The NVVALID flag is set
+;       if the checksum test passes, and cleared otherwise.  The NVERASED flag
+;       is set if all nv memory bits are set to 1 (the erased state), and
+;       cleared otherwise.
+;
+;     NVMEM_CKSUM_SET
+;
+;       Set the checksum according to the current nv memory contents.  The
+;       contents of the last 4 bytes of nv memory are irrelevant, and will be
+;       overwritten.  Calling NVMEM_CHECK immediately after this routine will
+;       result in the NVVALID flag set, and the NVERASED flag cleared (assuming
+;       no physical failures).
+;
+/include "qq2.ins.dspic"
+/include "(cog)src/dspic/nvmem.ins.dspic"
+.end

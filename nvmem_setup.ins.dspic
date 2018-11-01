@@ -1,0 +1,6 @@
+;   Define global symbols required by the NVMEM library code.  This file is
+;   intended to be included from the main include file of a project using the
+;   NVMEM library module.
+;
+/flag    nvvalid             ;non-volatile memory contents appears to be valid
+/flag    nverased            ;the whole non-volatile memory is erased

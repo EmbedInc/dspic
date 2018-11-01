@@ -61,6 +61,10 @@
 /if [not [exist "nvol_shortrw"]] then
   /const nvol_shortrw bool = false
   /endif
+
+/if [not [exist "flag_nvwrite"]] then
+  /const flag_nvwrite string = ""
+  /endif
 ;
 ;   Derived constants.
 ;
@@ -544,9 +548,14 @@ rd_leave:                    ;common exit point, W0 contains the returned byte v
          mcall   get_pointer ;point W3 to the byte in the cache
          cp.b    w0, [w3]    ;compare the new value to the existing value
          bra     z, wr_dwrite ;the value isn't being changed, nothing more to do ?
-
+         ;
+         ;   The byte value is being changed.
+         ;
          mov.b   w0, [w3]    ;write the new value into the cache
          bset    flags, #flg_dirty ;indicate data in the cache has been changed
+/if [<> flag_nvwrite ""] then ;need to set app flag ?
+         setflag [chars flag_nvwrite] ;set app flag to indicate a value changed
+  /endif
 
 wr_dwrite:                   ;done doing the write
          unlock              ;release the lock
@@ -638,6 +647,9 @@ er_cache:                    ;back here to write each new cache byte
          bset    flags, #flg_cache ;the cache contains valid data
          bclr    flags, #flg_dirty ;the cached data has not been changed
 
+/if [<> flag_nvwrite ""] then ;need to set app flag ?
+         setflag [chars flag_nvwrite] ;set app flag to indicate a value changed
+  /endif
          unlock              ;release the local NVOL lock
          leaverest
 

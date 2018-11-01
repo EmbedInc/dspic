@@ -108,6 +108,11 @@
 ;
 ;       Erase the entire non-volatile memory.  This sets all bits to 1.
 ;
+;     NVOL_SIZE
+;
+;       Gets the total size of the non-volatile memory in bytes.  The size is
+;       returned in W1:W0.
+;
 ;   The following preprocessor constants configure this module.  Note that some
 ;   may be required:
 ;
@@ -173,6 +178,12 @@
 ;       the short address routines only access the first 65536 bytes.  The long
 ;       address routines are required for accessing the remaining non-volatile
 ;       memory.
+;
+;     FLAG_NVWRITE, string
+;
+;       Name of the global flag to set whenever a non-volatile byte value may
+;       have been changed.  The default is the empty string, which causes no
+;       flag to be set.
 ;
 ;   This module can be customized to the particular non-volatile memory
 ;   available to the processor and how it is used.  Different library include
@@ -361,6 +372,7 @@
 /const   autoflush_sec real = 1.0 ;seconds after last write to automatically flush
 /const   name    = ""        ;unique name to add to exported symbols
 /const   nvol_shortrw bool = False ;short adr routines only when mem is small enough
+/const   flag_nvwrite = ""   ;no flag to set on writing new value
 //
 //   Delete all but one of the following sections.  Each section is a template
 //   for using a different include file.  The settings unique to each include

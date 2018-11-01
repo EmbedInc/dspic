@@ -1,0 +1,243 @@
+;   High level management of the non-volatile memory.  All non-volatile memory
+;   accesses are thru the routines in the NVOLB module.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   crcmask integer = 16#04C11DB7 ;32 bit CRC XOR mask (polynomial)
+/const   crcinit integer = 16#80000000 ;valid to init checksum accumulator to
+/const   crcsize integer = 4 ;byte size of the checksum
+;
+;   Derived constants.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+.equiv   xmaskl, [and crcmask 16#FFFF] ;low word of CRC XOR mask
+.equiv   xmaskh, [and [shiftr crcmask 16] 16#FFFF] ;high word of CRC XOR mask
+
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_nvmem, bss
+
+
+;*******************
+;
+;   Local state.
+;
+
+
+.section .code_nvmem, code
+;*******************************************************************************
+;
+;   Local subroutine CKSUM_INIT
+;
+;   Initialize the checksum accumulator W4:W3.
+;
+         locsub  cksum_init
+
+         load32  w3, [v crcinit]
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine CKSUM_BYTE
+;
+;   Add the byte in the low bits of W0 to the checksum in W4:W3.
+;
+         locsub  cksum_byte, regf0 | regf5 | regf6
+
+         sl      w0, #8, w0  ;move the first bit into position
+         mov     #8, w5      ;init number of bits left to do
+cks_bit:                     ;back here to add each new bit to the CRC checksum
+         rlc     w0, w0      ;move this bit into C
+         rlc     w3, w3      ;shift it into the CRC accumulator
+         rlc     w4, w4
+         btss    Sr, #C      ;shifted-out bit was 1 ?
+         jump    cks_nxor    ;was 0, skip the XOR
+         mov     #xmaskl, w6 ;apply the XOR mask to the CRC accumulator
+         xor     w3, w6, w3
+         mov     #xmaskh, w6
+         xor     w4, w6, w4
+cks_nxor:                    ;done with XOR
+         sub     #1, w5      ;count one less bit left to do
+         bra     nz, cks_bit ;back to do the next bit
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine CKSUM_NBYTES
+;
+;   Compute the checksum on the first W6:W5 bytes of the non-volatile memory.
+;   This value must not be 0.  The resulting checksum will be left in W4:W3.
+;   W2:W1 will be left with the next non-volatile memory address after the last
+;   byte included in the checksum.  The low byte of W0 will contain the AND of
+;   all the bytes.  The high byte of W0 will be cleared.
+;
+;   Warning: W5, W6 are trashed.
+;
+;   Registers on entry:
+;
+;     W6:W5  -  Number of bytes to checksum, starting at the start of nv mem.
+;
+;   Registers on exit:
+;
+;     W0  -  Logical AND of all bytes included in the checksum.
+;
+;     W2:W1  -  Next nv mem address after the last byte checksummed.
+;
+;     W4:W3  -  Computed checksum.
+;
+;     W6:W5  -  Trashed.
+;
+         locsub  cksum_nbytes, regf7
+;
+;   Register usage:
+;
+;     W0  -  Scratch.  Current byte value.
+;
+;     W2:W1  -  Non-volatile memory byte address.
+;
+;     W4:W3  -  Checksum accumulator.
+;
+;     W6:W5  -  Number of bytes left to accumulate into the checksum.
+;
+;     W7  -  AND of all data bytes.
+;
+         mcall   cksum_init  ;init the checksum accumulator in W4:W3.
+         load32  w1, 0       ;init address of next byte in W2:W1
+         mov     #0xFF, w7   ;init AND of all data bytes
+
+ckp_byte:                    ;back here each new byte to add to the checksum
+         gcall   nvol_read   ;read this byte, advance address to next
+         and     w7, w0, w7  ;update AND of all data bytes
+         mcall   cksum_byte  ;add this byte to the checksum
+         sub     #1, w5      ;count one less byte left to do
+         subb    #0, w6
+         bra     nz, ckp_byte ;back to do the next byte
+
+         mov     w7, w0      ;return final AND of all the data bytes
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVMEM_CHECK
+;
+;   Check the non-volatile memory checksum.  Flags NVVALID and NVERASED are set
+;   according to the contents of the memory.
+;
+         glbsub  nvmem_check, regf0 | regf1 | regf2 | regf3 | regf4 | regf5 | regf6
+
+         gcall   nvol_size   ;get the total number of nvol bytes into W6:W5
+         mov     w0, w5
+         mov     w1, w6
+         mcall   cksum_nbytes ;compute checksum on entire nvol memory
+;
+;   Current register contents:
+;
+;     W0  -  AND of all nvol bytes.
+;
+;     W1  -  Scratch.
+;
+;     W2  -  Scratch.
+;
+;     W4:W3  -  Computed checksum on entire nvol memory.
+;
+;     W5  -  Scratch.
+;
+;     W6  -  Scratch.
+;
+         ;
+         ;   Set the NVERASED according to the contents of the memory.
+         ;
+         com.b   w0, w0      ;set Z if all bytes were FFh
+         skip_nz
+         setflag nverased
+         skip_z
+         clrflag nverased
+         ;
+         ;   Set the NVVALID flag according to whether the checksum test
+         ;   passed.  The checksum is set up so that checksumming the entire
+         ;   memory should result in 0.
+         ;
+         ior     w3, w4, w3  ;set Z for checksum test passed
+         skip_nz
+         setflag nvvalid
+         skip_z
+         clrflag nvvalid
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVMEM_CKSUM_SET
+;
+;   Set the non-volatile memory checksum for the current contents of the memory.
+;   Note that the last CRCSIZE bytes of the memory are reserved for the
+;   checksum.  The previous contents of these checksum bytes is irrelevant.
+;
+;   This routine does not return until the checksum is physically written to the
+;   non-volatile memory.
+;
+         glbsub  nvmem_cksum_set, regf0 | regf1 | regf2 | regf3 | regf4 | regf5 | regf6
+;
+;   Compute the checksum on all the payload bytes.  This is all the bytes except
+;   the checksum itself.  The checksum will be left in W4:W3, and W2:W1 will
+;   be left the first address after the last checksummed byte.
+;
+         gcall   nvol_size   ;get size of whole nvol memory into W1:W0
+         sub     w0, #[v crcsize], w5 ;make bytes to checksum over in W6:W5
+         subb    w1, #0, w6
+         mcall   cksum_nbytes ;compute the checksum on just the payload bytes
+;
+;   Add 0 bytes into the checksum for each checksum byte.  The CRC checksum we
+;   use has the special property that if you do this, the resulting CRC
+;   checksum on all bytes (payload and checksum) is 0 when the checksum matches
+;   the payload.
+;
+         mov     #0, w0      ;get the byte value to add to the checksum
+/loop n crcsize              ;once for each checksum byte
+         mcall   cksum_byte
+  /endloop
+;
+;   Write the resulting checksum to the non-volatile memory.  The start address
+;   of where to write the checksum is already in W2:W1.  The checksum is in
+;   W4:W3.  It must be written in high to low byte order.
+;
+;   Register usage in this section:
+;
+;     W0   -   Byte value.
+;
+;     W2:W1  -  Non-volatile memory byte address.
+;
+;     W4:W3  -  The checksum.  Will be accessed indirectly via W5.
+;
+;     W5  -  Pointer to next checksum byte to write.
+;
+;     W6  -  Number of bytes left to write
+;
+         mov     #9, w5     ;init pointer to first byte of checksum to write
+         mov     #[v crcsize], w6 ;init number of bytes left to write
+nvs_byte:                    ;back here to write each new byte
+         mov.b   [w5--], w0  ;get this byte, advance pointer to next
+         gcall   nvol_write  ;write it, advance the write address
+         sub     #1, w6      ;count one less byte left to write
+         bra     nz, nvs_byte ;back to do next byte
+
+         gcall   nvol_flush  ;force any cached data to be physically written
+
+         leaverest
