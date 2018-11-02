@@ -233,6 +233,13 @@ void nvol_write (                      //write byte to non-volatile memory
 
 void nvol_flush (void);                //force cached changes to HW now
 
+//   Interface to higher level non-volatile memory management.  These functions
+//   are layered on the low level functions, above.
+//
+void nvmem_cksum_set (void);           //set checksum to current app content
+
+int32u_t nvmem_last (void);            //get adr of last application-usable byte
+
 //******************************************************************************
 //
 //   Interface to the display and buttons.

@@ -42,6 +42,22 @@
 .section .code_nvmem, code
 ;*******************************************************************************
 ;
+;   Subroutine NVMEM_LAST
+;
+;   Return the address of the last application-usable byte in the non-volatile
+;   memory.  Some bytes are reserved at the end of the memory for use by the
+;   system.  The address is returned in W1:W0.
+;
+         glbsubd nvmem_last
+
+         gcall   nvol_size   ;get first address past end of memory
+         sub     #[+ crcsize 1], w0 ;skip over the reserved bytes at end
+         subb    #0, w1
+
+         leaverest
+
+;*******************************************************************************
+;
 ;   Local subroutine CKSUM_INIT
 ;
 ;   Initialize the checksum accumulator W4:W3.

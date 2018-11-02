@@ -35,6 +35,13 @@
 ;       result in the NVVALID flag set, and the NVERASED flag cleared (assuming
 ;       no physical failures).
 ;
+;     NVMEM_LAST
+;
+;       Returns the last valid non-volatile memory byte address that can be used
+;       by the application.  This address is returned in W1:W0.  The bytes from
+;       this address plus 1 to the end of the memory are reserved for use by the
+;       system.
+;
 /include "qq2.ins.dspic"
 /include "(cog)src/dspic/nvmem.ins.dspic"
 .end
