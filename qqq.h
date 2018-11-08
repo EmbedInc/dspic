@@ -483,24 +483,8 @@ menu_val_float (                       //user edit a floating point value
 
 //******************************************************************************
 //
-//   Interface to the Jowa CAN bus (JCAN).
+//   Interface to the CAN bus.
 //
-void jcan_typea_start (                //init for sending type A JCAN data frame
-  machine_intu_t,                      //N, 0 - 3 (2 bits)
-  int32u_t);                           //ID, 0 - 1,048,575 (20 bits)
-
-void jcan_typeb_start (                //init for sending type B JCAN data frame
-  machine_intu_t,                      //N, 0 - 63 (6 bits)
-  machine_intu_t);                     //ID, 0 - 65535 (16 bits)
-
-void jcan_typec_start (                //init for sending type C JCAN data frame
-  machine_intu_t,                      //N, 0 - 1023 (10 bits)
-  machine_intu_t);                     //ID, 0 - 4095 (12 bits)
-
-void jcan_typed_start (                //init for sending type D JCAN data frame
-  machine_intu_t,                      //N, 0 - 4095 (12 bits)
-  machine_intu_t);                     //ID, 0 - 1023 (10 bits)
-
 void can_send_dat (                    //add one data byte to CAN frame being built
   machine_intu_t);                     //0-255 byte value in low bits
 
@@ -514,22 +498,6 @@ void can_send_dat32 (                  //add four data bytes to CAN frame being 
   int32u_t);                           //bytes, written most to least significant order
 
 void can_send (void);                  //send CAN frame, release CAN sending lock
-
-void jcan_typea_req (                  //send a type A JCAN remote request frame
-  machine_intu_t,                      //N, 0 - 3 (2 bits)
-  int32u_t);                           //ID, 0 - 1,048,575 (20 bits)
-
-void jcan_typeb_req (                  //send a type B JCAN remote request frame
-  machine_intu_t,                      //N, 0 - 63 (6 bits)
-  machine_intu_t);                     //ID, 0 - 65535 (16 bits)
-
-void jcan_typec_req (                  //send a type C JCAN remote request frame
-  machine_intu_t,                      //N, 0 - 1023 (10 bits)
-  machine_intu_t);                     //ID, 0 - 4095 (12 bits)
-
-void jcan_typed_req (                  //send a type D JCAN remote request frame
-  machine_intu_t,                      //N, 0 - 4095 (12 bits)
-  machine_intu_t);                     //ID, 0 - 1023 (10 bits)
 
 //******************************************************************************
 //
