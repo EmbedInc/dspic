@@ -19,6 +19,10 @@
 ;
 /include "qq2.ins.dspic"
 
+/if [not [exist "minstack0"]] then
+  /const minstack0 integer = 256
+  /endif
+
 /block
   /var local s string
   /set s [str "Fosc = " [eng freq_osc oscdig] "Hz"]
@@ -85,6 +89,19 @@ config   __FGS,  0b1111111111111111
 ;   need to be defined.
 ;
          flags_define
+
+;*******************************************************************************
+;
+;   Define the task 0 stack and the heap to the minimum required sizes specified
+;   in the xxxLIB.INS.DSPIC include file.
+;
+.section .stack0, stack
+.space   [v minstack0]
+
+/if [exist "minheap"] then
+         .section .heap, heap
+         .space  [v minheap]
+  /endif
 
 ;*******************************************************************************
 ;
