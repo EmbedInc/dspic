@@ -39,6 +39,7 @@
 ;         move   #<stack>, w14
 ;         call   task_new
 ;         goto   <new task start point>
+;         ...             ;existing task continues here
 ;
 ;     TASK_YIELD
 ;
@@ -63,6 +64,21 @@
 ;       task.  If the current task is killed, this routine will not return.  The
 ;       processor is reset on attempt to kill the only task.
 ;
+;     TASK_MAXN
+;
+;       Returns the maximum possible number of tasks in W0.
+;
+;     TASK_N
+;
+;       Returns the total number of current tasks in W0.
+;
+;     TASK_NID
+;
+;       Returns the ID for the 0-N task slot identified in W0, where N is the
+;       value returned by TASK_N minus 1.  The task ID is returned in W0.
+;
+;       For valid task slot numbers, the Z flag is cleared.  For out of range
+;       task slot numbers, the Z flag is set and the W0 value is undefined.
 ;
 ;   The tasks are:
 ;

@@ -69,6 +69,10 @@ typedef
 
 //   Functions.
 //
+machine_intu_t                         //true or false
+task_exist (                           //check whether a task exists
+  machine_intu_t);                     //task ID
+
 void __attribute__((noreturn))
 task_exit (void);                      //end this task
 
@@ -77,6 +81,12 @@ task_id (void);                        //get ID of the current task
 
 void task_kill (                       //end a specific task
   machine_intu_t);                     //ID of the task to end, ignored if invalid
+
+machine_intu_t
+task_maxn (void);                      //get maximum number of tasks configured for
+
+machine_intu_t
+task_n (void);                         //get the number of current tasks
 
 machine_intu_t
 task_n_curr (void);                    //get number of tasks that currently exist
@@ -92,9 +102,9 @@ task_new (                             //start a new task
   void *,                              //arbitrary arguments passed to task routine
   machine_intu_t);
 
-machine_intu_t                         //true or false
-task_exist (                           //check whether a task exists
-  machine_intu_t);                     //task ID
+machine_intu_t                         //task ID, undefined for out of range slot number
+task_nid (                             //get ID of task in a particular slot
+  machine_intu_t);                     //0 to TASK_N-1 task slot number
 
 void task_yield (void);                //let other tasks run for a while
 

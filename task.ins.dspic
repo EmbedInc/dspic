@@ -173,6 +173,58 @@ alloc    ntasks              ;number of tasks currently defined
 
 ;*******************************************************************************
 ;
+;   Subroutine TASK_MAXN
+;
+;   Returns the maximum possible number of tasks in W0.
+;
+         glbsubd task_maxn
+
+         mov     #[v maxtasks], w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TASK_N
+;
+;   Returns the number of current tasks in W0.
+;
+         glbsubd task_n
+
+         mov     ntasks, w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TASK_NID
+;
+;   Get the task ID for a 0-N task slot.  The task slot number is in W0 on
+;   entry.  If the task slot number is valid, then the Z flag is cleared and the
+;   task ID returned in W0.  If the task slot number is out of range, then the
+;   Z flag is set and the returned W0 value is undefined.
+;
+;   Valid task slot numbers are from 0 to the TASK_N value minus 1.
+;
+         glbsubd task_nid, regf1
+
+         cp      ntasks      ;compare number of tasks to task slot number
+         bra     gtu, tid_inr ;slot number is within range ?
+         bset    Sr, #Z      ;no, return indicating invalid slot number
+         jump    tid_leave
+
+tid_inr:                     ;the slot number in W0 is valid
+         mul.uu  w0, #entsize, w0 ;make offset into tasks table for this slot
+         mov     #tasks, w1  ;get start address of tasks table
+         add     w1, w0, w1  ;make address of this task descriptor
+         mov     [w1 + tsk_id], w0 ;fetch the task ID into W0
+         bclr    Sr, #Z      ;indicate returning with valid task ID
+
+tid_leave:
+         leaverest
+
+;*******************************************************************************
+;
 ;   Subroutine TASK_NEW
 ;
 ;   Create a new task.  The current values of the registers indicated by TSKSAVE
