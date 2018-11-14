@@ -192,9 +192,9 @@
 ;       set to the call period in seconds.
 ;
 ;       Calls to this routine is how the UART module performs timing.  This is
-;       used, for example, for the Modbus packet start detection.  The call period
-;       should be no more than a few bit times.  Bit timing at some common baud
-;       rates are:
+;       used, for example, for the Modbus packet start detection.  The call
+;       period should be no more than a few bit times.  Bit timing at some
+;       common baud rates are:
 ;
 ;           1200 baud: 833   us
 ;           2400 baud: 417   us
@@ -203,7 +203,8 @@
 ;         115200 baud:   8.7 us
 ;
 ;       For example, when 115.2 kBaud is used, calling UART_TICK with a regular
-;       period in the 10 to 25 us range would be reasonable.
+;       period in the 10 to 25 us range would be reasonable.  At 1200 baud, a
+;       1 ms tick is adequate.
 ;
 ;   Global variables:
 ;

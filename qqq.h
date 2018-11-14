@@ -49,11 +49,11 @@ void __attribute__((noreturn))
 //
 //   Clock and general timing.
 //
-machine_intu_t clock_1ms (void);       //get 1 ms clock tick counter
-machine_intu_t clock_10ms (void);      //get 10 ms clock tick counter
-machine_intu_t clock_100ms (void);     //get 100 ms clock tick counter
-int32u_t clock_seconds (void);         //get seconds since powerup or reset, 136 year range
-int16u_t clock_seconds16 (void);       //faster simpler 16 bit seconds, 18.2 hour range
+machine_intu_t clock_1ms (void);       //get 1 ms clock tick counter, 65.5 second range
+machine_intu_t clock_10ms (void);      //get 10 ms clock tick counter, 10.9 minute range
+machine_intu_t clock_100ms (void);     //get 100 ms clock tick counter, 1.8 hour range
+int32u_t clock_seconds (void);         //seconds since powerup or reset, 136 year range
+machine_intu_t clock_seconds16 (void); //faster simpler 16 bit seconds, 18.2 hour range
 
 void waitms (                          //wait fixed time while letting other tasks run
   machine_intu_t);                     //time to wait in milliseconds
@@ -83,12 +83,6 @@ void task_kill (                       //end a specific task
   machine_intu_t);                     //ID of the task to end, ignored if invalid
 
 machine_intu_t
-task_maxn (void);                      //get maximum number of tasks configured for
-
-machine_intu_t
-task_n (void);                         //get the number of current tasks
-
-machine_intu_t
 task_n_curr (void);                    //get number of tasks that currently exist
 
 machine_intu_t
@@ -104,7 +98,7 @@ task_new (                             //start a new task
 
 machine_intu_t                         //task ID, undefined for out of range slot number
 task_nid (                             //get ID of task in a particular slot
-  machine_intu_t);                     //0 to TASK_N-1 task slot number
+  machine_intu_t);                     //0 to TASK_N_CURR-1 task slot number
 
 void task_yield (void);                //let other tasks run for a while
 

@@ -28,7 +28,7 @@
 ;
 ;         W14  -  Start address of the task for the new stack.
 ;
-;       The new task starts immediately after CALL TASK_NEW instructions.  It
+;       The new task starts immediately after the CALL TASK_NEW instruction.  It
 ;       is intended that a GOTO be put there.  The call returns 2 instruction
 ;       words after the call, skipping over the GOTO intended to be immediately
 ;       after the call.
@@ -40,6 +40,8 @@
 ;         call   task_new
 ;         goto   <new task start point>
 ;         ...             ;existing task continues here
+;
+;       The original task continues running until TASK_YIELD is called.
 ;
 ;     TASK_YIELD
 ;
@@ -64,11 +66,11 @@
 ;       task.  If the current task is killed, this routine will not return.  The
 ;       processor is reset on attempt to kill the only task.
 ;
-;     TASK_MAXN
+;     TASK_N_MAX
 ;
 ;       Returns the maximum possible number of tasks in W0.
 ;
-;     TASK_N
+;     TASK_N_CURR
 ;
 ;       Returns the total number of current tasks in W0.
 ;
@@ -79,6 +81,11 @@
 ;
 ;       For valid task slot numbers, the Z flag is cleared.  For out of range
 ;       task slot numbers, the Z flag is set and the W0 value is undefined.
+;
+;     TASK_EXIST
+;
+;       Determine whether the task with ID in W0 exists.  Z is cleared if the
+;       task exists and set otherwise.
 ;
 ;   The tasks are:
 ;
