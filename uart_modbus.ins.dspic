@@ -556,7 +556,7 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;   Acquire the exclusive lock for writing to the UART output stream.  This
 ;   routine waits indefinitely until the UART output stream is available.
 ;
-         glbsub  uart[chars uname]_lock, regf0 | regf1
+         glbsubd uart[chars uname]_lock, regf0 | regf1
 
 lock_wait:                   ;back here until lock is available
          mov     task_uart[chars uname], w0 ;get ID of task that has UART locked
@@ -584,7 +584,7 @@ lock_leave:
 ;
 ;   Release the lock on the UART output stream if it is held by this task.
 ;
-         glbsub  uart[chars uname]_unlock, regf0 | regf1
+         glbsubd uart[chars uname]_unlock, regf0 | regf1
 
          mov     task_uart[chars uname], w0 ;get the ID of the task holding the lock
          mov     currtask, w1 ;get the ID of this task
@@ -607,7 +607,7 @@ unlock_leave:
 ;   the software output FIFO is full, this routine waits until it can receive
 ;   another byte.
 ;
-         glbsub  uart[chars uname]_put, regf1 | regf2
+         glbsubd uart[chars uname]_put, regf1 | regf2
          push    w0          ;save word with data byte on the top of the stack
 
 put_wait:
@@ -881,9 +881,26 @@ recv_leave:                  ;common exit point for UART receive interrupt
 ;
          glbsub  uart[chars uname]_get_ready, regf0 | regf1
 
-         fifow_z_empty fifoi ;set Z iff no byte available
+         fifow_z_empty fifoi ;set Z iff no event available
 
          leaverest
+
+/if using_xc16 then
+;*****************************
+;
+;   C function UART_GET_READY
+;
+;   Returns TRUE if a event is immediately available.
+;
+         glbsubc uart[chars uname]_get_ready
+
+         fifow_z_empty fifoi ;set Z iff no event available
+         mov     #0, w0      ;init to no event is available
+         skip_z              ;nothing is available ?
+         mov     #1, w0      ;something is available
+
+         leaverest
+  /endif
 
 ;*******************************************************************************
 ;

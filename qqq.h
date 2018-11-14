@@ -118,7 +118,37 @@ fp32_fixu (                            //FLOAT to fixed point, rounded and satur
 
 //******************************************************************************
 //
-//   Interface to the host.
+//   Interface to Modbus-capable UART.
+//
+//   The routine names defined here are generic.  The set of routines may have
+//   a string added to their names to distinguish multiple UARTs in the system.
+//   If so, the templates here must be edited before being copied into the .h
+//   file for the system.  The optional name is inserted after UART_, with
+//   another "_" following.  For example, if the unique name is XYZZ, then
+//   routine UART_LOCK would really be named UART_XYZZ_LOCK.
+//
+#define uart_ev_err_k 0x8000           //hard error: overrun, framing, etc
+#define uart_ev_perr_k 0x4000          //parity error, data in low byte
+#define uart_ev_pack_k 0x2000          //start of packet break, no character
+
+machine_intu_t                         //data in low byte + UART_EV_xxx_K flags
+uart_get (void);                       //get next event
+
+machine_intu_t                         //TRUE or FALSE
+machine_get_ready (void);              //find if event is immediately available
+
+void uart_lock (void);                 //acquire exclusive lock for sending
+
+void uart_put (                        //send character
+  machine_intu_t);                     //char in low byte, upper byte ignored
+
+void uart_unlock (void);               //release sending lock
+
+void uart_wait_send (void);            //guarantee packet break before next PUT
+
+//******************************************************************************
+//
+//   Host command and response stream access.
 //
 //   A constant named rsp_xxx_k is defined for each response opcode, where xxx
 //   is the response name.
@@ -487,8 +517,13 @@ menu_val_float (                       //user edit a floating point value
 
 //******************************************************************************
 //
-//   Interface to the CAN bus.
+//   CAN bus sending.
 //
+#define can_frtype_stddat_k 0          //standard data frame
+#define can_frtype_extdat_k 1          //extended data frame
+#define can_frtype_stdreq_k 2          //standard remote request frame
+#define can_frtype_extreq_k 3          //extended remote request frame
+
 void can_send_dat (                    //add one data byte to CAN frame being built
   machine_intu_t);                     //0-255 byte value in low bits
 
@@ -502,6 +537,9 @@ void can_send_dat32 (                  //add four data bytes to CAN frame being 
   int32u_t);                           //bytes, written most to least significant order
 
 void can_send (void);                  //send CAN frame, release CAN sending lock
+
+void can_send_init (                   //init for sending CAN frame, acquire sending lock
+  machine_intu_t);                     //type of frame, use CAN_FRTYPE_xxx_K
 
 //******************************************************************************
 //
