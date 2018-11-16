@@ -915,7 +915,7 @@ recv_leave:                  ;common exit point for UART receive interrupt
 ;   See the UART_MODBUS_SETUP.INS.DSPIC file for definition of the event flag
 ;   bits.
 ;
-         glbsub  uart[chars uname]_get, regf1 | regf2
+         glbsubd uart[chars uname]_get, regf1 | regf2
 
 get_wait:                    ;back here until a evebt is available from the FIFO
          fifow_jump_notempty fifoi, get_event ;event is available ?

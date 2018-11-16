@@ -104,6 +104,15 @@ void task_yield (void);                //let other tasks run for a while
 
 //******************************************************************************
 //
+//   Subsystem configuration.
+//
+machine_intu_t                         //number of config bytes
+config_get (                           //get config info for a subsystem
+  machine_intu_t,                      //subsystem ID, use CFG_xxx_K constants
+  int32u_t *);                         //nvol address of first config byte
+
+//******************************************************************************
+//
 //   Floating point manipulation routines.
 //
 int32s_t                               //returned 32 bit signed fixed point number

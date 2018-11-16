@@ -305,3 +305,31 @@ cfgg_nfnd:
 cfgg_leave:                  ;return to caller, W0 and W2:W1 all set
          cp0     w0          ;Z iff no config data
          leaverest
+
+;*******************************************************************************
+;
+;   C function CONFIG_GET (ID, &ADR)
+;
+;   C version of CONFIG_GET.  See the CONFIG_GET description for details.
+;
+;   The function returns the number of configuration bytes for the subsystem
+;   with the indicated ID.  The non-volatile memory start address of the config
+;   bytes for this subsystem is returned in ADR.  No change is made to ADR when
+;   there are no config bytes for the subsystem (the function returns 0).
+;
+;   Registers W1-W7 may be trashed
+;
+/if using_xc16 then
+         glbsubc config_get
+
+         mov     w1, w3      ;save pointer to ADR
+         gcall   config_get  ;number of bytes into W0, address into W2:W1
+         cp0     w0
+         bra     z, ccfget_leave ;no configuration bytes, nothing more do to ?
+
+         mov     w1,[w3++]   ;write nvol address low word
+         mov     w2,[w3]     ;write nvol address high word
+
+ccfget_leave:
+         leaverest
+  /endif
