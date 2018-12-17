@@ -164,7 +164,7 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;
 ;   Reset all the statistics counters to 0.
 ;
-         glbsub  modbus[chars uname]_stats_clear, regf0 | regf1
+         glbsubd modbus[chars uname]_stats_clear, regf0 | regf1
 
          mov     #after_stats - stats, w0 ;init number of bytes left to clear
          mov     #stats, w1  ;init pointer to first byte to clear
@@ -172,6 +172,50 @@ clr_byte:                    ;back here to clear each new byte
          clr.b   [w1++]      ;clear this byte, advance pointer to next
          sub     #1, w0      ;count one less byte left to clear
          bra     nz, clr_byte ;back to clear next byte
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_STATS_INFO
+;
+;   Get pointer to the Modbus statistics counters.  The address of the first
+;   statistics counter is returned in W0.  W1 is returned the number of 32 bit
+;   counters starting at where W0 is pointing.
+;
+         glbsub  modbus[chars uname]_stats_info
+
+         mov     #stats, w0  ;get starting address of statistics counters
+         mov     #after_stats - stats, w1 ;get number of statistics bytes
+         lsr     w1, #2, w1  ;make number of 32 bit statistics counters
+
+         leaverest
+
+;*******************************************************************************
+;
+;   C subroutine MODBUS_STATS_GET (&STATS, CLEAR)
+;
+;   Copy the current statistics counters into STATS.  The address of STATS is
+;   passed in W0.  The counters are all reset to 0 when CLEAR is TRUE (W1 not
+;   zero);
+;
+         glbsubc modbus[chars uname]_stats_get, regf0 | regf2 | regf3
+;
+;   Copy the counters to where W0 is pointing.
+;
+         mov     #stats, w2  ;init source pointer
+         mov     #after_stats - stats, w3 ;get number of bytes to copy
+getst_word:                  ;back here to copy each new word
+         mov     [w2++], [w0++] ;copy this word
+         sub     #2, w3      ;count one less word left to go
+         bra     gt, getst_word ;back to do next word ?
+;
+;   Clear the counters if W1 is non-zero.
+;
+         cp0     w1
+         bra     z, getst_nclear ;don't clear counters ?
+         mcall   modbus[chars uname]_stats_clear ;clear the counters
+getst_nclear:                ;done clearing the counters, if at all
 
          leaverest
 
@@ -186,7 +230,7 @@ clr_byte:                    ;back here to clear each new byte
 ;   that case, only broadcast packets will be received, and application requests
 ;   to send packets will be ignored.
 ;
-         glbsub  modbus[chars uname]_adr_set, regf0 | regf1
+         glbsubd modbus[chars uname]_adr_set, regf0 | regf1
 
          mov     #247, w1    ;get max allowed Modbus slave address
          cp      w0, w1      ;compare address from caller to the limit
@@ -206,7 +250,7 @@ clr_byte:                    ;back here to clear each new byte
 ;   In master mode, all valid packets are received, and the slave address must
 ;   be explicitly specified for all outgoing packets.
 ;
-         glbsub  modbus[chars uname]_master, regf0
+         glbsubd modbus[chars uname]_master, regf0
 
          mov     #0, w0
          mov     w0, slaveadr ;unassign the slave address
@@ -221,7 +265,7 @@ clr_byte:                    ;back here to clear each new byte
 ;   A start character will preceed all Modbus packets.  That character is in the
 ;   low 8 bits of W0.
 ;
-         glbsub  modbus[chars uname]_startchar, regf0
+         glbsubd modbus[chars uname]_startchar, regf0
 
          and     #0xFF, w0   ;mask in only the special character
          mov     w0, stchar  ;save it
@@ -235,7 +279,7 @@ clr_byte:                    ;back here to clear each new byte
 ;
 ;   Disable the non-standard start character feature.
 ;
-         glbsub  modbus[chars uname]_startchar_off
+         glbsubd modbus[chars uname]_startchar_off
 
          bclr    flags, #flg_stchar ;no special char sent or required before packets
 
@@ -265,7 +309,7 @@ clr_byte:                    ;back here to clear each new byte
 ;
 ;   Start the modbus packet reception task.
 ;
-         glbsub  modbus[chars uname]_start, regf13 | regf14
+         glbsubd modbus[chars uname]_start, regf13 | regf14
 
          mov     #[v stacksz], w13 ;pass size of data stack
          mov     #stack_modbus, w14 ;pass start address of data stack
@@ -544,6 +588,18 @@ tsk_forus:                   ;this packet is for us
 ;   received packet.  Results are undefined if MODBUS_PACK_GET is called before
 ;   the packet received from a previous call to MODBUS_PACK_GET is released.
 ;
+;   Input parameters:
+;
+;     W0  -  Max ms to wait.
+;
+;   Output parameters:
+;
+;     W1  -  Pointer to start of packet, Modbus PDU only.  0 on timeout.
+;
+;     W2  -  Number of bytes in packet.  0 on timeout.
+;
+;     W3  -  Packet address.
+;
          glbsub  modbus[chars uname]_pack_get, regf0
 
          mov     tick1ms, w1 ;init clock value up to date with
@@ -603,6 +659,40 @@ pget_wait:                   ;wait a little while
 pget_leave:                  ;common exit point
          leaverest
 
+;*******************
+;
+;   C Function MODBUS_PACK_GET (MS, &PACK_P, &ADR)
+;
+;   The function returns the number of bytes in the packet.  PACK_P is returned
+;   pointing to the start of the packet, and ADR is returned containing the
+;   address encoded in the serial packet.
+;
+         glbsubc modbus_pack_get
+
+         mov     w1, w4      ;save adr of PACK_P variable in W4
+         mov     w2, w5      ;save adr of ADR variable in W5
+         mcall   modbus[chars uname]_pack_get ;call asm routine
+;
+;   Current register contents:
+;
+;     W0  -  Allowed ms wait time, not used at this point.
+;
+;     W1  -  Pointer to packet data start.
+;
+;     W2  -  Number of packet data bytes.
+;
+;     W3  -  Address encoded in packet.
+;
+;     W4  -  Address of caller's PACK_P variable.
+;
+;     W5  -  Address of caller's ADR variable.
+;
+         mov     w2, w0      ;return number of bytes as function value
+         mov     w1, [w4]    ;write to caller's PACKP pointer variable
+         mov     w3, [w5]    ;write to caller's ADR variable
+
+         leaverest
+
 ;*******************************************************************************
 ;
 ;   Subroutine MODBUS_PACK_RELEASE
@@ -616,7 +706,7 @@ pget_leave:                  ;common exit point
 ;   when MODBUS_PACK_GET is called without the previous packet having been
 ;   released.
 ;
-         glbsub  modbus[chars uname]_pack_release
+         glbsubd modbus[chars uname]_pack_release
 
          btsc    flags, #flg_app2 ;packet is in buffer 1 ?
          jump    prel_buf2   ;is in buffer 2
@@ -659,7 +749,7 @@ prel_leave:
 ;   packet at a time, while all other tasks are stalled awaiting their turn.
 ;   The callback routines are called with the mutex held.
 ;
-         glbsub  modbus[chars uname]_pack_put, regf0 | regf1 | regf2 | regf3 | regf4
+         glbsubd modbus[chars uname]_pack_put, regf0 | regf1 | regf2 | regf3 | regf4
 ;
 ;   Range check the number of bytes.  W2 must be 1 to 253 else this is not a
 ;   valid Modbus packet, and the request to send it will be ignored.

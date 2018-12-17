@@ -132,7 +132,7 @@ fp32_fixu (                            //FLOAT to fixed point, rounded and satur
 //   The routine names defined here are generic.  The set of routines may have
 //   a string added to their names to distinguish multiple UARTs in the system.
 //   If so, the templates here must be edited before being copied into the .h
-//   file for the system.  The optional name is inserted after UART_, with
+//   file for a project.  The optional name is inserted after UART_, with
 //   another "_" following.  For example, if the unique name is XYZZ, then
 //   routine UART_LOCK would really be named UART_XYZZ_LOCK.
 //
@@ -154,6 +154,86 @@ void uart_put (                        //send character
 void uart_unlock (void);               //release sending lock
 
 void uart_wait_send (void);            //guarantee packet break before next PUT
+
+//******************************************************************************
+//
+//   Interface for sending and receiving complete Modbus packets.  These
+//   routines are layered on the Mobus-capable UART, defined above.
+//
+//   The routine names defined here are generic.  The set of routines may have
+//   a string added to their names to distinguish multiple Modbus I/O modules in
+//   the system.  If so, the templates here must be edited before being copied
+//   into the .h file for a project.  The optional name is inserted after
+//   MODBUS_, with another "_" following.  For example, if the unique name is
+//   XYZZ, then routine MODBUS_PACK_GET would really be named
+//   MODBUS_XYZZ_PACK_GET.
+//
+typedef struct {
+  int32u_t recv_total;                 //total received packets
+  int32u_t recv_broadcast;             //broadcast packets received (slave only)
+  int32u_t recv_mine;                  //packets received for this address (slave only)
+  int32u_t err_crc;                    //packets rejected due to CRC error
+  int32u_t err_parity;                 //number of bytes received with parity error
+  int32u_t err_short;                  //number of packets with too few bytes
+  int32u_t err_long;                   //number of packets with too many bytes
+  int32u_t err_other;                  //framing errors, overrun errors, etc
+  int32u_t send_total;                 //total number of packets sent
+  } modbus_stats_t;
+
+//********
+//
+//   These routines would typically be called during module configuration.
+//
+//   The master/slave status, start character, and slave address can be changed
+//   during normal operation.
+//
+//   The Modbus receiving task must only be started if the module is enabled.
+//   This is what defines whether the module is "on" or not.  The task can be
+//   stopped and restarted during normal operation, but there MUST never be
+//   more than one receiving task running per Modbus module.  Calling
+//   MODBUS_START when the task is already running can cause all manner of
+//   destruction.
+//
+void modbus_adr_set (                  //make slave, set slave address
+  machine_intu_t);                     //1-247 adr, 0 = none (recv broadcast only)
+
+void modbus_master (void);             //make this device the Modbus master
+
+void modbus_startchar (                //special char preceeds all Modubs packets
+  machine_intu_t);                     //special character in low byte
+
+void modbus_startchar_off (void);      //no special start char, default
+
+void modbus_start (void);              //start Modbus reception task
+
+//********
+//
+//   Routines intended for use during normal operation.
+//
+//   Modbus packets are received and verified by the Modbus reception task.
+//   Fully validated packets are receive by the application by calling
+//   MODBUS_PACK_GET.  Packets are double-buffered internally, so another
+//   packet can be received while the application is processing the previous.
+//   When done with a packet, the application MUST call MODBUS_PACK_RELEASE.
+//
+machine_intu_t                         //number of data bytes, 0 on timeout
+modbus_pack_get (                      //get next received Modbus packet
+  machine_intu_t,                      //max milliseconds to wait
+  int8u_t * *,                         //packet start, NIL on timeout
+  machine_intu_t *);                   //Modbus serial address
+
+void modbus_pack_release (void);       //release last received Modbus packet
+
+void modbus_pack_put (                 //send Modbus packet, multi-task safe
+  machine_intu_t,                      //address, only used if master
+  int8u_t *,                           //data byte address, no adr or checksum
+  machine_intu_t);                     //1-253 number of data bytes
+
+void modbus_stats_get (                //get current snapshot of statistics counters
+  modbus_stats_t *,                    //adr of structure to receive snapshot
+  machine_intu_t);                     //reset stats to 0 after copy on TRUE
+
+void modbus_stats_clear (void);        //reset all statistics counters to 0
 
 //******************************************************************************
 //

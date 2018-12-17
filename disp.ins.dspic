@@ -412,7 +412,7 @@ contu_skip:
 ;
 ;   Subroutine DISP_CONTDOWN
 ;
-;   Increase the display contrast setting by 1.  The new contrast setting is
+;   Decrease the display contrast setting by 1.  The new contrast setting is
 ;   returned in W0.
 ;
          glbsubd disp_contdown
