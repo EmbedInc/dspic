@@ -667,7 +667,7 @@ pget_leave:                  ;common exit point
 ;   pointing to the start of the packet, and ADR is returned containing the
 ;   address encoded in the serial packet.
 ;
-         glbsubc modbus_pack_get
+         glbsubc modbus[chars uname]_pack_get
 
          mov     w1, w4      ;save adr of PACK_P variable in W4
          mov     w2, w5      ;save adr of ADR variable in W5
