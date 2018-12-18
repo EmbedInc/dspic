@@ -219,7 +219,7 @@ void modbus_start (void);              //start Modbus reception task
 machine_intu_t                         //number of data bytes, 0 on timeout
 modbus_pack_get (                      //get next received Modbus packet
   machine_intu_t,                      //max milliseconds to wait
-  int8u_t * *,                         //packet start, NIL on timeout
+  const int8u_t * *,                   //packet start, NIL on timeout
   machine_intu_t *);                   //Modbus serial address
 
 void modbus_pack_release (void);       //release last received Modbus packet
