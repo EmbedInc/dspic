@@ -246,7 +246,7 @@ ckp_byte:                    ;back here each new byte to add to the checksum
 ;
 ;     W6  -  Number of bytes left to write
 ;
-         mov     #9, w5     ;init pointer to first byte of checksum to write
+         mov     #9, w5      ;init pointer to first byte of checksum to write
          mov     #[v crcsize], w6 ;init number of bytes left to write
 nvs_byte:                    ;back here to write each new byte
          mov.b   [w5--], w0  ;get this byte, advance pointer to next

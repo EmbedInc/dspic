@@ -48,7 +48,7 @@
 ;
          glbsub  modbus_crc_byte, regf1 | regf2
 
-	ze	w1, w1	;get only the byte value into W1
+         ze      w1, w1      ;get only the byte value into W1
          xor     w0, w1, w0  ;XOR the data byte into the accumulator
 
          mov     #8, w1      ;init number of bits left to do in W1

@@ -122,6 +122,7 @@
 ;
 .section .ram_config, bss    ;variables in normal RAM
 
+allocg   syscfg              ;single config byte for SYSTEM when SYSCFG flag set
 
 ;*******************
 ;
@@ -327,9 +328,28 @@ cfgg_leave:                  ;return to caller, W0 and W2:W1 all set
          cp0     w0
          bra     z, ccfget_leave ;no configuration bytes, nothing more do to ?
 
-         mov     w1,[w3++]   ;write nvol address low word
-         mov     w2,[w3]     ;write nvol address high word
+         mov     w1, [w3++]  ;write nvol address low word
+         mov     w2, [w3]    ;write nvol address high word
 
 ccfget_leave:
          leaverest
   /endif
+
+;*******************************************************************************
+;
+;   Command SYSCFG cfg
+;
+;   Overrides the configuration data for subsystem 0.  CFG will be the single
+;   configuration byte for subsystem 0 after this command.
+;
+;   This command is only acted upon when the SYSCFG_CMD flag is set.
+;
+         glbent  cm_syscfg
+
+         gcall   cmd_get8    ;get the config byte into W0
+         skip_flag syscfg_cmd ;a SYSCFG command is valid now ?
+         return              ;no, nothing more to do
+
+         mov     w0, syscfg  ;save the single subsystem 0 config byte
+         setflag syscfg      ;tell subsystem 0 to use the special byte
+         return

@@ -421,7 +421,7 @@
 //
 /const   eetype  = "24AA32A" ;specific EEPROM type, 4096 bytes
 ;/const   eetype = "24LC32A"  ;specific EEPROM type, 4096 bytes
-/const   devadr integer = ?? ;EEPROM chip 7-bit IIC bus address
+/const   devadr  integer = ?? ;EEPROM chip 7-bit IIC bus address
 /const   busname = ""        ;unique name of IIC routines to use
 
 /include "(cog)src/dspic/nvol_24xx32.ins.dspic" ;external IIC EEPROM
