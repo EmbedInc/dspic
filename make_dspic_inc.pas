@@ -1,8 +1,8 @@
 {   Program MAKE_DSPIC_INC [pic]
 *
-*   Make the include file for each dsPIC processor that has a linker file.
-*   The include file will contain definitions of symbols found in the
-*   linker file that meet the following criteria:
+*   Make the include file for each dsPIC processor that has a linker file, or
+*   for a single specific processor.  The include file will contain definitions
+*   of symbols found in the linker file that meet the following criteria:
 *
 *     1 - The name starts with an alphabetic character.
 *
@@ -10,21 +10,20 @@
 *
 *     3 - The symbol is assigned a literal integer constant.
 *
-*   These symbols will be defined in the output file with .equiv
-*   statements.  The symbol names in the output file will have the
-*   first character upper case, with all following aphabetic characters,
-*   if any, lower case.
+*   These symbols will be defined in the output file with .equiv statements.
+*   The symbol names in the output file will have the first character upper
+*   case, with all following aphabetic characters, if any, lower case.
 *
-*   All linker files in the current dsPIC tools installation will be
-*   processed and an include file created for each of them.  The dsPIC
-*   tools installation directory is indicated by the DSPICDIR environment
-*   variable.  The resulting include files are written to the current
-*   directory.
+*   With the PIC command line option omitted, all linker files in the current
+*   dsPIC tools installation will be processed and an include file created for
+*   each of them.  The dsPIC tools installation directory is indicated by the
+*   DSPICDIR environment variable.  The resulting include files are written to
+*   the current directory.
 *
 *   If the PIC command line option is provided, then only the file for that
 *   PIC will be created.  PIC must be the model number without the preceeding
-*   "PIC".  Valid examples for PIC are "30F3013" and "24FJ256DA210".  The PIC
-*   command line option is case-insensitive.
+*   "PIC".  For example, "30F3013" and "24FJ256DA210".  The PIC command line
+*   option is case-insensitive.
 }
 program make_dspic_inc;
 %include 'base.ins.pas';
@@ -279,7 +278,7 @@ have_digit:                            {II is index of first digit in generic in
   string_appends (obuf, ' .endif');
   wbuf;
 
-  string_appends (obuf, '/INCLUDE "');
+  string_appends (obuf, '/include "');
   string_append (obuf, incname);
   string_appends (obuf, '"');
   wbuf;
@@ -393,7 +392,7 @@ eof:                                   {end of linker input file encountered}
   file_close (conn_in);                {close the linker input file}
 
   wbuf;
-  string_appends (obuf, '/INCLUDE "lcase.ins.dspic"');
+  string_appends (obuf, '/include "lcase.ins.dspic"');
   wbuf;
 
   file_close (conn_out);               {close the output file}

@@ -42,7 +42,7 @@
   /endif
 
 /if [not [exist "startchar"]] then
-  /const master string = ""
+  /const startchar string = ""
   /endif
 /if [> [slen startchar] 1] then
   /show "  STARTCHAR set to string longer than 1, only singls char allowed."
