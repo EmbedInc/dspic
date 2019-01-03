@@ -18,10 +18,7 @@
 *   current directory.
 }
 program make_lcase;
-%include '(cog)lib/sys.ins.pas';
-%include '(cog)lib/util.ins.pas';
-%include '(cog)lib/string.ins.pas';
-%include '(cog)lib/file.ins.pas';
+%include 'base.ins.pas';
 
 var
   conn_in, conn_out: file_conn_t;      {input and output file connections}

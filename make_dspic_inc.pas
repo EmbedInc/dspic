@@ -27,7 +27,7 @@
 *   command line option is case-insensitive.
 }
 program make_dspic_inc;
-%include '(cog)lib/base.ins.pas';
+%include 'base.ins.pas';
 
 const
   max_msg_args = 2;                    {max arguments we can pass to a message}
