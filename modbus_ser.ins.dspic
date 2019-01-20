@@ -45,7 +45,7 @@
   /const startchar string = ""
   /endif
 /if [> [slen startchar] 1] then
-  /show "  STARTCHAR set to string longer than 1, only singls char allowed."
+  /show "  STARTCHAR set to string longer than 1, only single char allowed."
          .error  "STARTCHAR"
          .end
   /stop 3
