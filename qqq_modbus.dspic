@@ -110,7 +110,7 @@
 ;         W2  -  Number of bytes pointed to by W1.  Must be 1-253.
 ;
 ;       This call is multi-task safe.  A internal mutex is used to ensure a
-;       single task receives a whole packet at a time.
+;       single task transmits a whole packet at a time.
 ;
 ;     MODBUS_ACTIVITY
 ;

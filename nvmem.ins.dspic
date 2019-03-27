@@ -7,7 +7,7 @@
 ;   Configuration constants.
 ;
 /const   crcmask integer = 16#04C11DB7 ;32 bit CRC XOR mask (polynomial)
-/const   crcinit integer = 16#80000000 ;valid to init checksum accumulator to
+/const   crcinit integer = 16#80000000 ;value to init checksum accumulator to
 /const   crcsize integer = 4 ;byte size of the checksum
 ;
 ;   Derived constants.
