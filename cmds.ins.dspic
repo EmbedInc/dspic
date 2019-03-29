@@ -1,0 +1,219 @@
+;   ***************************************************************
+;   * Copyright (C) 2010, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Command processing routines.  See the comments in QQQ_CMDS.DSPIC for the
+;   interface to command routines.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+
+;
+;   Derived constants.
+;
+/var new ii integer //scratch integer
+/var new tk string //scratch token
+
+//   Make sure all the optional configuration parameters exist.  These are
+//   created and set to their default values if not already existing.
+//
+/if [not [exist "name"]] then
+  /const name string = ""
+  /endif
+
+//   Create the string constants used to customize symbol names.  These
+//   constants are:
+//
+//     SUFF
+//
+//       The empty string or "_name" for adding to the middle or end of CMD_xxx
+//       names.
+//
+//     CMD
+//
+//       The leading part of CMD_xxx names.  This is "cmd" when no special
+//       name is used, and "cmd_<name>" when a special name is used.
+//
+/if [= name ""]
+  /then                      ;no additional name given to our public
+    /const suff string = ""
+  /else                      ;public symbols have additional name
+    /const suff string = [str "_" name]
+  /endif
+
+/const   cmd     string = [str "cmd" suff]
+//
+//   Other derived constants.
+//
+/const   ustat   bool = [CmdRef cm_ustat] //USTAT command in use
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_cmds[chars suff], bss
+
+/if ustat then
+allocg   usb_fwtype          ;USB converter firmware type ID
+allocg   usb_fwver           ;USB converter firmware version number
+allocg   usb_fwseq           ;USB converter firmware sequence number
+  /endif
+
+;*******************
+;
+;   Local state.
+;
+
+
+.section .code_cmds[chars suff], code
+;*******************************************************************************
+;
+;   Subroutine CMDS_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  cmds_init, regf0
+
+/if ustat then
+         mov     #0, w0
+         mov     w0, usb_fwtype ;init USB converter firmware info to unknown
+         mov     w0, usb_fwver
+         mov     w0, usb_fwseq
+  /endif
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Command PING
+;
+;   Sends the PONG response.
+;
+/if [Command cm_ping] then
+         gcall   [chars cmd]_lock_out
+         mov     #rsp_pong, w0
+         gcall   [chars cmd]_put8 ;send the PONG response
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command NAMESET n string
+;
+;   Sets the non-volatile name of this unit.  This command is required by the
+;   Embed device 10 spec.
+;
+;   This device does not support a user-settable name string.  This command is
+;   accepted, but ignored.
+;
+/if [Command cm_nameset] then
+         gcall   [chars cmd]_get8 ;get the number of name characters following
+         gcall   [chars cmd]_putbufn ;read the name string bytes (which are then ignored)
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command NAMEGET
+;
+;   Sends the NAME response, which reports the non-volatile name of this device.
+;   This command is required by the Embed device 10 spec.
+;
+;   This device has a fixed name set at build time.  The name is set by the
+;   DEVNAME preprocessor string constant, set in the project include file.
+;
+/if [Command cm_nameget] then
+         gcall   [chars cmd]_lock_out
+         mov     #rsp_name, w0
+         gcall   [chars cmd]_put8 ;send NAME response opcode
+         mov     #[slen devname], w0
+         gcall   [chars cmd]_put8 ;send length of string to follow
+         cp0     w0
+         skip_nz
+         return              ;quit here if no string characters to send
+
+         mov     w0, w1      ;get number of string characters left to send
+         mov     #tbloffset(devname), w12 ;get string address into W13:W12
+         mov     #tblpage(devname), w13
+         and     #0x0F, w13
+nameget_byte:                ;back here to send each new string byte
+         gcall   pgbyte_read ;get this string byte into W0, advance adr
+         gcall   [chars cmd]_put8 ;send the string byte
+         sub     #1, w1      ;count one less byte left to do
+         bra     gtu, nameget_byte ;back to do next byte
+
+         return
+
+devname  rawstring [v devname] ;put name string in program memory
+  /endif
+
+;*******************************************************************************
+;
+;   Command USTAT stat [parm ... parm]
+;
+;   This command is not sent by the host, but by a serial to USB converter
+;   between here and the host.  The command is used to provide information about
+;   the converter and the USB link.  It is part of the Embed USB device 10
+;   protocol.  See the "embed10" documentation file for details.
+;
+/if [Command cm_ustat] then
+         gcall   [chars cmd]_get8 ;get STAT into W0
+         mov     w0, w1      ;save it in W1
+         lsr     w0, #5, w0  ;get the 0-7 opcode into W0
+         dispatch ustat_opc, 7 ;jump to specific routine for this opcode
+         return              ;invalid opcode (not supposed to be possible}
+
+ustat_opc:                   ;table of dispatch addresses for each opcode
+         .pword  ustat_opc_status ;0 - STATUS
+         .pword  ustat_opc_fw ;1 - FW type version sequence
+         .pword  [chars cmd]_done ;2
+         .pword  [chars cmd]_done ;3
+         .pword  [chars cmd]_done ;4
+         .pword  [chars cmd]_done ;5
+         .pword  [chars cmd]_done ;6
+         .pword  [chars cmd]_done ;7
+;
+;   USTAT STATUS
+;
+ustat_opc_status:
+         btss    w0, #0
+         setflag usb_host
+         btsc    w0, #0
+         clrflag usb_host
+
+         btss    w0, #1
+         setflag usb_app
+         btsc    w0, #1
+         clrflag usb_app
+         return
+;
+;   USTAT FW type version sequence
+;
+ustat_opc_fw:
+         gcall   [chars cmd]_get8 ;get type ID
+         mov     w0, usb_fwtype
+         gcall   [chars cmd]_get8 ;get version number
+         mov     w0, usb_fwver
+         gcall   [chars cmd]_get8 ;get sequence number
+         mov     w0, usb_fwseq
+         return
+  /endif

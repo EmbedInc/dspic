@@ -16,7 +16,212 @@
 ;
 ;   Command stream processor.  The module contains the mechanics for processing
 ;   and responding to commands.  It also contains the commands dispatch table.
-;   Most of the actual commands are in the CMDS module.
+;   Most actual commands are in other modules.
+;
+;   Exported routines are:
+;
+;     CMD_INIT
+;
+;       Performs module initialization.  This routine must be called before
+;       any other routine in this module.
+;
+;     CMD_START
+;
+;       Starts command processing.  A separate task is created that reads and
+;       processes the command stream in a infinite loop.
+;
+;     CMD_GET8  -  Get 8 bit unsigned value into W0.
+;     CMD_GET8S  -  Get 8 bit signed value into W0.
+;     CMD_GET16  -  Get 16 bit value into W0.
+;     CMD_GET24U  -  Get 24 bit unsigned value into W1:W0.
+;     CMD_GET24S  -  Get 24 bit signed value into W1:W0.
+;     CMD_GET32  -  Get 32 bit value into W1:W0.
+;
+;       Routines to read data from the command stream.  These routines are used
+;       by routines that implement commands.
+;
+;     CMD_LOCK_OUT
+;
+;       Acquire the exclusive lock on the response stream.  A task is only
+;       allowed to write to the response stream when holding this lock.
+;
+;     CMD_UNLOCK_OUT
+;
+;       Release the lock on the response stream.  This undoes what CMD_LOCK_OUT
+;       does.  The lock is automatically released when a command routine returns
+;       or jumps to CMD_DONE.
+;
+;     CMD_PUT8  -  Write the 8 low bits of W0.
+;     CMD_PUT16  -  Write the 16 bits of W0.
+;     CMD_PUT24  -  Write the 24 low bits of W1:W0.
+;     CMD_PUT32  -  Write the 32 bits of W1:W0.
+;
+;       Routines for writing data to the response stream.  Tasks are only
+;       allowed to write to the response stream when they hold the response
+;       stream sending lock.
+;
+;     CMD_DONE
+;
+;       Entry point that command routines must end up at when done.  The stack
+;       is reset to empty at CMD_DONE, so it is permissable to call this entry
+;       point like a subroutine, and to leave data on the stack.  The response
+;       stream sending lock is also released if it is held.
+;
+;       The address of CMD_DONE is written to the stack before a command routine
+;       is run, such that a RETURN from the top level of the command routine
+;       automatically jumps to CMD_DONE.  In other words, command routines can
+;       implemented as subroutines that return when done, as apposed to
+;       explicitly jumping to CMD_DONE.
+;
+;     CMD_PUTBUF
+;
+;       Write the low 8 bits of W0 as the next byte into the commands scratch
+;       buffer.  Nothing is done if the buffer is already full.  NCMDBUF is
+;       udpated as appropriate to contain the total number of bytes in the
+;       buffer.
+;
+;       The commands scratch buffer is automatically reset to empty before each
+;       command routine is run.  This buffer may only be used by the command
+;       processing routines.
+;
+;       This routine does not exist when BUFSIZE (see below) is 0.
+;
+;     CMD_PUTBUFN
+;
+;       Get the next N bytes from the command stream and save them into the
+;       commands scratch buffer.  N is passed in W0.
+;
+;       N bytes are always read from the command stream.  However, bytes are not
+;       saved after the buffer is full.
+;
+;       This routine does not exist when BUFSIZE (see below) is 0.
+;
+;   Other exported symbols are:
+;
+;     NCMDBUF
+;
+;       The number of bytes currently in the commands scratch buffer.  The
+;       buffer is reset to empty before each command routine is run.  This
+;       symbol is NCMDBUF_name when NAME exists and is not the empty string.
+;
+;       This symbol does not exist when BUFSIZE (see below) is 0.
+;
+;     CMDBUF
+;
+;       The start of the commands scratch buffer.  This symbol is CMDBUF_name
+;       when NAME exists and is not the empty string.
+;
+;       This symbol does not exist when BUFSIZE (see below) is 0.
+;
+;   The following preprocessor constants are used to configure this module:
+;
+;     NAME, string
+;
+;       Unique name added to CMD_xxx symbols exported and used by this module.
+;       Customizing the symbol names is necessary when multiple command
+;       processors exist in a system, handling command streams from different
+;       sources.
+;
+;       The generic names of symbols exported and required by this module are
+;       CMD_xxxx.  When NAME exists and is not the empty string, these names
+;       will be CMD_<name>_xxxx.  For example, the subroutine CMD_INIT becomes
+;       CMD_XYZ_INIT when NAME is set to "XYZ".
+;
+;       The default is the empty string, meaning the generic symbol names are
+;       used.
+;
+;     UART_NAME, string
+;
+;       The unique name of the UART routines to use.  If a system has multiple
+;       UARTs, then they must be uniquely named, using the same mechanism as the
+;       NAME constant for this module (above).  UART_NAME specifies the
+;       particular UART routines to call for sending and receiving the command
+;       and response streams.
+;
+;       The default is the NAME value, above.
+;
+;     BUFZIZE, integer
+;
+;       The size of the commands scratch buffer, in bytes.  This buffer is for
+;       the exclusive use of command processing routines.  When this value is 0,
+;       then no buffer is created, and the routines to access the buffer are not
+;       created.
+;
+;       The default is 0.
+;
+;     SENDNNOP, integer
+;
+;       The number of NOP responses to send at startup.  A NOP response is a
+;       single byte that is supposed to be ignored by hosts.  Therefore, sending
+;       as many NOPs as the maximum number of bytes in any command guarantees
+;       that the host will interpret the next byte as a reponse opcode.  Setting
+;       this value to zero completely removes the code that sends NOPs at
+;       startup.
+;
+;       The default is 16.
+;
+;     DEBUG_CMDDEL, bool
+;
+;       When TRUE, causes the dispatch routine to wait a little while after
+;       receiving each command opcode, before jumping to the command routine.
+;       The purpose is so that any command parameter bytes are in the input
+;       buffer when the command routine is run.  This simplifies single-step
+;       debugging since the command stream communication is not disrupted by the
+;       slow execution, and routines that get command parameters complete
+;       immediately.
+;
+;     CMD_name, string
+;
+;       There must be one of these constants for each implemented command.  The
+;       constant value is:
+;
+;         n [routine]
+;
+;       N is the 0-255 command opcode value.  The optional ROUTINE parameter is
+;       the name of the command routine.  This is the routine that is run to
+;       process the command.  The default for ROUTINE is "cm_<name>", where NAME
+;       is taken from the CMD_ constant name.
+;
+;       For example, if constant "cmd_blork" is set to "5", then command opcode
+;       5 will cause routine "cm_blork" to be run to read the remaining command
+;       bytes and perform the command.  If "cmd_blork" is set to "5 send_blork",
+;       then opcode 5 will cause routine "send_blork" to be run to process the
+;       command.
+;
+;       The names of these constants are customized according to the NAME
+;       constant, described above.  For example, if NAME is set to "abc", then
+;       the constant "cmd_abc_blork" specifies the opcode and routine name for
+;       the BLORK command.  The default command routine is likewise customized
+;       according to NAME.  With NAME "abc" and CMD_ABC_BLORK "5", the routine
+;       for command 5 is "cm_abc_blork".  Routine names explicitly set by using
+;       the ROUTINE parameter in the constant value are not customized by NAME.
+;
+;       None of these constants are created by default.  For a command to exist,
+;       a constant with its opcode value must be explicitly created.  Some
+;       "library" code that implements common commands searches the CMD_xxx
+;       constants to decide whether specific command routines should be created.
+;
+;   Additional preprocessor symbols used to customize this module are:
+;
+;     macro GETBYTE
+;
+;       Get the next command stream byte into W0.  The default is to call
+;       UART_PUT, as customized by UART_NAME.
+;
+;     macro LOCK
+;
+;       Acquire the exclusive lock on the response stream.  The default is to
+;       call UART_LOCK, as customized by UART_NAME.
+;
+;     macro UNLOCK
+;
+;       Release the lock on the response stream.  The default is to call
+;       UART_UNLOCK, as customized by UART_NAME.
+;
+;     macro PUTBYTE
+;
+;       Send the byte in the low 8 bits of W0 to the response stream.  The
+;       default is to call UART_PUT, as customized by UART_NAME.
 ;
 /include "qq2.ins.dspic"
 
@@ -24,698 +229,51 @@
 ;
 ;   Configuration constants.
 ;
-/const   bufsize integer = 32 ;size of buffer for temp saving command data
+/const   name    = ""        ;unique name to add to CMD_xxx symbols
+/const   uart_name = name    ;unique name to add to UART_xxx symbols
+/const   bufsize integer = 0 ;size of commands scratch buffer, bytes
 /const   sendnnop integer = 16 ;number of NOP responses to send at startup
-/const   uart_name string = "" ;name of the UART to use for cmd/rsp streams
-/const   stacksz_cmd integer = 128 ;command processing task stack size
-;
-;   Derived constants.
-;
-/if [not [exist "debug_cmddel"]] then
-  /const debug_cmddel bool = false
-  /endif
-/if [= uart_name ""]
-  /then                      ;no name given to UART
-    /const uname string = "uart"
-  /else                      ;UART has a specific name
-    /const uname string = [str "uart_" uart_name]
-  /endif
 
-;*******************************************************************************
-;
-;   Variables.
-;
-;*******************
-;
-;   Global state.
-;
-.section .ram_cmd, bss
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro GETBYTE
+//
+//   Get the next command stream byte into W0.  W0 will be 0 to 255.  This macro
+//   waits indefinitely until a command stream byte is available.  All other
+//   registers are preserved.
+//
+//macro getbyte
+//  endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro LOCK
+//
+//   Acquire the exclusive lock on the response stream.  This macro waits
+//   indefinitely until the lock is available.  All registers are preserved.
+//
+//macro lock
+//  endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro UNLOCK
+//
+//   Release the response stream lock.  All registers are preserved.
+//
+//macro unlock
+//  endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro PUTBYTE
+//
+//   Write the byte in the low 8 bits of W0 to the response stream.  All
+//   registers are preserved.
+//
+//macro putbyte
+//  endmac
+
+/include "(cog)src/dspic/cmd.ins.dspic"
 
-/if [> bufsize 0] then
-allocg   ncmdbuf             ;number of bytes in CMDBUF
-allocg   cmdbuf, [v bufsize] ;temp buffer for use during individual commands
-  /endif
-
-
-;*******************
-;
-;   Local state.
-;
-alloc    stack_cmd, [v stacksz_cmd], 2 ;command processing task stack
-
-
-.section .code_cmd, code
-;*******************************************************************************
-;
-;   Subroutine CMD_INIT
-;
-;   Initialize the hardware and software state managed by this module.
-;
-         glbsub  cmd_init
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_LOCK_OUT
-;
-;   Lock the output stream for this command processing task.  The output stream
-;   must be locked by command processing routines before sending any responses.
-;
-         glbsubd cmd_lock_out
-
-         gcall   [chars uname]_lock ;set the lock
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_UNLOCK_OUT
-;
-;   Release any command output stream lock held by this command processing task.
-;
-         glbsubd cmd_unlock_out
-
-         gcall   [chars uname]_unlock ;release the lock
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_GET8
-;
-;   Get the next 8 bit byte from the command input stream into W0.  This routine
-;   waits indefinitely until a byte is available.
-;
-/if using_xc16 then
-         glbent  _cmd_get8u
-  /endif
-
-         glbsub  cmd_get8
-
-         gcall   [chars uname]_get ;get the byte from the UART
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_GET8S
-;
-;   Get the next 8 bit byte from the command input stream as a signed integer
-;   into W0.
-;
-         glbsubd cmd_get8s
-
-         mcall   cmd_get8    ;get the byte in the low bits of W0
-         se      w0, w0      ;sign-extend low byte into all of W0
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_GET16
-;
-;   Get the next two bytes from the command input stream as a 16 bit value into
-;   W0.  The bytes are assumed to be in most to least significant order.
-;
-/if using_xc16 then
-         glbent  _cmd_get16u
-         glbent  _cmd_get16s
-  /endif
-
-         glbsub  cmd_get16, regf1
-
-         mcall   cmd_get8    ;get the high byte into W0
-         sl      w0, #8, w1  ;save it in W1 in the right position
-         mcall   cmd_get8    ;get the low byte into W0
-         ior     w1, w0, w0  ;assemble the 16 bit word in W0
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_GET24U
-;
-;   Get the next three bytes from the command input stream as a unsigned 24 bit
-;   integer into W1:W0.  The bytes are assumed to be in most to least
-;   significant order.
-;
-         glbsubd cmd_get24u
-
-         mcall   cmd_get8    ;get the high byte
-         mov     w0, w1
-         mcall   cmd_get16   ;get the low word
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_GET24S
-;
-;   Get the next three bytes from the command input stream as a signed 24 bit
-;   integer into W1:W0.  The bytes are assumed to be in most to least
-;   significant order.
-;
-         glbsubd cmd_get24s
-
-         mcall   cmd_get8    ;get the high byte
-         se      w0, w1      ;sign extend and save it in W1
-         mcall   cmd_get16   ;get the low word
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_GET32
-;
-;   Get the next four bytes from the command input stream as a 32 bit value into
-;   W1:W0.  The bytes are assumed to be in most to least significant order.
-;
-/if using_xc16 then
-         glbent  _cmd_get32u
-         glbent  _cmd_get32s
-  /endif
-
-         glbsub  cmd_get32
-
-         mcall   cmd_get16   ;get the high word
-         mov     w0, w1
-         mcall   cmd_get16   ;get the low word
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_PUT8
-;
-;   Write the byte in the low 8 bits of W0 to the response stream for this
-;   command processing task.
-;
-/if using_xc16 then
-         glbent  _cmd_put8u
-         glbent  _cmd_put8s
-  /endif
-
-         glbsub  cmd_put8
-
-         gcall   [chars uname]_put ;write the byte to the UART
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_PUT16
-;
-;   Write the 16 bit word in W0 to the response stream.  The bytes are written
-;   in most to least significant order.
-;
-/if using_xc16 then
-         glbent  _cmd_put16u
-         glbent  _cmd_put16s
-  /endif
-
-         glbsub  cmd_put16
-
-         swap    w0
-         mcall   cmd_put8    ;send the high byte
-         swap    w0
-         mcall   cmd_put8    ;send the low byte
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_PUT24
-;
-;   Write the 24 low bits of W1:W0 to the response stream.  The bytes are
-;   written in most to least significant order.
-;
-/if using_xc16 then
-         glbent  _cmd_put24u
-         glbent  _cmd_put24s
-  /endif
-
-         glbsub  cmd_put24
-
-         exch    w0, w1
-         mcall   cmd_put8    ;send the high byte
-         exch    w0, w1
-         mcall   cmd_put16   ;send the low word
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_PUT32
-;
-;   Write the 32 bit word in W1:W0 to the response stream.  The bytes are
-;   written in most to least significant order.
-;
-/if using_xc16 then
-         glbent  _cmd_put32u
-         glbent  _cmd_put32s
-  /endif
-
-         glbsub  cmd_put32
-
-         exch    w0, w1
-         mcall   cmd_put16   ;send the high word
-         exch    w0, w1
-         mcall   cmd_put16   ;send the low word
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_PUTBUF
-;
-;   Write the low 8 bits of W0 as the next byte into the commands scratch
-;   buffer.  Nothing is done if the buffer is already full.  NCMDBUF is udpated
-;   as appropriate to contain the total number of bytes in the buffer.  Note
-;   that the buffer is automatically reset to empty before each command routine
-;   is run.  This buffer may only be used by the command processing task.  The
-;   buffer is made global so that command processing routines can be in other
-;   modules.
-;
-/if [> bufsize 0] then
-         glbsub  cmd_putbuf, regf1 | regf2
-
-         mov     ncmdbuf, w1 ;get number of bytes already in the buffer
-         mov     #[v bufsize], w2 ;get maximum bytes allowed in the buffer
-         cp      w1, w2
-         bra     geu, pbuf_leave ;buffer is already full, nothing more to do
-
-         mov     #cmdbuf, w2 ;get address of start of buffer
-         add     w2, w1, w2  ;point W2 to where to store this byte
-         mov.b   w0, [w2]    ;stuff the byte into the buffer
-
-         add     #1, w1      ;update number of bytes in the buffer
-         mov     w1, ncmdbuf
-
-pbuf_leave:                  ;common exit point
-         leaverest
-  /endif
-
-;*******************************************************************************
-;
-;   Subroutine CMD_PUTBUFN
-;
-;   Get the next N bytes from the command stream and save them into the command
-;   routines scratch buffer, CMDBUF.  N is passed in W0.
-;
-;   N bytes are always read from the command stream.  However, bytes are not
-;   saved after the buffer is full.
-;
-/if [> bufsize 0] then
-         glbsub  cmd_putbufn, regf0 | regf1
-
-         mov     w0, w1      ;init number of bytes left to do
-pbn_byte:                    ;back here each new byte
-         cp0     w1
-         bra     z, pbn_done ;done with all the bytes ?
-         mcall   cmd_get8    ;get the next input byte into W0
-         mcall   cmd_putbuf  ;save it in the scratch buffer
-         sub     #1, w1      ;count one less byte left to do
-         jump    pbn_byte    ;back to do next byte
-pbn_done:                    ;done copying all the bytes
-         leaverest
-  /endif
-
-;*******************************************************************************
-;
-;   Subroutine CMD_FWINFO
-;
-;   Send the FWINFO response.
-;
-         locsub  cmd_fwinfo, regf0
-
-         gcall   cmd_lock_out
-
-         mov     #rsp_fwinfo, w0
-         gcall   cmd_put8    ;FWINFO opcode
-         mov     #fwtype, w0
-         gcall   cmd_put8    ;firmare type ID
-         mov     #fwver, w0
-         gcall   cmd_put8    ;firmware version number
-         mov     #fwseq, w0
-         gcall   cmd_put8    ;firmware sequence number
-
-         gcall   cmd_unlock_out
-         leaverest
-
-;*******************************************************************************
-;
-;   Subroutine CMD_START
-;
-;   Start the command stream processing tasks.
-;
-         glbsub  cmd_start, regf13 | regf14
-
-         start_task cmd
-
-         leaverest
-
-;*******************************************************************************
-;
-;   Routine CMD_TASK
-;
-;   This code is run in a separate task.  The task reads the command stream,
-;   processes the commands, and possibly sends responses.
-;
-cmd_task_start:              ;task starts here
-;
-;   Send a bunch of NOP responses so that the host will be in sync with our
-;   response stream.  The number of NOPs to send is set by the constant SENDNNOP
-;   at the top of this module.  This section is omitted when SENDNNOP is 0.
-;
-/if [> sendnnop 0] then
-         mov     #[v sendnnop], w1 ;init number of NOPs left to send
-         gcall   cmd_lock_out ;acquire exclusive lock on the response stream
-loop_nop:
-         mov     #rsp_nop, w0
-         gcall   cmd_put8    ;send one NOP
-         sub     #1, w1      ;count one less NOP left to send
-         bra     nz, loop_nop ;back to send the next NOP
-         gcall   cmd_unlock_out ;release lock on the response stream
-  /endif
-
-         mcall   cmd_fwinfo  ;send initial response giving our firmware info
-;
-;   Return point after done executing a command.  Command routines can jump here
-;   from nested subroutines or with data on the stack.  The stack will be reset
-;   to empty before any further processing.
-;
-         glbent  cmd_done
-
-         disi    #1
-         mov     #stack_cmd, w15 ;reset the stack to empty
-         mcall   cmd_unlock_out ;make sure this task is not holding output lock
-
-/if [> bufsize 0] then
-         mov     #0, w0
-         mov     w0, ncmdbuf ;reset the scratch command data buffer to empty
-  /endif
-;
-;   Get and process the next command.
-;
-         mcall   cmd_get8    ;get the opcode byte into W0
-;
-;   If the DEBUG_CMDDEL switch is enabled, wait a while for any parameters for
-;   this command to arrive.  This makes single stepping thru command
-;   interpretation possible since all data bytes will already have been received
-;   by the hardware and they will be coming from the software FIFO.
-;
-/if debug_cmddel then
-         mov     w0, w1      ;temp save the opcode byte
-         mov     #10, w0     ;number of ms ticks to wait
-         gcall   waitms      ;do the wait
-         mov     w1, w0      ;restore the opcode into W0
-  /endif
-
-         mov     #tbloffset(cmd_done), w1 ;put CMD_DONE as return address onto stack
-         mov     w1, [w15++]
-         mov     #tblpage(cmd_done), w1
-         and     #127, w1
-         mov     w1, [w15++]
-
-         mov     #tbloffset(cmd_tbl), w1 ;get command table address into W2:W1
-         mov     #tblpage(cmd_tbl), w2
-         and     #127, w2
-         sl      w0, #1, w3  ;make offset into table for this opcode
-         add     w1, w3, w1  ;make table entry address in W2:W1
-         addc    #0, w2
-         mov     w2, Tblpag  ;set high bits of program memory address to fetch
-         tblrdl  [w1], [w15++] ;fetch low 16 bits and push them onto the stack
-         tblrdh  [w1], [w15++] ;fetch and push the remaining high bits
-         return              ;jump to the address just pushed onto the stack
-
-;*******************************************************************************
-;
-;   Commands dispatch table.  There is one table entry for each possible 0 - 255
-;   command opcode.  Each table entry uses one program memory word (24 bits),
-;   and contains the address of the command processing routine for that opcode.
-;
-;   All command routines are named CM_xxx.  Most simple commands are in the CMDS
-;   module.
-;
-;   See the header comments in the CMDS module for the details of the interface
-;   to command processing routines.
-;
-cmd_tbl:
-         .pword  cmd_done    ;0 - NOP, command explicitly ignored
-         .pword  cm_ping     ;1 - PING, send PONG response
-         .pword  cmd_fwinfo  ;2 - FWINFO, send FWINFO response
-         .pword  cm_nameset  ;3 - NAMESET, sets non-volatile name (ignored)
-         .pword  cm_nameget  ;4 - NAMEGET, gets non-volatile name
-         .pword  cmd_done    ;5
-         .pword  cmd_done    ;6
-         .pword  cmd_done    ;7
-         .pword  cmd_done    ;8
-         .pword  cmd_done    ;9
-         .pword  cmd_done    ;10
-         .pword  cmd_done    ;11
-         .pword  cmd_done    ;12
-         .pword  cmd_done    ;13
-         .pword  cmd_done    ;14
-         .pword  cmd_done    ;15
-         .pword  cmd_done    ;16
-         .pword  cmd_done    ;17
-         .pword  cmd_done    ;18
-         .pword  cmd_done    ;19
-         .pword  cmd_done    ;20
-         .pword  cmd_done    ;21
-         .pword  cmd_done    ;22
-         .pword  cmd_done    ;23
-         .pword  cmd_done    ;24
-         .pword  cmd_done    ;25
-         .pword  cmd_done    ;26
-         .pword  cmd_done    ;27
-         .pword  cmd_done    ;28
-         .pword  cmd_done    ;29
-         .pword  cmd_done    ;30
-         .pword  cmd_done    ;31
-         .pword  cmd_done    ;32
-         .pword  cmd_done    ;33
-         .pword  cmd_done    ;34
-         .pword  cmd_done    ;35
-         .pword  cmd_done    ;36
-         .pword  cmd_done    ;37
-         .pword  cmd_done    ;38
-         .pword  cmd_done    ;39
-         .pword  cmd_done    ;40
-         .pword  cmd_done    ;41
-         .pword  cmd_done    ;42
-         .pword  cmd_done    ;43
-         .pword  cmd_done    ;44
-         .pword  cmd_done    ;45
-         .pword  cmd_done    ;46
-         .pword  cmd_done    ;47
-         .pword  cmd_done    ;48
-         .pword  cmd_done    ;49
-         .pword  cmd_done    ;50
-         .pword  cmd_done    ;51
-         .pword  cmd_done    ;52
-         .pword  cmd_done    ;53
-         .pword  cmd_done    ;54
-         .pword  cmd_done    ;55
-         .pword  cmd_done    ;56
-         .pword  cmd_done    ;57
-         .pword  cmd_done    ;58
-         .pword  cmd_done    ;59
-         .pword  cmd_done    ;60
-         .pword  cmd_done    ;61
-         .pword  cmd_done    ;62
-         .pword  cmd_done    ;63
-         .pword  cmd_done    ;64
-         .pword  cmd_done    ;65
-         .pword  cmd_done    ;66
-         .pword  cmd_done    ;67
-         .pword  cmd_done    ;68
-         .pword  cmd_done    ;69
-         .pword  cmd_done    ;70
-         .pword  cmd_done    ;71
-         .pword  cmd_done    ;72
-         .pword  cmd_done    ;73
-         .pword  cmd_done    ;74
-         .pword  cmd_done    ;75
-         .pword  cmd_done    ;76
-         .pword  cmd_done    ;77
-         .pword  cmd_done    ;78
-         .pword  cmd_done    ;79
-         .pword  cmd_done    ;80
-         .pword  cmd_done    ;81
-         .pword  cmd_done    ;82
-         .pword  cmd_done    ;83
-         .pword  cmd_done    ;84
-         .pword  cmd_done    ;85
-         .pword  cmd_done    ;86
-         .pword  cmd_done    ;87
-         .pword  cmd_done    ;88
-         .pword  cmd_done    ;89
-         .pword  cmd_done    ;90
-         .pword  cmd_done    ;91
-         .pword  cmd_done    ;92
-         .pword  cmd_done    ;93
-         .pword  cmd_done    ;94
-         .pword  cmd_done    ;95
-         .pword  cmd_done    ;96
-         .pword  cmd_done    ;97
-         .pword  cmd_done    ;98
-         .pword  cmd_done    ;99
-         .pword  cmd_done    ;100
-         .pword  cmd_done    ;101
-         .pword  cmd_done    ;102
-         .pword  cmd_done    ;103
-         .pword  cmd_done    ;104
-         .pword  cmd_done    ;105
-         .pword  cmd_done    ;106
-         .pword  cmd_done    ;107
-         .pword  cmd_done    ;108
-         .pword  cmd_done    ;109
-         .pword  cmd_done    ;110
-         .pword  cmd_done    ;111
-         .pword  cmd_done    ;112
-         .pword  cmd_done    ;113
-         .pword  cmd_done    ;114
-         .pword  cmd_done    ;115
-         .pword  cmd_done    ;116
-         .pword  cmd_done    ;117
-         .pword  cmd_done    ;118
-         .pword  cmd_done    ;119
-         .pword  cmd_done    ;120
-         .pword  cmd_done    ;121
-         .pword  cmd_done    ;122
-         .pword  cmd_done    ;123
-         .pword  cmd_done    ;124
-         .pword  cmd_done    ;125
-         .pword  cmd_done    ;126
-         .pword  cmd_done    ;127
-         .pword  cmd_done    ;128
-         .pword  cmd_done    ;129
-         .pword  cmd_done    ;130
-         .pword  cmd_done    ;131
-         .pword  cmd_done    ;132
-         .pword  cmd_done    ;133
-         .pword  cmd_done    ;134
-         .pword  cmd_done    ;135
-         .pword  cmd_done    ;136
-         .pword  cmd_done    ;137
-         .pword  cmd_done    ;138
-         .pword  cmd_done    ;139
-         .pword  cmd_done    ;140
-         .pword  cmd_done    ;141
-         .pword  cmd_done    ;142
-         .pword  cmd_done    ;143
-         .pword  cmd_done    ;144
-         .pword  cmd_done    ;145
-         .pword  cmd_done    ;146
-         .pword  cmd_done    ;147
-         .pword  cmd_done    ;148
-         .pword  cmd_done    ;149
-         .pword  cmd_done    ;150
-         .pword  cmd_done    ;151
-         .pword  cmd_done    ;152
-         .pword  cmd_done    ;153
-         .pword  cmd_done    ;154
-         .pword  cmd_done    ;155
-         .pword  cmd_done    ;156
-         .pword  cmd_done    ;157
-         .pword  cmd_done    ;158
-         .pword  cmd_done    ;159
-         .pword  cmd_done    ;160
-         .pword  cmd_done    ;161
-         .pword  cmd_done    ;162
-         .pword  cmd_done    ;163
-         .pword  cmd_done    ;164
-         .pword  cmd_done    ;165
-         .pword  cmd_done    ;166
-         .pword  cmd_done    ;167
-         .pword  cmd_done    ;168
-         .pword  cmd_done    ;169
-         .pword  cmd_done    ;170
-         .pword  cmd_done    ;171
-         .pword  cmd_done    ;172
-         .pword  cmd_done    ;173
-         .pword  cmd_done    ;174
-         .pword  cmd_done    ;175
-         .pword  cmd_done    ;176
-         .pword  cmd_done    ;177
-         .pword  cmd_done    ;178
-         .pword  cmd_done    ;179
-         .pword  cmd_done    ;180
-         .pword  cmd_done    ;181
-         .pword  cmd_done    ;182
-         .pword  cmd_done    ;183
-         .pword  cmd_done    ;184
-         .pword  cmd_done    ;185
-         .pword  cmd_done    ;186
-         .pword  cmd_done    ;187
-         .pword  cmd_done    ;188
-         .pword  cmd_done    ;189
-         .pword  cmd_done    ;190
-         .pword  cmd_done    ;191
-         .pword  cmd_done    ;192
-         .pword  cmd_done    ;193
-         .pword  cmd_done    ;194
-         .pword  cmd_done    ;195
-         .pword  cmd_done    ;196
-         .pword  cmd_done    ;197
-         .pword  cmd_done    ;198
-         .pword  cmd_done    ;199
-         .pword  cmd_done    ;200
-         .pword  cmd_done    ;201
-         .pword  cmd_done    ;202
-         .pword  cmd_done    ;203
-         .pword  cmd_done    ;204
-         .pword  cmd_done    ;205
-         .pword  cmd_done    ;206
-         .pword  cmd_done    ;207
-         .pword  cmd_done    ;208
-         .pword  cmd_done    ;209
-         .pword  cmd_done    ;210
-         .pword  cmd_done    ;211
-         .pword  cmd_done    ;212
-         .pword  cmd_done    ;213
-         .pword  cmd_done    ;214
-         .pword  cmd_done    ;215
-         .pword  cmd_done    ;216
-         .pword  cmd_done    ;217
-         .pword  cmd_done    ;218
-         .pword  cmd_done    ;219
-         .pword  cmd_done    ;220
-         .pword  cmd_done    ;221
-         .pword  cmd_done    ;222
-         .pword  cmd_done    ;223
-         .pword  cmd_done    ;224
-         .pword  cmd_done    ;225
-         .pword  cmd_done    ;226
-         .pword  cmd_done    ;227
-         .pword  cmd_done    ;228
-         .pword  cmd_done    ;229
-         .pword  cmd_done    ;230
-         .pword  cmd_done    ;231
-         .pword  cmd_done    ;232
-         .pword  cmd_done    ;233
-         .pword  cmd_done    ;234
-         .pword  cmd_done    ;235
-         .pword  cmd_done    ;236
-         .pword  cmd_done    ;237
-         .pword  cmd_done    ;238
-         .pword  cmd_done    ;239
-         .pword  cmd_done    ;240
-         .pword  cmd_done    ;241
-         .pword  cmd_done    ;242
-         .pword  cmd_done    ;243
-         .pword  cmd_done    ;244
-         .pword  cmd_done    ;245
-         .pword  cmd_done    ;246
-         .pword  cmd_done    ;247
-         .pword  cmd_done    ;248
-         .pword  cmd_done    ;249
-         .pword  cmd_done    ;250
-         .pword  cmd_done    ;251
-         .pword  cmd_done    ;252
-         .pword  cmd_done    ;253
-         .pword  cmd_done    ;254
-         .pword  cm_ustat    ;255 - Embed device 10 USB status
 .end

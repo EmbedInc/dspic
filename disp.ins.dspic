@@ -1351,12 +1351,12 @@ lr_leave:
 
          setflag bpress_right ;3
          jump    evset_leave
-         setflag brel_right   ;4
+         setflag brel_right  ;4
          jump    evset_leave
 
-         setflag bpress_up ;5
+         setflag bpress_up   ;5
          jump    evset_leave
-         setflag brel_up   ;6
+         setflag brel_up     ;6
          jump    evset_leave
 
          setflag bpress_down ;7
@@ -1364,14 +1364,14 @@ lr_leave:
          setflag brel_down   ;8
          jump    evset_leave
 
-         setflag bpress_mid ;9
+         setflag bpress_mid  ;9
          jump    evset_leave
-         setflag brel_mid   ;10
+         setflag brel_mid    ;10
          jump    evset_leave
 
          setflag bpress_onoff ;11
          jump    evset_leave
-         setflag brel_onoff   ;12
+         setflag brel_onoff  ;12
          jump    evset_leave
 
 evset_leave:
