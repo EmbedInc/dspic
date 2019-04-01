@@ -273,11 +273,11 @@ wat_leave:                   ;common exit point
          glbsubd clock_seconds, regf2
 
 sec_retry:
-         mov     seconds+0, w0 ;get seconds low word
          mov     seconds+2, w1 ;get seconds high word
-         mov     seconds+0, w2 ;get the low word again
-         cp      w0, w2
-         bra     nz, sec_retry ;low word changed, try again ?
+         mov     seconds+0, w0 ;get seconds low word
+         mov     seconds+2, w2 ;get the high word again
+         cp      w1, w2
+         bra     nz, sec_retry ;high word changed, try again ?
 
          leaverest
 

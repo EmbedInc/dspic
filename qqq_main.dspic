@@ -41,7 +41,11 @@
 ;
 ;   Local state.
 ;
-
+alloc    slowadr, 4          ;slow task restart address
+alloc    slow0               ;register save area for slow task
+alloc    slow1
+alloc    slow2
+alloc    slow3
 ;
 ;   Local state in near memory.
 ;
@@ -66,6 +70,12 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;   loop.
 ;
          clr     flags       ;init all local flags to off
+
+         mov     #tbloffset(slow_start), w0 ;init slow task restart address
+         mov     w0, slowadr+0
+         mov     #tblpage(slow_start), w0
+         and     #0x7F, w0
+         mov     w0, slowadr+2
 
 ;********************
 ;
@@ -117,8 +127,77 @@ d_tick100ms:
          ;
 
 d_tick1s:
+
+;*******************************************************************************
 ;
-;   Done checking all events.
+;   There were no events to process.  The "slow" task will be run for one
+;   iteration before restarting the main event loop.
 ;
-         jump    loop_main   ;done with this iteration of this task
+;   There are several actions that need to be performed occasionally that are
+;   appropriate to do whenever the event loop has nothing else to do.  Each
+;   individual action is fast enough, but all together might be more than what
+;   is appropriate for a single event loop iteration.
+;
+;   This section implements a task that cycles thru all the "slow" actions that
+;   need to be performed occasionally, releasing the processor between each one.
+;   This effectively means that one slow action will be performed every time we
+;   get here, and that the slow events are cycled thru over multiple times here.
+;
+;   The task restart address is in SLOWADR, which is updated by the task before
+;   it ends each iteration.
+;
+         mov     slowadr+0, w0 ;push the slow task restart address onto the stack
+         push    w0
+         mov     slowadr+2, w0
+         push    w0
+
+         mov     slow0, w0   ;restore slow task register preserved by YIELD
+         mov     slow1, w1
+         mov     slow2, w2
+         mov     slow3, w3
+
+         return              ;jump to the slow task restart point
+
+;*****************************
+;
+;   Local subroutine YIELD
+;
+;   This routine is called from the slow task to release the processor.  This
+;   causes the main event loop to be restarted.  To the slow task, this looks
+;   like a routine that returns some time later, trashing some registers.
+;
+;   WARNING: W4 - W14 are trashed.
+;
+         locsub  yield
+
+         mov     w0, slow0   ;save registers preserved by this routine
+         mov     w1, slow1
+         mov     w2, slow2
+         mov     w3, slow3
+
+         pop     w0          ;get high word of restart address
+         and     #0x7F, w0   ;mask in only the address bits
+         mov     w0, slowadr+2 ;save it
+         pop     w0          ;get low word of restart address
+         mov     w0, slowadr+0 ;save it
+
+         jump    loop_main   ;back to the start of the event loop
+
+;*****************************
+;
+;   Slow task.
+;
+;   This task is run for one time slice each time the main event loop gets to
+;   the bottom, meaning no large events were handled.
+;
+;   Only registers W0-W3 are preserved between time slices (across calls to
+;   YIELD).
+;
+slow_start:                  ;task initial start point
+
+slow_loop:                   ;back here to do everything again
+         gcall   ledstat_update ;update the "Status" LED
+         mcall   yield
+
+         jump    slow_loop   ;back to do it all again
 .end

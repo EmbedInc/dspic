@@ -186,9 +186,10 @@
 ;
 ;   Command XXX
 ;
-/if [Command cm_xxx] then
-         glbent  cm_xxx
-         return
-  /endif
+;   Example command routine.
+;
+;/if [Command cm_xxx] then
+;         return
+;  /endif
 
 .end
