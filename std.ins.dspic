@@ -1885,6 +1885,31 @@ _\name:
   /endif
 /endfunc
 
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine EXPORT_RSP
+//
+//   Export all the RSP_ constants from the preprocessor to the assembler
+//   environment.  All preprocessor integer constants with names starting with
+//   "rsp_" will have assembler constants defined of the same name and value.
+//
+/subroutine export_rsp
+  /loop symbols sym const    //loop over all constants
+    /var local sy string
+    /if [<> [sym sym dtype] "INTEGER"] then //not integer ?
+      /repeat
+      /endif
+    /if [<> [substr 1 4 sym] "rsp_"] then //doesn't start with "rsp_" ?
+      /repeat
+      /endif
+    /set sy [sym sym name]   //get bare symbol name
+    /if [<= [slen sy] 4] then //too short to be "rsp_x" ?
+      /repeat
+      /endif
+.equiv   [chars sy], [v [chars sym]]
+    /endloop
+  /endsub
+
 ;*******************************************************************************
 ;
 ;   Support for the global 1-bit flags defined with the preprocessor /FLAG

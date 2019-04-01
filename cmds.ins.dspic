@@ -119,11 +119,10 @@ allocg   usb_fwseq           ;USB converter firmware sequence number
 ;
 ;   Command NAMESET n string
 ;
-;   Sets the non-volatile name of this unit.  This command is required by the
-;   Embed device 10 spec.
+;   Embed device 10 command for setting the user-settable name of this device.
 ;
-;   This device does not support a user-settable name string.  This command is
-;   accepted, but ignored.
+;   This version assumes a fixed name, so ignores this command other than to
+;   consume the correct number of parameter bytes.
 ;
 /if [Command cm_nameset] then
          gcall   [chars cmd]_get8 ;get the number of name characters following
@@ -135,13 +134,19 @@ allocg   usb_fwseq           ;USB converter firmware sequence number
 ;
 ;   Command NAMEGET
 ;
-;   Sends the NAME response, which reports the non-volatile name of this device.
-;   This command is required by the Embed device 10 spec.
+;   Embed device 10 command to get the user-settable name of this device.
 ;
-;   This device has a fixed name set at build time.  The name is set by the
-;   DEVNAME preprocessor string constant, set in the project include file.
+;   This version assumes a fixed name set by the DEVNAME preprocessor string
+;   constant.
 ;
 /if [Command cm_nameget] then
+  /if [not [exist "devname:vcon"]] then
+    /show "  The version of the NAMEGET command used in CMDS.INS.DSPIC requires"
+    /show "  the DEVNAME constant to be set to the fixed name of this unit."
+         .error  "devname"
+    /stop
+    /endif
+
          gcall   [chars cmd]_lock_out
          mov     #rsp_name, w0
          gcall   [chars cmd]_put8 ;send NAME response opcode

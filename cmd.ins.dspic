@@ -533,7 +533,7 @@ cm_nop:                      ;NOP command dispatch point
 /if [< lastcmd 255] then     ;only a partial dispatch table is in use ?
          mov     #[v lastcmd], w1 ;get largest valid opcode
          cp      w0, w1
-         bra     geu, [chars cmd]_done ;opcode is out of range ?
+         bra     gtu, [chars cmd]_done ;opcode is out of range ?
   /endif
 ;
 ;   If the DEBUG_CMDDEL switch is enabled, wait a while for any parameters for

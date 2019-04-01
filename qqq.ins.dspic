@@ -48,17 +48,7 @@
 /const   rsp_fwinfo integer = 2 ;firmware type, version, and sequence
 /const   rsp_name integer = 3 ;reports unit name string
 
-/loop symbols symq const     ;define response opcodes as ASM30 constants too
-  /var local sym string
-  /set sym [sym symq name]
-  /if [< [slen sym] 5] then  ;too short to be RSP_xxx symbol ?
-    /repeat
-    /endif
-  /if [<> [substr 1 4 sym] "rsp_"] then ;doesn't start with "rsp_" ?
-    /repeat
-    /endif
-.equiv   [chars sym], [v [chars sym]]
-  /endloop
+/call export_rsp             ;define response opcodes as ASM30 constants too
 ;
 ;   Software error IDs.
 ;
