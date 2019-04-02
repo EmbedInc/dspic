@@ -41,6 +41,16 @@
 .equiv   ipr_uart_recv, 2    ;UART receive interrupt priority
 .equiv   ipr_uart_xmit, 1    ;UART transmit interrupt priority
 ;
+;   Define command stream opcodes.
+;
+/const   cmd_nop = 0         ;NOP
+/const   cmd_ping = 1        ;send PONG response
+/const   cmd_fwinfo = 2      ;send FWINFO response, gives FW type, ver and seq
+/const   cmd_nameset = 3     ;set user-settable device name, ignored
+/const   cmd_nameget = 4     ;get device name, fixed from DEVNAME constant
+
+/const   cmd_ustat = 255     ;Embed 10 USTAT command
+;
 ;   Response stream opcodes.
 ;
 /const   rsp_nop integer = 0 ;NOP
