@@ -372,7 +372,7 @@
 /const   autoflush_sec real = 1.0 ;seconds after last write to automatically flush
 /const   name    = ""        ;unique name to add to exported symbols
 /const   nvol_shortrw bool = False ;short adr routines only when mem is small enough
-/const   flag_nvwrite = ""   ;no flag to set on writing new value
+/const   flag_nvwrite = "nvwrcks" ;flag to set on writing new value
 //
 //   Delete all but one of the following sections.  Each section is a template
 //   for using a different include file.  The settings unique to each include

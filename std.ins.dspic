@@ -1894,7 +1894,7 @@ _\name:
 //   "rsp_" will have assembler constants defined of the same name and value.
 //
 /subroutine export_rsp
-  /loop symbols sym const    //loop over all constants
+  /loop symbols sym const //loop over all constants
     /var local sy string
     /if [<> [sym sym dtype] "INTEGER"] then //not integer ?
       /repeat
@@ -1902,7 +1902,7 @@ _\name:
     /if [<> [substr 1 4 sym] "rsp_"] then //doesn't start with "rsp_" ?
       /repeat
       /endif
-    /set sy [sym sym name]   //get bare symbol name
+    /set sy [sym sym name] //get bare symbol name
     /if [<= [slen sy] 4] then //too short to be "rsp_x" ?
       /repeat
       /endif

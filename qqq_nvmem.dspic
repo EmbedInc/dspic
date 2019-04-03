@@ -42,6 +42,61 @@
 ;       this address plus 1 to the end of the memory are reserved for use by the
 ;       system.
 ;
+;   The following commands are implemented, depending on being enabled by their
+;   CMD_xxx constants:
+;
+;     NVMEM_APPSIZE
+;
+;       Sends the NVMEM_APPSIZE response, which indicates the size of the
+;       non-volatile memory available for use by the application.  Reserved
+;       areas, like the checksum, should not be used by the application.
+;
+;     NVMEM_STAT
+;
+;       Sends the NVMEM_STAT response, which indicates the non-volatile memory
+;       checksum and checksum status.
+;
+;     NVMEM_CHECK
+;
+;       Performs checksum check.  The NVMEM_STAT response is sent with the
+;       result.
+;
+;     NVMEM_CKSET
+;
+;       Set the checksum according to the current memory contents.
+;
+;     NVMEM_USED
+;
+;       Sends the NVMEM_USED response, which indicates the number of bytes that
+;       currently appear to be used by the application.  Bytes are considered
+;       used from address 0 up to and including the last byte that is not set to
+;       the erased value.
+;
+;   The following responses are emitted by the commands above:
+;
+;     NVMEM_APPSIZE size
+;
+;       SIZE is the 32 bit number of non-volatile memory bytes available for use
+;       by the application.  This is a contiguous block of bytes starting at
+;       address 0.
+;
+;     NVMEM_STAT cksum stat
+;
+;       CKSUM is the 32 bit checksum currently stored in the memory.  STAT is
+;       one of these values:
+;
+;         0  -  Checksum status unknown.
+;
+;         1  -  Checksum tested and failed.
+;
+;         2  -  Checksum tested and passed.
+;
+;     NVMEM_USED n
+;
+;       N is the 32 bit number of bytes "used" by the application.  The bytes
+;       from 0 up to and including the last byte that is not set to the erased
+;       value are considered used.
+;
 /include "qq2.ins.dspic"
 /include "(cog)src/dspic/nvmem.ins.dspic"
 .end

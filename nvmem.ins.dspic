@@ -50,7 +50,7 @@
 ;
          glbsubd nvmem_last
 
-         gcall   nvol_size   ;get first address past end of memory
+         gcall   nvol_size   ;get first address past end into W1:W0
          sub     #[+ crcsize 1], w0 ;skip over the reserved bytes at end
          subb    #0, w1
 
@@ -154,7 +154,7 @@ ckp_byte:                    ;back here each new byte to add to the checksum
 ;   Subroutine NVMEM_CHECK
 ;
 ;   Check the non-volatile memory checksum.  Flags NVVALID and NVERASED are set
-;   according to the contents of the memory.
+;   according to the contents of the memory.  Flag NVWRCKS is reset.
 ;
          glbsub  nvmem_check, regf0 | regf1 | regf2 | regf3 | regf4 | regf5 | regf6
 
@@ -178,7 +178,7 @@ ckp_byte:                    ;back here each new byte to add to the checksum
 ;     W6  -  Scratch.
 ;
          ;
-         ;   Set the NVERASED according to the contents of the memory.
+         ;   Set the NVERASED flag according to the contents of the memory.
          ;
          com.b   w0, w0      ;set Z if all bytes were FFh
          skip_nz
@@ -195,6 +195,11 @@ ckp_byte:                    ;back here each new byte to add to the checksum
          setflag nvvalid
          skip_z
          clrflag nvvalid
+         ;
+         ;   Reset the NVWRCKS flag since the checksum status is now up to date
+         ;   with the current contents of the memory.
+         ;
+         clrflag nvwrcks     ;no write since last checksum check
 
          leaverest
 
@@ -257,3 +262,142 @@ nvs_byte:                    ;back here to write each new byte
          gcall   nvol_flush  ;force any cached data to be physically written
 
          leaverest
+
+;*******************************************************************************
+;
+;   Command NVMEM_APPSIZE
+;
+;   Send the NVMEM_APPSIZE response, which indicates the size of the
+;   non-volatile memory available to the application.  The checksum at the end
+;   of the memory is reserved by the system, and is not available for the
+;   application to store arbitrary data in.
+;
+/if [Command cm_nvmem_appsize] then
+         gcall   cmd_lock_out ;acquire lock on the response stream
+         mov     #rsp_nvmem_appsize, w0
+         gcall   cmd_put8    ;send NVMEM_APPSIZE response opcode
+
+         gcall   nvol_size   ;get size of whole non-volatile memory into W1:W0
+         sub     #[v crcsize], w0 ;subtract the reserved area size at the end
+         subb    #0, w1
+         gjump   cmd_put32   ;send app-usable size, end the command
+  /endif
+
+;*******************************************************************************
+;
+;   Command NVMEM_STAT
+;
+;   Send the NVMEM_STAT response, which provides the non-volatile memory
+;   checksum and checksum status.
+;
+;   This response also needs to be sent at other times.  This code is therefore
+;   implemented as the full subroutine SEND_NVMEM_STAT.  The command routine
+;   entry point CM_NVMEM_STAT is a alias for the subroutine entry point
+;   SEND_CKSUM.
+;
+/if [Command cm_nvmem_stat] then
+         glbsub  send_nvmem_stat, regf0 | regf1 | regf2 | regf3
+
+         gcall   nvol_size   ;get the non-volatile memory size into W2:W1
+         mov     w1, w2
+         mov     w0, w1
+         sub     #[v crcsize], w1 ;make start address of the checksum
+         subb    #0, w2
+
+         gcall   cmd_lock_out ;acquire lock on response stream
+         mov     #rsp_nvmem_stat, w0
+         gcall   cmd_put8    ;send NVMEM_STAT response opcode
+
+         mov     #[v crcsize], w3 ;init number of checksum bytes left to send
+sndck_byte:                  ;back here to send each new checksum byte
+         gcall   nvol_read   ;get this byte into W0, advance adr in W2:W1
+         gcall   cmd_put8    ;send this checksum byte
+         sub     #1, w3      ;count one less byte left to send
+         bra     nz, sndck_byte ;back to send next checksum byte
+
+         mov     #0, w0      ;init to checksum status unknown
+         skip_nflag nvwrcks  ;no write since last checksum test ?
+         jump    sndck_stat  ;there was a write, status in W0 all set
+         mov     #1, w0      ;get status for checksum test failed
+         skip_nflag nvvalid  ;really did fail ?
+         mov     #2, w0      ;no, get status for checksum test passed
+sndck_stat:                  ;status byte in W0 is all set
+         gcall   cmd_put8    ;send STATUS byte
+
+         gcall   cmd_unlock_out ;release lock on response stream
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Command NVMEM_CHECK
+;
+;   Perform checksum test.  The NVMEM_STAT response will be sent with the
+;   result.
+;
+/if [Command cm_nvmem_check] then
+         mcall   nvmem_check ;do the checksum test
+         jump    send_nvmem_stat ;send the NVMEM_STAT response, end the command
+  /endif
+
+;*******************************************************************************
+;
+;   Command NVMEM_CKSET
+;
+;   Set the non-volatile memory checksum according to its current content.  The
+;   NVMEM_STAT response will be sent as confirmation.
+;
+/if [Command cm_nvmem_ckset] then
+         mcall   nvmem_cksum_set ;compute and set the checksum
+         mcall   nvmem_check ;check the result
+         jump    send_nvmem_stat ;send the NVMEM_STAT response, end the command
+  /endif
+
+;*******************************************************************************
+;
+;   Command NVMEM_USED
+;
+;   Get the amount of non-volatile memory that appears to be in use by the
+;   application.  Contiguous bytes set to the erased value at the end of the
+;   application-accessible memory are considered unused.  The NVMEM_USED
+;   response is sent, which indicates the number of "used" bytes.
+;
+/if [Command cm_nvmem_used] then
+         gcall   nvmem_last  ;get last app-usable nv mem address into W1:W0
+         mov     w1, w2      ;move it to W2:W1 for use by the NVOL_xxx routines
+         mov     w0, w1
+;
+;   Scan backwards from the last usable address (in W2:W1) looking for the first
+;   byte that is not in the erased state.
+;
+nvu_byte:                    ;back here to check each new byte
+         gcall   nvol_read   ;get the byte at address W2:W1 into W0
+         com.b   w0, w0      ;set Z if the erased value
+         bra     nz, nvu_send ;found the last-used byte, W2:W1 is number of used ?
+         sub     w1, #1, w0  ;set Z according to the address just checked
+         subb    w2, #0, w0
+         bra     z, nvu_nfound ;no used byte found at all ?
+         ;
+         ;   Advance to the next address.  Since we are scanning backwards thru
+         ;   memory, and the NVOL_READ routine increments the address after the
+         ;   read, the address in W2:W1 must be decremented by 2.
+         ;
+         sub     #2, w1      ;make address of next byte to check
+         subb    #0, w2
+         jump    nvu_byte    ;back to check the byte at this new address
+;
+;   All bytes were read, and all of them were in the erased state.
+;
+nvu_nfound:
+         load32  w1, 0       ;the number of used bytes is 0
+;
+;   The value to send with the NVMEM_USED response is in W2:W1.
+;
+nvu_send:
+         gcall   cmd_lock_out ;acquire lock on the response stream
+         mov     #rsp_nvmem_used, w0
+         gcall   cmd_put8    ;send NVMEM_USED response opcode
+         mov     w1, w0      ;move the 32 bit value to send into W1:W0
+         mov     w2, w1
+         gjump   cmd_put32   ;send it, end the command
+  /endif
