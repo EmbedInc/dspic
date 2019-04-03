@@ -34,9 +34,9 @@
 ;
 /if using_xc16
   /then
-         glbsubd nvol_size
+         glbsubd nvol[chars uname]_size
   /else
-         glbsub  nvol_size
+         glbsub  nvol[chars uname]_size
   /endif
 
          mov     #[and nvbytes 16#FFFF], w0
@@ -53,12 +53,12 @@
 ;
 /if using_xc16
   /then
-         glbsubc nvol_read
+         glbsubc nvol[chars uname]_read
 
          mov     w0, w3      ;save pointer to the 32 bit address
          mov     [w3++], w1  ;get the address into W2:W1
          mov     [w3--], w2
-         gcall   nvol_read   ;get byte into W0, increment adr in W2:W1
+         mcall   nvol[chars uname]_read ;get byte into W0, increment adr in W2:W1
          mov     w1, [w3++]  ;update caller's address
          mov     w2, [w3]
 
@@ -74,16 +74,149 @@
 ;
 /if using_xc16
   /then
-         glbsubc nvol_write
+         glbsubc nvol[chars uname]_write
 
          mov     w0, w3      ;save pointer to the 32 bit address
          mov     w1, w0      ;get the data byte into W0
 
          mov     [w3++], w1  ;get the address into W2:W1
          mov     [w3--], w2
-         gcall   nvol_write  ;write the byte in W0 to adr in W2:W1, inc adr
+         mcall   nvol[chars uname]_write ;write the byte in W0 to adr in W2:W1, inc adr
          mov     w1, [w3++]  ;update caller's address
          mov     w2, [w3]
 
          leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Command NVREAD adr n
+;
+;   Read the N+1 bytes of non-volatile memory starting at the 32 bit address
+;   ADR.
+;
+/if [Command cm_nvread] then
+         gcall   cmd_get32   ;get the non-volatile address into W2:W1
+         mov     w1, w2
+         mov     w0, w1
+         gcall   cmd_get8    ;get the number of bytes to read into W3
+         add     w0, #1, w3
+;
+;   Send one NVOL response for the whole buffer of data.
+;
+;     W0  -  Data byte or word.
+;
+;     W2:W1  -  Non-volatile memory address.
+;
+;     W3  -  Number of bytes left to do.
+;
+         gcall   cmd_lock_out ;acquire lock on response stream
+         mov     #rsp_nvol, w0 ;send NVOL response opcode
+         gcall   cmd_put8
+         mov     w2, w0      ;send high word of address
+         gcall   cmd_put16
+         mov     w1, w0      ;send low word of address
+         gcall   cmd_put16
+         sub     w3, #1, w0  ;send number of data bytes - 1
+         gcall   cmd_put8
+nvrb_byte:                   ;back here to do each new byte
+         mcall   nvol[chars uname]_read ;read byte into W0, advance address in W2:W1
+         gcall   cmd_put8    ;send the data byte
+         sub     #1, w3      ;count one less byte left to do
+         bra     nz, nvrb_byte ;back to do next byte
+
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command NVWRITE adr n dat ... dat
+;
+;   Write a buffer of bytes to the non-volatile memory.  ADR is the 32 bit
+;   address of the first byte to write.  N is the number of bytes - 1.  DAT are
+;   the data bytes.  There must be exactly N+1 DAT bytes.
+;
+/if [Command cm_nvwrite] then
+         gcall   cmd_get32   ;get the non-volatile address into W2:W1
+         mov     w1, w2
+         mov     w0, w1
+         gcall   cmd_get8    ;get the number of data bytes into W3
+         add     w0, #1, w3
+
+         mov     w3, w0      ;pass number of bytes to read
+         gcall   cmd_putbufn ;read all the data bytes into the scratch buffer
+;
+;   Copy the bytes in the commands scratch buffer to the non-volatile memory.
+;
+;   Register usage in this section:
+;
+;     W0  -  Data byte.
+;
+;     W2:W1  -  Non-volatile memory byte address.
+;
+;     W3  -  Number of bytes left to write.
+;
+;     W4  -  Pointer to the next byte value in the commands scratch buffer.
+;
+         mov     #cmdbuf, w4 ;init pointer to data for next byte to write
+nvwbuf_byte:                 ;back here to write each byte to non-volatile memory
+         mov.b   [w4++], w0  ;fetch the data value to write, bump source pointer
+         mcall   nvol[chars uname]_write ;write byte to nvol mem, bump address
+         sub     #1, w3      ;count one less byte left to write
+         bra     nz, nvwbuf_byte ;back to do the next byte
+
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command NVERASE type version sequence
+;
+;   Erase the non-volatile memory to all 1 bits.  TYPE, VERSION, and SEQUENCE
+;   must match the particulars of this firmware.
+;
+/if [Command cm_nverase] then
+         gcall   cmd_get8    ;get TYPE
+         xor     #fwtype, w0
+         mov     w0, w1
+         gcall   cmd_get8    ;get VERSION
+         xor     #fwver, w0
+         ior     w1, w0, w1
+         gcall   cmd_get8    ;get SEQUENCE
+         xor     #fwseq, w0
+         ior     w1, w0, w1
+         skip_z              ;all parameters are correct
+         return              ;no, abort this command
+
+         jump    nvol[chars uname]_erase ;erase the non-volatile memory, return from command
+  /endif
+
+;*******************************************************************************
+;
+;   Command NVFLUSH
+;
+;   Force any non-volatile memory cached data to be physically written to the
+;   memory.  The write will have completed before the next command is executed.
+;
+/if [Command cm_nvflush] then
+         jump    nvol[chars uname]_flush ;do the flush, return to caller
+  /endif
+
+;*******************************************************************************
+;
+;   Command NVSIZE
+;
+;   Sends the NVSIZE response, which indicates the size of the non-volatile
+;   memory.
+;
+/if [Command cm_nvsize] then
+         gcall   cmd_lock_out ;acquire exclusive lock on response stream
+         mov     #rsp_nvsize, w0
+         gcall   cmd_put8    ;send NVSIZE response opcode
+
+         mov     #[and nvbytes 16#FFFF], w0 ;get NV size into W1:W0
+         mov     #[shiftr nvbytes 16], w1
+         gcall   cmd_put32   ;send it
+
+         return
   /endif

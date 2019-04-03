@@ -415,11 +415,13 @@ wc_byte:                     ;back here to do each new byte
 ;   Subroutine NVOL_FLUSH
 ;
 ;   Write any cached and changed non-volatile data to the physical non-volatile
-;   memory.  Writes performed with NVOL_WRITE may be cached transparently to
-;   the caller.  The new data will be returned by NVOL_READ whether it is cached
-;   or not.  However, the new data will not survive a power down unless it is
-;   physically written to the non-volatile memory.  The only way to guarantee
-;   that is to call this routine.
+;   memory.
+;
+;   Writes performed with NVOL_WRITE may be cached transparently to the caller.
+;   The new data will be returned by NVOL_READ whether it is cached or not.
+;   However, the new data will not survive a power down unless it is physically
+;   written to the non-volatile memory.  The only way to guarantee that is to
+;   call this routine.
 ;
 ;   Any physical writes to non-volatile memory are guaranteed to have completed
 ;   when this routine returns.
