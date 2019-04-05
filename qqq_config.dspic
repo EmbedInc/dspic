@@ -33,23 +33,151 @@
 ;   the range 0 to 254.  The special value of 255 is reserved for internal use
 ;   by this configuration code.
 ;
+;
 ;   Exported routines
 ;
 ;     CONFIG_INIT
 ;
 ;       Must be first call into this module.
 ;
-;     CONFIG_GET
+;     CONFIG_LOCK
 ;
-;       Get the configuration for the module ID in the low 8 bits of W0.  The
-;       number of configuration bytes is returned in W0, and W2:W1 is set to the
-;       non-volatile memory address of the first data byte.  When there is no
-;       configuration data for a module (W0 is returned 0), the module must
-;       disable itself.  The Z flag is set according to whether there is
-;       configuration data (Z set according to value of W0).
+;       Acquire the exclusive lock on the remaining configuration routines.
+;       Only one subsystem at a time can use these routines.  This routine waits
+;       as necessary for the lock to become available before acquiring the lock
+;       and returning.  The lock is held by the caller when this routine
+;       returns.
 ;
-;     Additional C functions are exported.  See the "Configuration" section in
-;     qqq.h for details.
+;       All the routines listed from here to CONFIG_UNLOCK must only be called
+;       with the lock held.
+;
+;     CONFIG_SETUP
+;
+;       Set up for getting configuration data for a particular subsystem.  The
+;       subsystem ID is passed in W0.  W0 is returned the number of
+;       configuration bytes for that subsystem.  The config data reading state
+;       is initialized to the first byte.
+;
+;     CONFIG_I8U
+;     CONFIG_I8S
+;     CONFIG_I16U
+;     CONFIG_I16S
+;     CONFIG_I24U
+;     CONFIG_I24S
+;     CONFIG_I32U
+;     CONFIG_I32S
+;     CONFIG_FP32
+;
+;       Routines that return the next consecutive configuration data byte(s) in
+;       various formats.  The IxxU and IxxS routine return integer unsigned and
+;       signed values, respectively.  The xx number indicates the number of
+;       configuration data bits.  FPxx routines return floating point values.
+;
+;       Data of 16 bits of less is returned in W0.  Data of 17 to 32 bits is
+;       returned in W1:W0.
+;
+;       Sequential configuration bytes are read.  When all the configuration
+;       bytes for the current subsystem have been exhausted, bytes with value 0
+;       are silently substituted.  It is the subsystem's responsibility to only
+;       read or interpret actual configuration bytes.
+;
+;     CONFIG_SKIP
+;
+;       Skip the number of configuration bytes indicated in W0.
+;
+;     CONFIG_INDEX
+;
+;       Returns W0 the 0-N index of the next configuration byte that will be
+;       read for the current subsystem.
+;
+;     CONFIG_INDEX_SET
+;
+;       Set the current configuration bytes read index to the value in W0.
+;
+;     CONFIG_LEFT
+;
+;       Sets W0 to the number of configuration bytes left to read, starting at
+;       the current read index.  This value is always 0 when there are no more
+;       configuration bytes left to read, regardless of how many bytes have been
+;       read past the end.
+;
+;     CONFIG_OVR0
+;
+;       Override the configuration data for subsystem 0.  The configuration data
+;       for subsystem 0 will be the single byte in the low bits of W0,
+;       regardless of what is stored in non-volatile memory.
+;
+;     --  End of routines that require the lock to be held when called --
+;
+;     CONFIG_UNLOCK
+;
+;       Releases the exclusive lock on these routines.  This undoes what
+;       CONFIG_LOCK does.  The lock can only be released by the same task that
+;       called CONFIG_LOCK.  Calls by other tasks are ignored.  Attempts to
+;       release the lock when it is not locked are silently ignored.
+;
+;     CONFIG_OVR0_WINDOW
+;
+;       Allow a short time-window during which the CFGOVR0 command will be
+;       accepted.  Specfically, the steps performed are:
+;
+;         1 - The CFGOVR0 flag is set.  This allows the CFGOVR0 command to act.
+;
+;         2 - The CFGOVR0 repsonse is sent.  This indicates to the host that
+;             CFGOVR0 commands will be accepted for a short window.
+;
+;         3 - Waits 100 ms or until the first command from the host is received,
+;             whichever occurs first.
+;
+;         4 - Makes sure the CFGOVR0 flag is cleared.  This ends the time window
+;             during which CFGOVR0 commands are accepted.
+;
+;       The config lock MUST NOT be held when this routine is called.
+;
+;
+;   Commands implemented in this module if the corresponding CMD_xxx constants
+;   are defined:
+;
+;     CFGOVR0 dat
+;
+;       Explicitly provide a single byte of configuration data for subsystem 0
+;       (the SYSTEM module).  The SYSTEM module will be configured as if it had
+;       the DAT byte as its only configuration data.  The non-volatile
+;       configuration data for the SYSTEM module is irrelevant.
+;
+;       This command is only acted upon when the CFGOVR0 flag is set.  The
+;       command always clears this flag when done.
+;
+;       The purpose of this mechanism is to allow the host to force the system
+;       to start in a "safe" mode.  The special DAT byte value of 0 is
+;       guaranteed to start the system without any optional application modules
+;       being configured, regardless of the state of non-volatile memory.  This
+;       is itended to be the minimum state that provides configuration port
+;       access to the low level hardware capabilities.  It is permissible for
+;       the system to enter "test" mode, which may provide direct access to I/O
+;       lines and the like to the configuration port.  All other values of DAT
+;       are specific to the system.
+;
+;     CFG id
+;
+;       Send the CFG response for subsystem ID.  The CFG response provides the
+;       configuration data for a subsystem.
+;
+;
+;   Responses that can be emitted by this firmware:
+;
+;     CFGOVR0
+;
+;       Notifies the host of the opportunity to send a CFGOVR0 command.  For the
+;       CFGOVR0 command to be acted upon, it must be received within 100 ms of
+;       this CFGOVR0 response.
+;
+;     CFG: id n dat ... dat
+;
+;       Sent in response to the CFG command.  Gives the configuration data for
+;       the indicated ID.  N is the 16 bit number of data bytes.  Exactly N data
+;       bytes follow N.
+;
 ;
 ;   Pre-processor configuration parameters:
 ;
@@ -57,6 +185,7 @@
 ;
 ;       The non-volatile memory address of where the configuration data starts.
 ;       The default is 0.
+;
 ;
 /include "qq2.ins.dspic"
 

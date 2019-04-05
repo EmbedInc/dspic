@@ -272,7 +272,7 @@ alloc    ntasks              ;number of tasks currently defined
 ;   use, then the value is incremented by one and checked again.
 ;
 ;   LAST_P is pointing to the descriptor of the new task.  Therefore, valid
-;   existing entries are from the start of the table up to but no including the
+;   existing entries are from the start of the table up to but not including the
 ;   one pointed to by LAST_P.
 ;
          jump    checkid     ;go check the current NEXTID value

@@ -2524,18 +2524,84 @@ _\name:                      ;define the C30 entry point label
          noskid
   .endm
 
-;********************
-;
-;   Macro GLBLAB name
-;
-;   Define a global label.  This label is not intended to be a code entry
-;   point, so NOPs for debugging are not automatically added after the label
-;   as they are by the GLBENT macro.
-;
-.macro glblab name
-\name:
-.global  \name
-  .endm
+//////////////////////////////
+//
+//   [label] Macro GLBLAB [name]
+//
+//   Define a global label.  No extra instructions for debugger skidding will be
+//   generated.
+//
+//   The label can either be defined with LABEL or NAME.  Exactly one of these
+//   must exist.
+//
+/macro glblab
+  /var local lab string
+  /var local labex bool
+
+  /if [exist -1 arg] then //LABEL was provided ?
+    /set lab [qstr [arg -1]] //save the label name
+    /set labex true //indicate LABEL was found
+    /endif
+  /if [exist 1 arg]
+    /then //NAME was provided
+      /if labex then
+        /show "  GLBLAB macro invoked with both leading label and trailing name."
+         .error  "GLBLAB"
+        /stop
+        /endif
+      /set lab [qstr [arg 1]] //save label name
+    /else //NAME was not provided
+      /if [not labex] then
+        /show "  GLBLAB macro invoked without any label."
+         .error  "GLBLAB"
+        /stop
+        /endif
+    /endif
+[chars lab]:
+.global  [chars lab]
+  /endmac
+
+//////////////////////////////
+//
+//   [label] Macro GLBLABD [name]
+//
+//   Define a global label.  No extra instructions for debugger skidding will be
+//   generated.  If using C, then the C-visible version of the label will also
+//   be defined.
+//
+//   The label can either be defined with LABEL or NAME.  Exactly one of these
+//   must exist.
+//
+/macro glblabd
+  /var local lab string
+  /var local labex bool
+
+  /if [exist -1 arg] then //LABEL was provided ?
+    /set lab [qstr [arg -1]] //save the label name
+    /set labex true //indicate LABEL was found
+    /endif
+  /if [exist 1 arg]
+    /then //NAME was provided
+      /if labex then
+        /show "  GLBLABD macro invoked with both leading label and trailing name."
+         .error  "GLBLABD"
+        /stop
+        /endif
+      /set lab [qstr [arg 1]] //save label name
+    /else //NAME was not provided
+      /if [not labex] then
+        /show "  GLBLABD macro invoked without any label."
+         .error  "GLBLABD"
+        /stop
+        /endif
+    /endif
+[chars lab]:
+.global  [chars lab]
+  /if using_c then
+[chars "_" lab]:
+.global  [chars "_" lab]
+    /endif
+  /endmac
 
 ;********************
 ;

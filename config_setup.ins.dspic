@@ -1,0 +1,5 @@
+;   Define global symbols required by the CONFIG library code.  This file is
+;   intended to be included from the main include file of a project using the
+;   CONFIG library module.
+;
+/flag    cfgovr0             ;CFGOVR0 command will be acted on

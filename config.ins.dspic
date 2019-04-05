@@ -19,9 +19,9 @@
 ;
 ;   Configuration Data Format
 ;
-;     The static configuration is stored in non-volatile memory starting at
-;     the fixed address indicated by the CONFIG_START constant.  The
-;     configuration data is a sequence of bytes:
+;     The static configuration is stored in non-volatile memory starting at the
+;     fixed address indicated by the CONFIG_START constant.  The configuration
+;     data is a sequence of bytes:
 ;
 ;       ID
 ;
@@ -99,9 +99,11 @@
 ;
 ;   Configuration constants.
 ;
-/if [not [exist "config_start"]] then
+/if [not [exist "config_start:vcon"]] then
   /const config_start integer = 0
   /endif
+
+/const   ovrwint real = 0.100 ;CFGOVR0 time window, seconds
 ;
 ;   Derived constants.
 ;
@@ -122,18 +124,31 @@
 ;
 .section .ram_config, bss    ;variables in normal RAM
 
-allocg   syscfg              ;single config byte for SYSTEM when SYSCFG flag set
 
 ;*******************
 ;
 ;   Local state.
 ;
-
-
+alloc    ntotal              ;total number of config bytes for this subsystem
+alloc    nleft               ;number of config bytes left to read at curr ADR
+alloc    adr0,   4           ;nvol address of first config data byte
+alloc    adr,    4           ;nvol address to read next config data byte from
+alloc    index               ;user-visible 0-N index of next config byte
+alloc    datovrr             ;single config byte when override on
 ;
 ;   Local state in near memory.
 ;
 .section .near_config, bss, near ;varibles in near RAM
+
+alloc    lock                ;ID of task holding lock when FLG_LOCK set
+
+alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_lock, 0         ;routines are locked, LOCK is ID of locking task
+.equiv   flg_ovr0, 1         ;DATOVRR overrides the config data for subsystem 0
+.equiv   flg_ovrr, 2         ;data is being overridden
 
 
 .section .code_config, code
@@ -143,29 +158,106 @@ allocg   syscfg              ;single config byte for SYSTEM when SYSCFG flag set
 ;
 ;   Initialize the hardware and software state managed by this module.
 ;
-         glbsub  config_init
+         glbsub  config_init, regf0
+
+         clr     flags       ;init all flags to off
 
          leaverest
 
 ;*******************************************************************************
 ;
-;   Subroutine CONFIG_GET
+;   Subroutine CONFIG_LOCK
 ;
-;   Get the configuration data for a particular subsystem ID.  The ID is passed
-;   in the low 8 bits of W0.
+;   Acquire the lock to the current task.
+;
+         glbsubd config_lock, regf0
+
+         mov     currtask, w0 ;get the ID of this task into W0
+
+lck_retry:                   ;back here to check the lock again
+         btss    flags, #flg_lock ;already locked ?
+         jump    lck_free    ;no
+         cp      lock        ;compare locking task to curr task
+         bra     z, lck_leave ;this task is already holding the lock ?
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    lck_retry   ;back to check on the lock again
+;
+;   Grab the lock.  W0 contains the ID of the current task.
+;
+lck_free:                    ;the lock is currently free
+         bset    flags, #flg_lock ;indicate now locked
+         mov     w0, lock    ;save the ID of the task holding the lock
+
+         bclr    flags, #flg_ovrr ;init to override off
+         mov     #0, w0
+         mov     w0, ntotal  ;init to no config bytes
+         mov     w0, nleft
+         mov     w0, adr0+0  ;init addresses
+         mov     w0, adr0+2
+         mov     w0, adr+0
+         mov     w0, adr+2
+         mov     w0, index   ;init index of next config byte
+
+lck_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_UNLOCK
+;
+;   Release the lock, if held by the current task.  Only the task holding the
+;   lock can release it.
+;
+         glbsubd config_unlock, regf0
+
+         mov     currtask, w0 ;get the ID of the current task into W0
+         cp      lock        ;compare locking task to current task
+         bra     nz, ulk_leave ;not the same tasks ?
+
+         bclr    flags, #flg_lock ;release the lock
+
+ulk_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_SETUP
+;
+;   Look up the configuration data for a particular subsystem ID.  The ID is
+;   passed in the low 8 bits of W0.
 ;
 ;   W0 is returned the number of configuration bytes for the indicated ID.  Note
-;   that this can be 0, which indicates the subsystem is not used.
+;   that this can be 0, which indicates the subsystem is not used.  The Z flag
+;   is set if there are no config data bytes, and cleared if there is at least
+;   one.
 ;
-;   When W0 is non-zero, W2:W1 is returned the non-volatile memory address of
-;   the first configuration byte for the ID.  The remaining configuration bytes
-;   are stored sequentially.  W2:W1 is undefined when W0 is returned 0.
-;
-         glbsub  config_get, regf3 | regf4 | regf5 | regf6
+         glbsubd config_setup, regf1 | regf2 | regf3 | regf4 | regf5 | regf6
 
          ze      w0, w3      ;save target ID in W3
+;
+;   Handle special case of subsystem 0, and the data for subsystem 0 being
+;   overridden.  The Z bit is set according to the subsystem ID.
+;
+         bclr    flags, #flg_ovrr ;init to not in active override
 
-         load32  w1, [v config_start] ;init non-volatile memory address
+         bra     nz, cfgg_n0 ;not subsystem 0 ?
+         btss    flags, #flg_ovr0 ;override subsytem 0 ?
+         jump    cfgg_n0     ;no
+         ;
+         ;   Subsystem 0 config is being requested, and its data is being
+         ;   overridden.
+         ;
+         bset    flags, #flg_ovrr ;indicate data being overridden
+         mov     #1, w0      ;number of config data bytes
+         load32  w1, 0       ;set "address" of first byte
+         jump    cfgg_ret    ;init state and return to caller
+
+cfgg_n0:                     ;done checking for subsystem 0 override
+;
+;   Process the config opcodes.
+;
+         load32  w1, [v config_start] ;init non-volatile memory address in W2:W1
+
 cfgg_id:                     ;back here each new ID in the list
          gcall   nvol_read   ;get the ID for this record into W0
          cp      w0, #0xFF   ;compare to special end of list ID
@@ -204,7 +296,7 @@ cfgg_opc0:
          and     w0, #0x1F, w0 ;make number of following data bytes in W0
          add     #1, w0
          cp      w4, w3      ;check the ID of this record
-         bra     z, cfgg_leave ;ID matches, return with config data ?
+         bra     z, cfgg_ret ;ID matches, return with config data ?
          ;
          ;   Not this ID, skip over data bytes.
          ;
@@ -232,7 +324,7 @@ cfgg_opc1:
 cfgg_retlen:
          gcall   nvol_readw  ;get number of config data bytes into W0
          swap    w0
-         jump    cfgg_leave  ;return with config data
+         jump    cfgg_ret    ;return with config data
 ;
 ;   Opcode 2.  Indirect data, 29 bit address.  3 address bytes follow.
 ;
@@ -302,54 +394,386 @@ cfgg_opc4:
 ;
 cfgg_nfnd:
          mov     #0, w0      ;indicate no data
+;
+;   Return to the caller.  Register contents:
+;
+;     W0  -  Number of config data bytes.
+;
+;     W2:W0  -  Non-volatile memory address of the first config data byte
+;
+;     W3  -
+;
+;     W4  -
+;
+;     W5  -
+;
+;     W6  -
+;
+cfgg_ret:                    ;return to caller, W0 and W2:W1 all set
+         mov     w0, ntotal  ;save total number of config data bytes
+         mov     w0, nleft   ;init number of bytes left to read
 
-cfgg_leave:                  ;return to caller, W0 and W2:W1 all set
+         mov     w1, adr0+0  ;save config data bytes starting address
+         mov     w2, adr0+2
+
+         mov     w1, adr+0   ;init address to read the next config byte from
+         mov     w2, adr+2
+
+         mov     #0, w1
+         mov     w1, index   ;init 0-N index of next config byte
+
          cp0     w0          ;Z iff no config data
          leaverest
 
 ;*******************************************************************************
 ;
-;   C function CONFIG_GET (ID, &ADR)
+;   Subroutine CONFIG_I8U
 ;
-;   C version of CONFIG_GET.  See the CONFIG_GET description for details.
+;   Low level routine to get the next configuration data byte.  The byte is
+;   treated as unsigned and expanded into all of W0.  If the configuration data
+;   bytes have been exhausted, then a byte value of 0 is silently substituted.
 ;
-;   The function returns the number of configuration bytes for the subsystem
-;   with the indicated ID.  The non-volatile memory start address of the config
-;   bytes for this subsystem is returned in ADR.  No change is made to ADR when
-;   there are no config bytes for the subsystem (the function returns 0).
-;
-;   Registers W1-W7 may be trashed
-;
-/if using_xc16 then
-         glbsubc config_get
+         glbsubd config_i8u, regf1 | regf2
 
-         mov     w1, w3      ;save pointer to ADR
-         gcall   config_get  ;number of bytes into W0, address into W2:W1
-         cp0     w0
-         bra     z, ccfget_leave ;no configuration bytes, nothing more do to ?
+         mov     #0, w0      ;init to returning the default value
+         mov     nleft, w1   ;get number of bytes left at curr position
+         cp0     w1
+         bra     z, gb_leave ;past end of config data bytes, return the 0 ?
+         sub     #1, w1      ;update number of config bytes left after this one
+         mov     w1, nleft
+;
+;   Check for special case of the data being overridden.
+;
+         btss    flags, #flg_ovrr ;override is in effect ?
+         jump    gb_novrr    ;no
 
-         mov     w1, [w3++]  ;write nvol address low word
-         mov     w2, [w3]    ;write nvol address high word
+         mov     datovrr, w0 ;return the single override byte
+         jump    gb_next     ;update state to next byte
 
-ccfget_leave:
+gb_novrr:                    ;skip to here on data not being overridden
+;
+;   Fetch and return the next byte from non-volatile memory.
+;
+         mov     adr+0, w1   ;get the non-volatile memory address into W2:W1
+         mov     adr+2, w2
+         gcall   nvol_read   ;read the byte into W0, advance the address
+         mov     w1, adr+0   ;update the address for next time
+         mov     w2, adr+2
+;
+;   Advance the remaining state to the next byte.  NLEFT and ADR have already
+;   been updated.
+;
+gb_next:
+         mov     index, w1   ;update the user-visible byte index
+         add     #1, w1
+         mov     w1, index
+
+gb_leave:                    ;the return value is in W0
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutines
+;
+;     CONFIG_IxxU
+;     CONFIG_IxxS
+;     CONFIG_FPxx
+;
+;   Various routines to get the next config data byte(s) in various formats.
+;
+;   The CONFIG_I.. routines return integers.  The trailing U or S in the name
+;   denotes signed or unsigned.  The CONFIG_FP.. routines return floating point
+;   values.  In all cases, XX in the name is the number of configuration bits
+;   that will be fetched.
+;
+;   All these routines are layered on CONFIG_I8U (above), which fetches the next
+;   byte and handles all the special cases.
+;
+         glbsubd config_i8s
+         mcall   config_i8u  ;get the byte
+         se      w0, w0      ;sign extend it
+         leaverest
+
+         glblabd config_i16s
+         glbsubd config_i16u, regf1
+         mcall   config_i8u  ;get the high byte
+         sl      w0, #8, w1  ;move it into position and save it in W1
+         gcall   config_i8u  ;get the low byte
+         ior     w0, w1, w0  ;merge the two bytes into the 16 bit return value
+         leaverest
+
+         glbsubd config_i24u
+         mcall   config_i8u  ;get the high byte
+         mov     w0, w1
+         mcall   config_i16u ;get the low word
+         leaverest
+
+         glbsubd config_i24s
+         mcall   config_i8u  ;get the high byte
+         se      w0, w1
+         mcall   config_i16u ;get the low word
+         leaverest
+
+         glblabd config_i32s
+         glblabd config_fp32
+         glbsubd config_i32u
+         mcall   config_i16u ;get the high word
+         mov     w0, w1
+         mcall   config_i16u ;get the low word
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_SKIP
+;
+;   Skip over the next W0 number of configuration bytes.  This is the same as
+;   reading and discarding them.
+;
+         glbsubd config_skip, regf0 | regf1
+
+         mov     nleft, w1   ;get the number of bytes left
+         cp      w0, w1      ;compare skip amount to max possible
+         bra     geu, skp_end ;skipping to or past the end ?
+;
+;   There will be bytes left after the skip.  Register contents:
+;
+;     W0  -  Number of bytes to skip forwards.
+;
+;     W1  -  Number of bytes currently left.
+;
+         sub     w1, w0, w1  ;update number of bytes that will be left
+         mov     w1, nleft
+
+         mov     adr+0, w1   ;update the address
+         add     w1, w0, w1
+         mov     w1, adr+0
+         mov     adr+2, w1
+         addc    #0, w1
+         mov     w1, adr+2
+
+         mov     index, w1   ;update the 0-N byte index
+         add     w1, w0, w1
+         mov     w1, index
+         jump    skp_leave
+;
+;   All the remaining bytes are being skipped.  Set the state to immediately
+;   after the last byte.
+;
+skp_end:
+         mov     ntotal, w0  ;get the total bytes available
+         mov     w0, index   ;set the index to after the last byte
+
+         mov     adr0+0, w1  ;set curr address to after the last byte
+         add     w1, w0, w1
+         mov     w1, adr+0
+         mov     adr0+2, w1
+         addc    #0, w1
+         mov     w1, adr+2
+
+         mov     #0, w0      ;indicate no bytes left
+         mov     w0, nleft
+
+skp_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_INDEX
+;
+;   Get the user-visible 0-N of the next config byte.  The index is returned in
+;   W0.
+;
+         glbsubd config_index
+
+         mov     index, w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_INDEX_SET
+;
+;   Set the index of the next configuration byte to read.  The new index is
+;   passed in W0.
+;
+         glbsubd config_index_set, regf0 | regf1
+
+         mov     index, w1   ;get the current index
+         cp      w0, w1      ;compare new to current index
+         bra     z, sind_leave ;no change, nothing to do ?
+         bra     ltu, sind_back ;going backwards ?
+;
+;   The index is being moved forward.  Register contents:
+;
+;     W0  -  New index.
+;
+;     W1  -  Current index.
+;
+         sub     w0, w1, w0  ;make number of bytes to skip forward
+         mcall   config_skip ;do the skip
+         jump    sind_leave
+;
+;   The index is being moved backward.  Register contents:
+;
+;     W0  -  New index.
+;
+;     W1  -  Current index.
+;
+sind_back:
+         mov     w0, index   ;update the index
+
+         mov     ntotal, w1  ;update the number of bytes left to read
+         sub     w1, w0, w1
+         mov     w1, nleft
+
+         mov     adr0+0, w1  ;set the new address from the new index
+         add     w1, w0, w1
+         mov     w1, adr+0
+         mov     adr0+2, w1
+         addc    #0, w1
+         mov     w1, adr+2
+
+sind_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_LEFT
+;
+;   Get the number of bytes left to read.  The value is returned in W0.
+;
+         glbsubd config_left
+
+         mov     nleft, w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_OVR0
+;
+;   Cause the configuration data for subsystem 0 to be the single byte in the
+;   low bits of W0, regardless of non-volatile memory contents.
+;
+         glbsub  config_ovr0, regf0
+
+         ze      w0, w0      ;make just the 0-255 byte value in W0
+         mov     w0, datovrr ;save it as the override value
+         bset    flags, #flg_ovr0 ;indicate to override subsystem 0 data
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_OVR0_WINDOW
+;
+;   Allow the host a short time to override the subsystem 0 configuration data.
+;
+/if [exist "rsp_cfgovr0:vcon"] then //the CFGOVR0 response is defined ?
+         glbsub  config_ovr0_window, regf0 | regf1
+
+         gcall   cmd_lock_out ;acquire the lock on the response stream to the host
+         mov     #rsp_cfgovr0, w0 ;get the CFGOVR0 response opcode
+         setflag cfgovr0     ;enable the CFGOVR0 command
+         gcall   cmd_put8    ;send the CFGOVR0 response
+         gcall   cmd_unlock_out ;release lock on response stream to host
+;
+;   Wait for OVRWINT time or the CFGOVR0 flag getting cleared, whichever comes
+;   first.  The CFGOVR0 flag is automatically cleared after every command from
+;   the host is processed.
+;
+         mov     tick1ms, w1 ;init last tick updated to
+         mov     #[rnd [* ovrwint 1000]], w0 ;init milliseconds left to wait
+
+wind_loop:                   ;back here to wait for next tick
+         gcall   task_yield_save ;give other tasks a chance to run
+         skip_flag cfgovr0   ;CFGOVR0 command still enabled ?
+         jump    wind_leave  ;no, all done
+
+wind_tick:                   ;back here after processing a tick
+         push    w2          ;temp save W2 on stack
+         mov     tick1ms, w2 ;get current tick counter
+         cp      w1, w2      ;compare to last value acted upon
+         pop     w2          ;restore W2
+         bra     z, wind_loop ;not a new tick this time ?
+         ;
+         ;   New 1 ms tick detected.
+         ;
+         add     #1, w1      ;update last tick value acted upon
+         sub     #1, w0      ;count one less tick left to wait
+         bra     nz, wind_tick ;wait time not elapsed yet ?
+;
+;   The wait time has elapsed.
+;
+         clrflag cfgovr0     ;the CFGOVR0 command will no longer be acted upon
+
+wind_leave:
          leaverest
   /endif
 
 ;*******************************************************************************
 ;
-;   Command SYSCFG cfg
+;   Command CFGOVR0 dat
 ;
-;   Overrides the configuration data for subsystem 0.  CFG will be the single
+;   Overrides the configuration data for subsystem 0.  DAT will be the single
 ;   configuration byte for subsystem 0 after this command.
 ;
-;   This command is only acted upon when the SYSCFG_CMD flag is set.
+;   This command is only acted upon when the CFGOVR0 flag is set.
 ;
-         glbent  cm_syscfg
-
-         gcall   cmd_get8    ;get the config byte into W0
-         skip_flag syscfg_cmd ;a SYSCFG command is valid now ?
+/if [Command cm_cfgovr0] then
+         gcall   cmd_get8    ;get the data byte into W0
+         skip_flag cfgovr0   ;this command is valid now ?
          return              ;no, nothing more to do
-
-         mov     w0, syscfg  ;save the single subsystem 0 config byte
-         setflag syscfg      ;tell subsystem 0 to use the special byte
+;
+;   Set the override.
+;
+         mcall   config_lock ;acquire exclusive lock on the CONFIG state
+         mcall   config_ovr0 ;set the override
+         mcall   config_unlock ;release the lock on the CONFIG state
          return
+  /endif
+
+;*******************************************************************************
+;
+;   Command CFG id
+;
+;   Send response CFG: id n dat ... dat
+;
+;   Gets the configuration data for one subsystem.
+;
+/if [Command cm_cfg] then
+;
+;   Register usage:
+;
+;     W0  -  Data value, scratch.
+;
+;     W1  -  Subsystem ID.
+;
+;     W2  -  Number of config data bytes left to read.
+;
+         gcall   cmd_get8    ;get the subsystem ID
+         mov     w0, w1      ;save it in W1
+
+         mcall   config_lock ;acquire lock on the CONFIG state
+         mcall   config_setup ;set up for reading the config for this subsystem
+         mov     w0, w2      ;save the number of config bytes in W2
+
+         gcall   cmd_lock_out ;acquire exclusive lock on response stream
+         mov     #rsp_cfg, w0
+         gcall   cmd_put8    ;send CFG response opcode
+         mov     w1, w0
+         gcall   cmd_put8    ;send config ID
+         mov     w2, w0
+         gcall   cmd_put16   ;send number of config bytes
+
+cmcfg_byte:                  ;back here to send each new config byte
+         cp0     w2
+         bra     z, cmcfg_done ;done sending all the data bytes ?
+         mcall   config_i8u  ;get this config byte into W0
+         gcall   cmd_put8    ;send it
+         sub     #1, w2      ;count one less config byte left to do
+         jump    cmcfg_byte  ;back to do next config byte
+
+cmcfg_done:                  ;done sending all the data bytes
+         jump    config_unlock ;release the CONFIG lock, end the command
+  /endif
