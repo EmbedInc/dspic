@@ -30,6 +30,11 @@
 ;       Starts command processing.  A separate task is created that reads and
 ;       processes the command stream in a infinite loop.
 ;
+;     CMD_GET_CHECK
+;
+;       Checks for command stream byte immediately available.  Z cleared if a
+;       byte is available, set if not.
+;
 ;     CMD_GET8  -  Get 8 bit unsigned value into W0.
 ;     CMD_GET8S  -  Get 8 bit signed value into W0.
 ;     CMD_GET16  -  Get 16 bit value into W0.
@@ -160,6 +165,25 @@
 ;
 ;       The default is 16.
 ;
+;     DRAINWAIT, real
+;
+;       Seconds no byte is received to consider the command stream drained.
+;       When the command stream processing task is started, it gets and discards
+;       any existing recieved bytes.  It keeps getting and discarding received
+;       bytes until no byte is received for DRAINWAIT seconds.  When DRAINWAIT
+;       is not defined, then the logic to drain the command stream on startup is
+;       removed.
+;
+;     CMDDONE_SET, string
+;
+;       Name of the system flag to set whenever the processing of a command is
+;       completed.
+;
+;     CMDDONE_CLR, string
+;
+;       Name of the system flag to clear whenever the processing of a command is
+;       completed.
+;
 ;     DEBUG_CMDDEL, bool
 ;
 ;       When TRUE, causes the dispatch routine to wait a little while after
@@ -233,6 +257,19 @@
 /const   uart_name = name    ;unique name to add to UART_xxx symbols
 /const   bufsize integer = 0 ;size of commands scratch buffer, bytes
 /const   sendnnop integer = 16 ;number of NOP responses to send at startup
+/const   drainwait real = 0.010 ;seconds no received byte for CMD stream drained
+/const   cmddone_set = ""    ;flag to set when done processing a command
+/const   cmddone_clr = ""    ;flag to clear when done processing a command
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro GETCHECK
+//
+//   Check for whether a command stream byte is immediately available.  The Z
+//   flag is cleared if a byte is available, and set otherwise.
+//
+//macro getcheck
+//  endmac
 
 ////////////////////////////////////////////////////////////////////////////////
 //

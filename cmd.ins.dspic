@@ -49,6 +49,12 @@
 /if [not [exist "debug_cmddel"]] then
   /const debug_cmddel bool = false
   /endif
+/if [not [exist "cmddone_set"]] then
+  /const cmddone_set string = ""
+  /endif
+/if [not [exist "cmddone_clr"]] then
+  /const cmddone_clr string = ""
+  /endif
 
 //   Create the string constants used to customize symbol names.  These
 //   constants are:
@@ -73,7 +79,7 @@
     /const suff string = [str "_" name]
   /endif
 /const   cmd     string = [str "cmd" suff]
-
+/const   cmdpref string = [str cmd "_"]
 
 /if [= uart_name ""]
   /then                      ;no name given to UART_xxx symbols
@@ -106,7 +112,7 @@
 //
 /var new lastcmd integer
 /var new ncommands integer
-/set ii [slen cmd] //length of fixed starting part of CMD_ names
+/set ii [slen cmdpref] //length of fixed starting part of CMD_ names
 
 /loop symbols sym vcon
   /var local sy string //bare variable or constant name
@@ -117,9 +123,10 @@
   /if [<= [slen sy] ii] then
     /repeat
     /endif
-  /if [<> [substr 1 ii sy] cmd] then
+  /if [<> [substr 1 ii sy] cmdpref] then
     /repeat
     /endif
+
   /call parse_cmd [chars sy] [chars suff]
   /set lastcmd [max lastcmd opc] //update last-implemented opcode
   /const cmd[v opc]entry string = entpnt //make constant for this opcode
@@ -140,7 +147,6 @@
 allocg   ncmdbuf[chars suff] ;number of bytes in commands scratch buffer
 allocg   cmdbuf[chars suff], [v bufsize] ;commands scratch buffer
   /endif
-
 
 ;*******************
 ;
@@ -193,6 +199,23 @@ alloc    stack_cmd, [v stacksz_cmd], 2 ;command processing task stack
          leaverest
   /else                      ;no macro
          gjump   [chars uart]_unlock ;release the lock, return to caller
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine CMD_GET_CHECK
+;
+;   Set the Z flag iff no command stream byte is immediately available.
+;
+         glbsub  [chars cmd]_get_check
+
+/if [exist "getcheck:macro"]
+  /then                      ;use custom macro
+         getcheck
+
+         leaverest
+  /else                      ;no macro
+         gjump   [chars uart]_get_ready
   /endif
 
 ;*******************************************************************************
@@ -491,6 +514,42 @@ cm_fwinfo:
 ;
 cmd_task_start:              ;task starts here
 ;
+;   Drain and discard any received command stream bytes.  The command stream is
+;   considered drained if no new byte is received for DRAINWAIT seconds.
+;
+/if [exist "drainwait:vcon"] then
+         mov     tick1ms, w1 ;init clock tick up to date with
+
+cmd_drain_reset:             ;back here to restart the drain time
+         mov     #[rnd [* drainwait 1000]], w2 ;init or reset ms left to wait
+
+cmd_drain_check:             ;back here each new drain iteration
+         gcall   task_yield_save ;give all other tasks a chance to run
+         ;
+         ;   Check for byte available.  Reset the drain wait time if so.
+         ;
+         mcall   cmd_get_check ;set Z iff no byte available
+         bra     z, cmd_drain_nb ;no byte is immediately available
+         mcall   cmd_get8    ;read and discard the byte
+         jump    cmd_drain_reset ;reset the wait time until drained
+cmd_drain_nb:                ;no byte is currently available
+         ;
+         ;   Check for new clock tick.
+         ;
+cmd_drain_clock:
+         mov     tick1ms, w0 ;get current clock value
+         cp      w1, w0      ;compare to last value up to date with
+         bra     z, cmd_drain_check ;no new clock tick ?
+         ;
+         ;   A new clock tick has occurred.
+         ;
+         add     #1, w1      ;update clock value now current with
+         sub     #1, w2      ;count one less tick left to wait
+         bra     nz, cmd_drain_clock ;wait time not expired yet ?
+
+cmd_drain_done:
+  /endif
+;
 ;   Send a bunch of NOP responses so that the host will be in sync with our
 ;   response stream.  The number of NOPs to send is set by the constant SENDNNOP
 ;   at the top of this module.  This section is omitted when SENDNNOP is 0.
@@ -505,8 +564,17 @@ loop_nop:
          bra     nz, loop_nop ;back to send the next NOP
          gcall   [chars cmd]_unlock_out ;release lock on the response stream
   /endif
-
+;
+;   Send the FWINFO response.
+;
+/if [exist "rsp_fwinfo:vcon"] then
          mcall   send_fwinfo ;send initial response giving our firmware info
+  /endif
+;
+;   Go process commands.  Execution jumps to CMD_FIRST to allow for processing
+;   that is done after each command, but not before the first command.
+;
+         jump    cmd_first
 ;
 ;   Return point after done executing a command.  Command routines can jump here
 ;   from nested subroutines or with data on the stack.  The stack will be reset
@@ -519,6 +587,14 @@ cm_nop:                      ;NOP command dispatch point
          mov     #stack_cmd, w15 ;reset the stack to empty
          mcall   [chars cmd]_unlock_out ;make sure this task is not holding output lock
 
+/if [<> cmddone_set ""] then
+         setflag [chars cmddone_set] ;indicate that a command was just completed
+  /endif
+/if [<> cmddone_clr ""] then
+         clrflag [chars cmddone_clr] ;indicate that a command was just completed
+  /endif
+
+cmd_first:                   ;skip to here to get the first command
 /if [> bufsize 0] then
          mov     #0, w0
          mov     w0, ncmdbuf[chars suff] ;reset the commands scratch buffer to empty

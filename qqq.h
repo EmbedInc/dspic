@@ -106,10 +106,38 @@ void task_yield (void);                //let other tasks run for a while
 //
 //   Subsystem configuration.
 //
+void config_lock (void);               //get exclusive access to CONFIG routines
+
+//  The CONFIG lock must be held when calling any CONFIG_xxx routine listed
+//  below here.
+//
 machine_intu_t                         //number of config bytes
-config_get (                           //get config info for a subsystem
-  machine_intu_t,                      //subsystem ID, use CFG_xxx_K constants
-  int32u_t *);                         //nvol address of first config byte
+config_setup (                         //set up for reading config of a subsystem
+  machine_intu_t);                     //subsystem ID
+
+machine_intu_t config_i8u (void);      //get next config bytes in various formats
+machine_ints_t config_i8s (void);
+machine_intu_t config_i16u (void);
+machine_ints_t config_i16s (void);
+int32u_t config_i24u (void);
+int32s_t config_i24s (void);
+int32u_t config_i32u (void);
+int32s_t config_i32s (void);
+float config_fp32 (void);
+
+void config_skip (                     //skip over config bytes
+  machine_intu_t);                     //number of bytes to skip
+
+machine_intu_t                         //0-N byte index into config bytes
+  config_index (void);                 //get index of next config byte
+
+void config_index_set (                //set index of next config byte to read
+  machine_intu_t);                     //new index
+
+machine_intu_t                         //remaining config bytes from current index
+  config_left (void);                  //get number of config bytes left to read
+
+void config_unlock (void);             //release exclusive lock on CONFIG routines
 
 //******************************************************************************
 //
