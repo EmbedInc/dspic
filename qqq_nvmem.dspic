@@ -42,6 +42,12 @@
 ;       this address plus 1 to the end of the memory are reserved for use by the
 ;       system.
 ;
+;     NVMEM_ERASE
+;
+;       Erases the non-volatile memory unless it is already known to be erased,
+;       according to the NVERASED flag.  Other state kept by the NVMEM module is
+;       updated accordingly.
+;
 ;   The following commands are implemented, depending on being enabled by their
 ;   CMD_xxx constants:
 ;

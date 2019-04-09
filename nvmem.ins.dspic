@@ -156,7 +156,7 @@ ckp_byte:                    ;back here each new byte to add to the checksum
 ;   Check the non-volatile memory checksum.  Flags NVVALID and NVERASED are set
 ;   according to the contents of the memory.  Flag NVWRCKS is reset.
 ;
-         glbsub  nvmem_check, regf0 | regf1 | regf2 | regf3 | regf4 | regf5 | regf6
+         glbsub  nvmem_check, regf0 | regf1 | regf3 | regf4 | regf5 | regf6
 
          gcall   nvol_size   ;get the total number of nvol bytes into W6:W5
          mov     w0, w5
@@ -167,15 +167,13 @@ ckp_byte:                    ;back here each new byte to add to the checksum
 ;
 ;     W0  -  AND of all nvol bytes.
 ;
-;     W1  -  Scratch.
-;
-;     W2  -  Scratch.
+;     W1  -  Scratch
 ;
 ;     W4:W3  -  Computed checksum on entire nvol memory.
 ;
-;     W5  -  Scratch.
+;     W5  -  Scratch
 ;
-;     W6  -  Scratch.
+;     W6  -  Scratch
 ;
          ;
          ;   Set the NVERASED flag according to the contents of the memory.
@@ -260,6 +258,26 @@ nvs_byte:                    ;back here to write each new byte
          bra     nz, nvs_byte ;back to do next byte
 
          gcall   nvol_flush  ;force any cached data to be physically written
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine NVMEM_ERASE
+;
+;   Erase the non-volatile memory unless it is already known to be erased.
+;   Other state is updated accordingly.
+;
+         glbsub  nvmem_erase
+
+         skip_nflag nverased ;not already erased
+         jump    er_is       ;is already erased, skip this section
+
+         gcall   nvol_erase  ;erase the memory
+         setflag nverased    ;indicate the memory is erased
+         clrflag nvvalid     ;fully erased memory has invalid checksum
+         clrflag nvwrcks     ;nothing written since checksum validity determined
+er_is:                       ;skip to here if memory already erased
 
          leaverest
 

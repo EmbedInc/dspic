@@ -713,6 +713,112 @@ wind_leave:
 
 ;*******************************************************************************
 ;
+;   Subroutine CONFIG_STAT
+;
+;   Indicate a event or status of a subsystem during configuration.  The
+;   subsystem ID is in the low byte of W0, and the status code in the low byte
+;   of W1.  Status codes with the high bit set (128 - 255) cause the CFGFAIL
+;   flag to be set.  This indicates to the system after configuration is
+;   complete that one or more subsystems could not be configured as required,
+;   and that normal operation is not possible.
+;
+config_stat glbentd
+
+         btsc    w0, #7      ;status code does not indicate failure ?
+         setflag cfgfail     ;does indicate failure, set config failure flag
+;
+;   Fall thru to SEND_CFGSTAT, which will return to the caller
+;
+;*******************
+;
+;   Local subroutine SEND_CFGSTAT
+;
+;   Send a CFGSTAT response.  The SUBSYS parameter is in the low byte of W0, and
+;   the STATUS parameter in the low byte of W1.
+;
+         locsub  send_cfgstat
+
+         gcall   cmd_lock_out ;acquire lock on response stream to host
+
+         push    w0          ;temp save subsystem ID
+         mov     #rsp_cfgstat, w0
+         gcall   cmd_put8    ;send CFGSTAT response opcode
+         pop     w0
+
+         gcall   cmd_put8    ;send subsystem ID
+
+         push    w0          ;temp save W0
+         mov     w1, w0
+         gcall   cmd_put8    ;send the status code
+         pop     w0          ;restore W0
+
+         gcall   cmd_unlock_out ;release lock on response stream
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_STAT_SYS0
+;
+;   Send a CFGSTAT response for the current status of the main system (subsystem
+;   0).
+;
+/if [Command cm_cfgstat] then ;create CM_CFGSTAT entry point if command defined
+  /endif
+         glbsub  config_stat_sys0, regf0 | regf1
+
+         mov     #7, w1      ;get code for config still in progress
+         skip_flag cfgdone   ;configuration completed ?
+         jump    s0_stat     ;no
+
+         mov     #255, w1    ;get code for failure
+         skip_nflag cfgfail
+         jump    s0_stat
+
+         mov     #254, w1    ;get code for in test mode
+         skip_flag cfgrun
+         jump    s0_stat
+
+         mov     #0, w1      ;get code for normal operation
+s0_stat:                     ;status code is in W1
+
+         mov     #0, w0      ;subsystem ID for main system
+         mcall   send_cfgstat ;send the CFGSTAT response
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_SYS
+;
+;   Perform the basic main system (subsystem 0) configuration that is common to
+;   MDEVs.  For systems that have more complicated main system configurations,
+;   this routine is intended to be called from the main system configuration
+;   routine.
+;
+         glbsub  config_sys, regf0
+
+         mcall   config_ovr0_window ;give host a chance to override main sys config
+
+         mcall   config_lock ;acquire lock on config mechanism
+         clrflag cfgdone     ;init to configuration not completed yet
+         clrflag cfgfail     ;init to no failure encountered during configuration
+         clrflag cfgrun      ;init to system configured to test mode, not normal op
+
+         mov     #0, w0
+         mcall   config_setup ;set up for reading main system config
+         bra     z, cfgsys_done ;no configuration bytes ?
+
+         mcall   config_i8u  ;get the first config byte
+         cp0     w0
+         bra     z, cfgsys_done ;configure in test mode, no other subsystems ?
+
+         setflag cfgrun      ;indicate to run in normal operating mode
+
+cfgsys_done:
+         mcall   config_unlock ;release lock on config mechanism
+         leaverest
+
+;*******************************************************************************
+;
 ;   Command CFGOVR0 dat
 ;
 ;   Overrides the configuration data for subsystem 0.  DAT will be the single

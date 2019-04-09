@@ -30,8 +30,8 @@
 ;   A unique ID is assigned to each configurable module.  The configuration
 ;   routine for a module inquires the configuration data for its ID, then
 ;   configures its module accordingly.  Configuration IDs are 8-bit values in
-;   the range 0 to 254.  The special value of 255 is reserved for internal use
-;   by this configuration code.
+;   the range 0 to 254.  ID 0 is reserved for the main system.  The special
+;   value of 255 is reserved for internal use by this configuration code.
 ;
 ;
 ;   Exported routines
@@ -56,7 +56,8 @@
 ;       Set up for getting configuration data for a particular subsystem.  The
 ;       subsystem ID is passed in W0.  W0 is returned the number of
 ;       configuration bytes for that subsystem.  The config data reading state
-;       is initialized to the first byte.
+;       is initialized to the first byte.  The Z flag is set if there are no
+;       config data bytes, and cleared if there is at least one.
 ;
 ;     CONFIG_I8U
 ;     CONFIG_I8S
@@ -73,7 +74,7 @@
 ;       signed values, respectively.  The xx number indicates the number of
 ;       configuration data bits.  FPxx routines return floating point values.
 ;
-;       Data of 16 bits of less is returned in W0.  Data of 17 to 32 bits is
+;       Data of 16 bits or less is returned in W0.  Data of 17 to 32 bits is
 ;       returned in W1:W0.
 ;
 ;       Sequential configuration bytes are read.  When all the configuration
@@ -107,7 +108,7 @@
 ;       for subsystem 0 will be the single byte in the low bits of W0,
 ;       regardless of what is stored in non-volatile memory.
 ;
-;     --  End of routines that require the lock to be held when called --
+;     -----  End of routines that require the lock to be held when called -----
 ;
 ;     CONFIG_UNLOCK
 ;
@@ -123,16 +124,32 @@
 ;
 ;         1 - The CFGOVR0 flag is set.  This allows the CFGOVR0 command to act.
 ;
-;         2 - The CFGOVR0 repsonse is sent.  This indicates to the host that
-;             CFGOVR0 commands will be accepted for a short window.
+;         2 - The CFGOVR0 repsonse is sent.  This indicates to the host that a
+;             CFGOVR0 command will be accepted for a short window.
 ;
-;         3 - Waits 100 ms or until the first command from the host is received,
-;             whichever occurs first.
+;         3 - Waits 100 ms or until the first command from the host is
+;             processed, whichever occurs first.
 ;
 ;         4 - Makes sure the CFGOVR0 flag is cleared.  This ends the time window
 ;             during which CFGOVR0 commands are accepted.
 ;
-;       The config lock MUST NOT be held when this routine is called.
+;     CONFIG_STAT
+;
+;       Indicate a event or status of a subsystem during configuration.  The
+;       subsystem ID is in the low byte of W0, and the status code in the low
+;       byte of W1.  Status codes with the high bit set (128 - 255) cause the
+;       CFGFAIL flag to be set.  This indicates to the system after
+;       configuration is complete that one or more subsystems could not be
+;       configured as required, and that normal operation is not possible.
+;
+;     CONFIG_STAT_SYS0
+;
+;       Send a CFGSTAT response for the current status of the main system
+;       (subsystem  0).
+;
+;     CONFIG_SYS
+;
+;       Perform basic MDEV main system (subsystem ID 0) configuration.
 ;
 ;
 ;   Commands implemented in this module if the corresponding CMD_xxx constants
@@ -163,6 +180,11 @@
 ;       Send the CFG response for subsystem ID.  The CFG response provides the
 ;       configuration data for a subsystem.
 ;
+;     CFGSTAT
+;
+;       Get the status resulting from system configuration.  A CFGSTAT response
+;       is sent for the status of subsystem 0.
+;
 ;
 ;   Responses that can be emitted by this firmware:
 ;
@@ -177,6 +199,45 @@
 ;       Sent in response to the CFG command.  Gives the configuration data for
 ;       the indicated ID.  N is the 16 bit number of data bytes.  Exactly N data
 ;       bytes follow N.
+;
+;    CFGSTAT: 10 subsys status
+;
+;      Sent asynchronously to indicate various events or status during system
+;      configuration.
+;
+;      SUBSYS is the ID of the subsystem sending the response.
+;
+;      STATUS indicates a particular status or event related to the subsystem.
+;      STATUS values with the low bit 0 (0 to 127) indicate normal conditions
+;      and events, and do not indicate any failure or error.  STATUS values with
+;      the high bit set (128 to 255) indicate some kind of failure during
+;      initialization.
+;
+;      Subsystems are not required to send a STAT response when a failure is
+;      detected, although that is usually helpful.  Failures are flagged
+;      internally, and the system does not enter normal operation if any failure
+;      was flagged during configuration.
+;
+;      Values of STATUS for the main system (ID 0) are:
+;
+;        0  -  System startup completed, beginning normal operation.
+;
+;        7  -  Startup not completed yet.  This is only sent in response to a
+;          CFGSTAT command while configuration is still in progress.
+;
+;        254  -  Startup completed, in test mode.
+;
+;        255  -  Failure, not entering normal operating mode.
+;
+;      The first 8 (0 - 7) and the last 8 (248 - 255) main system status codes
+;      are reserved to indicate the final status of the system after
+;      configuration has completed.  The remaining codes (8 - 247) are specific
+;      to individual implementations.  After the asynchronous STAT response for
+;      SUBSYS 0 with one of the reserved codes is sent, no more STAT responses
+;      will be asynchronously sent.
+;
+;      The CFGSTAT command causes the status for the main system (SUBSYS 0) to
+;      be sent.
 ;
 ;
 ;   Pre-processor configuration parameters:

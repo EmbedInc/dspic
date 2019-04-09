@@ -2501,19 +2501,6 @@ _\name:                      ;define the C30 entry point label
 
 ;********************
 ;
-;   Macro GLBENT name
-;
-;   Define a generic global entry point.  NAME is the name of the entry
-;   point.
-;
-.macro glbent name
-\name:                       ;define the entry point label
-.global  \name               ;declare the label global
-         noskid
-  .endm
-
-;********************
-;
 ;   Macro LOCENT name
 ;
 ;   Define a generic local entry point.  NAME is the name of the entry
@@ -2563,6 +2550,41 @@ _\name:                      ;define the C30 entry point label
 
 //////////////////////////////
 //
+//   [label] Macro GLBENT [name]
+//
+//   Like GLBLAB, except that extra NOPs for debugger skidding is added after
+//   the entry point if debugging with a ICD is enabled.
+//
+/macro glbent
+  /var local lab string
+  /var local labex bool
+
+  /if [exist -1 arg] then //LABEL was provided ?
+    /set lab [qstr [arg -1]] //save the label name
+    /set labex true //indicate LABEL was found
+    /endif
+  /if [exist 1 arg]
+    /then //NAME was provided
+      /if labex then
+        /show "  GLBLAB macro invoked with both leading label and trailing name."
+         .error  "GLBLAB"
+        /stop
+        /endif
+      /set lab [qstr [arg 1]] //save label name
+    /else //NAME was not provided
+      /if [not labex] then
+        /show "  GLBLAB macro invoked without any label."
+         .error  "GLBLAB"
+        /stop
+        /endif
+    /endif
+[chars lab]:
+.global  [chars lab]
+         noskid
+  /endmac
+
+//////////////////////////////
+//
 //   [label] Macro GLBLABD [name]
 //
 //   Define a global label.  No extra instructions for debugger skidding will be
@@ -2601,6 +2623,45 @@ _\name:                      ;define the C30 entry point label
 [chars "_" lab]:
 .global  [chars "_" lab]
     /endif
+  /endmac
+
+//////////////////////////////
+//
+//   [label] Macro GLBENTD [name]
+//
+//   Like GLBLABD, except that extra NOPs for debugger skidding is added after
+//   the entry point if debugging with a ICD is enabled.
+//
+/macro glbentd
+  /var local lab string
+  /var local labex bool
+
+  /if [exist -1 arg] then //LABEL was provided ?
+    /set lab [qstr [arg -1]] //save the label name
+    /set labex true //indicate LABEL was found
+    /endif
+  /if [exist 1 arg]
+    /then //NAME was provided
+      /if labex then
+        /show "  GLBLABD macro invoked with both leading label and trailing name."
+         .error  "GLBLABD"
+        /stop
+        /endif
+      /set lab [qstr [arg 1]] //save label name
+    /else //NAME was not provided
+      /if [not labex] then
+        /show "  GLBLABD macro invoked without any label."
+         .error  "GLBLABD"
+        /stop
+        /endif
+    /endif
+[chars lab]:
+.global  [chars lab]
+  /if using_c then
+[chars "_" lab]:
+.global  [chars "_" lab]
+    /endif
+         noskid
   /endmac
 
 ;********************

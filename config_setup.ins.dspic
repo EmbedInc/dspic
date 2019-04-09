@@ -3,3 +3,6 @@
 ;   CONFIG library module.
 ;
 /flag    cfgovr0             ;CFGOVR0 command will be acted on
+/flag    cfgfail             ;failure occured during configuration
+/flag    cfgrun              ;in normal operating mode, not test mode
+/flag    cfgdone             ;configuration has completed

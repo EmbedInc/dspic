@@ -108,6 +108,10 @@ void task_yield (void);                //let other tasks run for a while
 //
 void config_lock (void);               //get exclusive access to CONFIG routines
 
+void config_stat (                     //send response for event or status of a subsystem
+  machine_intu_t,                      //0-254 subsystem ID
+  machine_intu_t);                     //0-255 status code, 128-255 indicate failure
+
 //  The CONFIG lock must be held when calling any CONFIG_xxx routine listed
 //  below here.
 //
