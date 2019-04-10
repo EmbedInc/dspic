@@ -469,32 +469,6 @@ pbn_done:                    ;done copying all the bytes
 
 ;*******************************************************************************
 ;
-;   Local subroutine SEND_FWINFO
-;
-;   Send the FWINFO response.
-;
-;   This is also named CM_FWINFO, which is the default command routine name for
-;   a command named "FWINFO".
-;
-cm_fwinfo:
-         locsub  send_fwinfo, regf0
-
-         gcall   [chars cmd]_lock_out
-
-         mov     #rsp_fwinfo, w0
-         gcall   [chars cmd]_put8 ;FWINFO opcode
-         mov     #fwtype, w0
-         gcall   [chars cmd]_put8 ;firmare type ID
-         mov     #fwver, w0
-         gcall   [chars cmd]_put8 ;firmware version number
-         mov     #fwseq, w0
-         gcall   [chars cmd]_put8 ;firmware sequence number
-
-         gcall   [chars cmd]_unlock_out
-         leaverest
-
-;*******************************************************************************
-;
 ;   Subroutine CMD_START
 ;
 ;   Start the command stream processing tasks.
@@ -568,7 +542,7 @@ loop_nop:
 ;   Send the FWINFO response.
 ;
 /if [exist "rsp_fwinfo:vcon"] then
-         mcall   send_fwinfo ;send initial response giving our firmware info
+         gcall   send_fwinfo ;send initial response giving our firmware info
   /endif
 ;
 ;   Go process commands.  Execution jumps to CMD_FIRST to allow for processing

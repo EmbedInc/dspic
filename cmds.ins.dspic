@@ -117,6 +117,49 @@ allocg   usb_fwseq           ;USB converter firmware sequence number
 
 ;*******************************************************************************
 ;
+;   Subroutine SEND_FWINFO
+;
+;   Send the FWINFO response.
+;
+;   This is also named CM_FWINFO, which is the default command routine name for
+;   a command named "FWINFO".
+;
+/if [Command cm_fwinfo] then
+  /endif
+         glbsub  send_fwinfo, regf0
+
+         gcall   [chars cmd]_lock_out
+
+         mov     #rsp_fwinfo, w0
+         gcall   [chars cmd]_put8 ;FWINFO opcode
+         mov     #fwtype, w0
+         gcall   [chars cmd]_put8 ;firmare type ID
+         mov     #fwver, w0
+         gcall   [chars cmd]_put8 ;firmware version number
+         mov     #fwseq, w0
+         gcall   [chars cmd]_put8 ;firmware sequence number
+
+/if ustat then //additional firmware from USB device exists ?
+         mov     usb_fwtype, w0
+         cp0     w0
+         bra     z, fwi_dusb ;USB device firmware info is unknown ?
+
+         mov     #rsp_fwinfo, w0
+         gcall   [chars cmd]_put8 ;FWINFO opcode
+         mov     usb_fwtype, w0
+         gcall   [chars cmd]_put8 ;firmare type ID
+         mov     usb_fwver, w0
+         gcall   [chars cmd]_put8 ;firmware version number
+         mov     usb_fwseq, w0
+         gcall   [chars cmd]_put8 ;firmware sequence number
+fwi_dusb:                    ;done sending USB device firmware info
+  /endif
+
+         gcall   [chars cmd]_unlock_out
+         leaverest
+
+;*******************************************************************************
+;
 ;   Command NAMESET n string
 ;
 ;   Embed device 10 command for setting the user-settable name of this device.

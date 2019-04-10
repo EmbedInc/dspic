@@ -193,7 +193,7 @@
 ;       and before it is processed.
 ;
 ;       W2, W3 may be trashed.  All other registers must be preserved.  W1:W0
-;       can  be restored by loading the 32 bit local variable READING:
+;       can be restored by loading the 32 bit local variable READING:
 ;
 ;         mov     reading+0, w0 ;restore W1:W0
 ;         mov     reading+2, w1
