@@ -774,7 +774,7 @@ config_stat glbentd
          skip_nflag cfgfail
          jump    s0_stat
 
-         mov     #254, w1    ;get code for in test mode
+         mov     #1, w1      ;get code for in test mode
          skip_flag cfgrun
          jump    s0_stat
 

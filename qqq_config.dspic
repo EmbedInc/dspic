@@ -222,10 +222,10 @@
 ;
 ;        0  -  System startup completed, beginning normal operation.
 ;
+;        1  -  Startup completed, in test mode.
+;
 ;        7  -  Startup not completed yet.  This is only sent in response to a
 ;          CFGSTAT command while configuration is still in progress.
-;
-;        254  -  Startup completed, in test mode.
 ;
 ;        255  -  Failure, not entering normal operating mode.
 ;
