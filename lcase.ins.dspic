@@ -1763,6 +1763,11 @@
          .equiv  Cf, CF
   .endif
 .endif
+.ifndef  Chen
+.ifdef CHEN
+         .equiv  Chen, CHEN
+  .endif
+.endif
 .ifndef  Ch0na
 .ifdef CH0NA
          .equiv  Ch0na, CH0NA
