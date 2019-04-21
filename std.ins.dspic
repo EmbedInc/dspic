@@ -3730,7 +3730,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
 //   data to be written.  Unused high bytes of a program memory word will be set
 //   to the erased value of FFh.
 //
-//   If LABEL is supplied, then is is created as a assembler constant set to the
+//   If LABEL is supplied, then it is created as a assembler constant set to the
 //   offset of this byte (not program memory address) from the first byte
 //   created, or since PBYTE_OFFSET was reset to 0.
 //
