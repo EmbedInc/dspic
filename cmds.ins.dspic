@@ -265,3 +265,124 @@ ustat_opc_fw:
          mov     w0, usb_fwseq
          return
   /endif
+
+;*******************************************************************************
+;
+;   Command CANSD nid dat ... dat
+;
+;   Send CAN standard data frame.  The frame ID is in NID<10:0> and the number
+;   of data bytes in NID<14:11>.
+;
+/if [Command cm_cansd] then
+;
+;   Read the whole command.
+;
+         gcall   cmd_get16   ;get NID into W0
+         lsr     w0, #11, w1 ;extract the number of data bytes into W1
+         and     #15, w1
+         mov     #0x7FF, w2  ;extract frame ID into W2
+         and     w0, w2, w2
+
+         mov     w1, w0      ;read the data bytes into the scratch buffer
+         gcall   cmd_putbufn
+;
+;   Send the CAN frame.  Register contents:
+;
+;     W1  -  Number of data bytes.
+;
+;     W2  -  CAN frame ID.
+;
+         mov     #0b00, w0   ;indicate standard data frame
+         gcall   can_send_init ;set up for sending a CAN frame
+
+         mov     w2, w0      ;set the frame ID
+         gcall   can_send_id
+
+         mov     #cmdbuf, w2 ;init pointer to first data byte
+sends_byte:                  ;back here each new data byte
+         cp0     w1
+         bra     z, sends_dbytes ;done all data bytes ?
+         mov.b   [w2++], w0  ;get this data byte
+         gcall   can_send_dat ;write it to the CAN frame
+         sub     #1, w1      ;count one less byte left to do
+         jump    sends_byte  ;back to do next byte
+sends_dbytes:                ;done writing all data bytes
+
+         gjump   can_send    ;send frame, release lock, return from command
+  /endif
+
+;*******************************************************************************
+;
+;   Command CANSR id16
+;
+;   Send CAN standard remote request frame.
+;
+/if [Command cm_cansr] then
+         gcall   cmd_get16   ;get the frame ID into W1
+         mov     w0, w1
+
+         mov     #0b10, w0   ;indicate standard remote request frame
+         gcall   can_send_init ;set up for sending a CAN frame
+
+         mov     w1, w0      ;set the frame ID
+         gcall   can_send_id
+
+         gjump   can_send    ;send frame, release lock, return from command
+  /endif
+
+;*******************************************************************************
+;
+;   Command CANED id32 ndat dat ... dat
+;
+;   Send CAN extended data frame.
+;
+/if [Command cm_caned] then
+         gcall   cmd_get32   ;get the frame ID into W1:W0
+         mov.d   w0, w2      ;save it in W3:W2
+         gcall   cmd_get8    ;get the number of data bytes
+         mov     w0, w4      ;save it in W4
+         gcall   cmd_putbufn ;read the data bytes into the scratch buffer
+;
+;   Send the CAN frame.  Register contents:
+;
+;     W3:W2  -  CAN frame ID.
+;
+;     W4  -  Number of data bytes.
+;
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending a CAN frame
+
+         mov.d   w2, w0      ;set the frame ID
+         gcall   can_send_id
+
+         mov     #cmdbuf, w2 ;init pointer to first data byte
+sende_byte:                  ;back here each new data byte
+         cp0     w4
+         bra     z, sende_dbytes ;done all data bytes ?
+         mov.b   [w2++], w0  ;get this data byte
+         gcall   can_send_dat ;write it to the CAN frame
+         sub     #1, w4      ;count one less byte left to do
+         jump    sende_byte  ;back to do next byte
+sende_dbytes:                ;done writing all data bytes
+
+         gjump   can_send    ;send frame, release lock, return from command
+  /endif
+
+;*******************************************************************************
+;
+;   Command CANER id32
+;
+;   Send CAN extended remote request frame.
+;
+/if [Command cm_caner] then
+         gcall   cmd_get32   ;get the frame ID into W1:W0
+         mov     w0, w2      ;save it in W1:W2
+
+         mov     #0b11, w0   ;indicate extended remote request frame
+         gcall   can_send_init ;set up for sending a CAN frame
+
+         mov     w2, w0      ;set the frame ID
+         gcall   can_send_id
+
+         gjump   can_send    ;send frame, release lock, return from command
+  /endif

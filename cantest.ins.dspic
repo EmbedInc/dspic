@@ -1,0 +1,166 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   stacksz_cantest integer = 128 ;private task stack size, bytes
+;
+;   Derived constants.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+  /var local b bool
+
+  /set b [exist "cfg_cantest:const"] ;subsystem ID defined ?
+  /set b [or b [exist "rsp_canfr:const"]] ;CAN frame response opcode defined ?
+  /const subsys bool = b     ;create the subsystem
+
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;*******************
+;
+;   Global state.
+;
+.section .ram_cantest, bss   ;variables in normal RAM
+
+;*******************
+;
+;   Local state.
+;
+/if subsys then
+alloc    stack_cantest, [v stacksz_cantest], 2 ;task stack
+  /endif
+;
+;   Local state in near memory.
+;
+
+
+.section .code_cantest, code
+;*******************************************************************************
+;
+;   Subroutine SEND_CANFR
+;
+;   Send the CANFR response for the current received CAN frame state.  The
+;   CANIN_xxx state must be valid.
+;
+/if [exist "rsp_canfr:const"] then
+         glbsub  send_canfr, regf0 | regf1 | regf2
+
+         gcall   cmd_lock_out ;acquire exclusive lock on the response stream
+
+         mov     #[v rsp_canfr], w0
+         gcall   cmd_put8    ;send CANFR response opcode
+;
+;   Send the FLAGS byte.
+;
+         mov     canin_ndat, w0 ;init FLAGS byte with the NDAT field
+         skip_nflag canin_ext
+         bset    w0, #4      ;extended frame
+         skip_nflag canin_rtr
+         bset    w0, #5      ;remote request
+         gcall   cmd_put8    ;send FLAGS byte
+
+         skip_nflag canin_ext ;standard frame ?
+         jump    scn_extid   ;extended frame
+;
+;   Send standard frame ID.
+;
+         mov     canin_id, w0 ;get the ID
+         gcall   cmd_put16   ;send it
+         jump    scn_doneid
+;
+;   Send extended frame ID.
+;
+scn_extid:
+         mov     canin_id+0, w0 ;get the frame ID into W1:W0
+         mov     canin_id+2, w1
+         gcall   cmd_put32   ;send it
+scn_doneid:                  ;done sending the frame ID
+;
+;   Send the data bytes.
+;
+         mov     canin_ndat, w1 ;init number of data bytes left to send
+         cp0     w1
+         bra     z, scn_dbytes ;no bytes to send ?
+         mov     #canin_dat, w2 ;init pointer to next data byte to send
+scn_dbyte:                   ;back here each new byte, Z set to bytes left
+         mov.b   [w2++], w0  ;fetch this byte, increment pointer
+         gcall   cmd_put8    ;send this byte
+         sub     #1, w1      ;count one less byte
+         bra     nz, scn_dbyte ;back to do the next byte
+scn_dbytes:                  ;done sending all the data bytes
+
+         gcall   cmd_unlock_out ;release lock on config port response stream
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine CANTEST_CFG
+;
+;   Configure this module according to the static configuration data.
+;
+/if subsys then
+         glbsub  cantest_cfg, regf0 | regf13 | regf14
+
+         gcall   config_lock ;get exclusive access to CONFIG_xxx routines
+
+         mov     #[v cfg_cantest], w0 ;request config data for this module
+         gcall   config_setup ;set up for reading config, N config bytes into W0
+         cp      w0, #1      ;check number of config bytes
+         bra     nz, cfg_leave ;not the required number of config bytes ?
+
+         gcall   config_i8u  ;get config byte
+         cp0     w0
+         bra     z, cfg_leave ;this subsystem is disabled ?
+;
+;   This module is enabled.
+;
+         start_task cantest  ;start the background task.
+
+cfg_leave:
+         gcall   config_unlock ;release lock on CONFIG routines
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   CANTEST task.
+;
+/if subsys then
+cantest_task_start:          ;task execution start point
+
+tsk_loop:                    ;start of main operating loop
+
+tsk_waitframe:               ;back here until a new CAN frame is received
+         call    task_yield  ;give other tasks a chance to run
+         skip_flag canin     ;a new CAN frame is available ?
+         jump    tsk_waitframe ;no, go back and check again
+
+         mcall   send_canfr  ;send the CAN frame
+         clrflag canin       ;release the received CAN frame
+
+         jump    tsk_loop    ;back to get next CAN frame
+  /endif

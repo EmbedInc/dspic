@@ -14,8 +14,6 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   Low level CAN bus interface.
-;
 ;   CAN bus interface routines.  The exported routines are briefly listed here.
 ;   See the header comments of each routine for details.
 ;
@@ -61,7 +59,7 @@
 ;       by application code outside this file when done with the CANIN_xxx state
 ;       for the current frame to allow new CAN frames to be received.
 ;
-;       In addition to the FLAG_CANIN_xxx bits described below, the received
+;       In addition to the FLAG_CANIN_xxx flags described below, the received
 ;       CAN frame state is:
 ;
 ;         CANIN_ID  -  CAN frame ID, 32 bits.
@@ -103,7 +101,7 @@
 ;   The following pre-processor constant are used to configure this module:
 ;
 ;     BITRATE  -  Preprocessor constant, type REAL.  The desired CAN bit rate in
-;       bits per second.  Default = 500 Kbits/second.
+;       bits per second.  Default = 500 kBits/second.
 ;
 ;     CANIN_CALLBACK  -  Preprocessor constant, type STRING.  Name of routine to
 ;       call from internal CAN thread when a CAN frame is received.  No routine
@@ -135,7 +133,7 @@
 ;           bytes are set to 0.
 ;
 ;       No routine is called when this constant does not exist or is the empty
-;       string.
+;       string, which is the default.
 ;
 ;     DEBUG_CANCFG  -  Preprocessor constant, type BOOL.  TRUE causes detailed
 ;       information to be shown about the preprocssor CAN bit timing
@@ -173,7 +171,7 @@
 ;       processor must have a dedicated pin for CANTX.
 ;
 ;     CANTX_RPID  -  The ID value to specify the CAN TX function for a
-;       a remappable output pin.
+;       remappable output pin.
 ;
 /include "qq2.ins.dspic"
 
@@ -181,14 +179,14 @@
 ;
 ;   Configuration constants.
 ;
-/const   bitrate real = 500e3 ;desired CAN bus bit rate, Hz
+/const   bitrate real = 500e3 ;desired CAN bus baud rate, bits/second
 /const   canin_callback = "" ;routine to call when CAN frame received
 /const   canout_callback = "" ;routine to call when CAN frame sent
 /const   debug_cancfg bool = false ;no extra output during build about CAN config
 /const   ncanbuf integer = 8 ;number of DMA buffers for CAN messages
 /const   dma_canrecv integer = 0 ;DMA channel to use for receiving
 /const   dma_canxmit integer = 1 ;DMA channel to use for transmitting
-/const   dmaram  bool = False ;processor has no special region of RAM for DMA
+/const   dmaram  bool = false ;processor has no special region of RAM for DMA
 
 /const   canrx_rp integer = 53 ;RPn or RPIn pin number for CANRX, 0 = none
 /const   canrx_rpreg = "Rpinr26+0" ;adr of 8 bit reg to select CANRX remappable pin
