@@ -104,6 +104,21 @@ void task_yield (void);                //let other tasks run for a while
 
 //******************************************************************************
 //
+//   Dynamic memory allocation and deallocation.
+//
+void *                                 //pointer to start of the new memory
+dymem_alloc_perm (                     //permanently alloc mem from heap, no dealloc
+  int16u_t);                           //size of new memory to allocate, bytes
+
+void *                                 //pointer to start of the new memory
+dymem_alloc_temp (                     //allocate new mem from heap, can dealloc
+  int16u_t);                           //size of new memory to allocate, bytes
+
+void dymem_dealloc (                   //deallocate temporarily allocated memory
+  void *);                             //pointer to anywhere in region to dealloc
+
+//******************************************************************************
+//
 //   Subsystem configuration.
 //
 void config_lock (void);               //get exclusive access to CONFIG routines
