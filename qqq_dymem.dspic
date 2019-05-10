@@ -1,0 +1,87 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Dynamic memory management.  This module allocates memory from a "heap".
+;
+;   The heap actually used is different from the native heap created by the
+;   Microchip assembler and linker.  The Microchip heap has to be configured to
+;   a fixed size.  There is no provision to have it occupy all remaining unused
+;   memory.
+;
+;   However, the Microchip tools can be configured to allocate all remaining
+;   memory to the stack.  This module uses that mechanism to identify the unused
+;   memory.  The stack is reserved from the start of this memory, then the
+;   remainder used as the heap.  The preprocessor constant MINSTACK0 must be set
+;   to the minimum required stack size in bytes.  This is usually done in the
+;   <proj>lib.ins.dspic file.  See the qqqlib.ins.dspic template.
+;
+;   These routines support two types of dynamic memory allocation, permanent and
+;   temporary.  Permanently allocated memory can not be deallocated.  Its
+;   advantage is that there is no overhead.  Temporarily allocated memory can
+;   be deallocated at a later time.  This requires additional state to keep track
+;   of allocated regions so that they can be deallocated.
+;
+;   In this implementation, permanent memory is allocated from the start of the
+;   heap.  Temporary memory is allocated from the end of the smallest available
+;   region that is large enough.  When there is no fragmentation, this means
+;   temporary memory is allocated from the end (high addresses) of the heap.
+;
+;   These routines are not compatible, and are mutually exclusive, with the
+;   dynamic memory allocation in the C compiler libraries.
+;
+;
+;   Exported routines:
+;
+;     DYMEM_INIT
+;
+;       One-time module initialization.  Must be first call.  W0 is the address
+;       of the start of the heap, and W1 the address of the last word of the
+;       heap.
+;
+;     DYMEM_ALLOC_PERM
+;
+;       Permanently allocate dynamic memory.
+;
+;       The number of requested bytes is passed in W0.  W0 is returned the
+;       address of the first byte of the new region.  Memory is always allocated
+;       in whole 16 bit words.  W0 will therefore always be returned even.
+;
+;       When there is insufficient remaining space on the heap, W0 is returned
+;       0 and the Z flag is set.  When the memory is allocated, W0 will be
+;       non-zero and the Z flag cleared.
+;
+;     DYMEM_ALLOC_TEMP
+;
+;       Allocate dynamic memory that can later be de-allocated (returned to the
+;       heap).
+;
+;       The number of requested bytes is passed in W0.  W0 is returned the
+;       address of the first byte of the new region.  Memory is always allocated
+;       in whole 16 bit words.  W0 will therefore always be returned even.
+;
+;       When there is insufficient remaining space on the heap, W0 is returned
+;       0 and the Z flag is set.  When the memory is allocated, W0 will be
+;       non-zero and the Z flag cleared.
+;
+;     DYMEM_DEALLOC
+;
+;       Deallocate a block of temporarily-allocated dynamic memory.  W0 is any
+;       address within the block.  Nothing is done if W0 is not a address
+;       somewhere inside a temporarily-allocated block of dynamic memory.
+;
+/include "qq2.ins.dspic"
+/include "(cog)src/dspic/dymem.ins.dspic"
+         .end

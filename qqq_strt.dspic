@@ -19,12 +19,13 @@
 ;
 /include "qq2.ins.dspic"
 
-/if [not [exist "minstack0"]] then
-  /const minstack0 integer = 256
-  /endif
-
 /block
   /var local s string
+
+  /if [not [exist "dymem_heap:vcon"]] then
+    /const dymem_heap bool = [exist "minstack0:vcon"]
+    /endif
+
   /set s [str "Fosc = " [eng freq_osc oscdig] "Hz"]
   /set s [str s ", Fcy = " [eng freq_inst oscdig] "Hz"]
   /set s [str s ", Tcy = " [eng [/ 1 freq_inst] oscdig] "s"]
@@ -89,19 +90,6 @@ config   __FGS,  0b1111111111111111
 ;   need to be defined.
 ;
          flags_define
-
-;*******************************************************************************
-;
-;   Define the task 0 stack and the heap to the minimum required sizes specified
-;   in the xxxLIB.INS.DSPIC include file.
-;
-.section .stack0, stack
-.space   [v minstack0]
-
-/if [exist "minheap"] then
-         .section .heap, heap
-         .space  [v minheap]
-  /endif
 
 ;*******************************************************************************
 ;
@@ -210,15 +198,34 @@ config   __FGS,  0b1111111111111111
 .ifdef Gie
          bset    Intcon2, #Gie ;globally allow interrupts
   .endif
-;
-;   Set up the stack.
-;
-         mov     #__SPLIM_init, w0 ;initalize stack limit register
-         mov     w0, Splim
-         nop                 ;needed after changing SPLIM
-         mov     #__SP_init, w15 ;initialize the stack pointer
 
          flags_clear         ;initialize all the global flags to off
+;
+;   Set up the stack and the heap if the Embed DYMEM heap is in use.  The linker
+;   is set up so that the suggested SPLIM value is the first address past the
+;   end of the stack.  In other words, no guard band is reserved at the end of
+;   the stack.  We set up the task 0 stack here with 6 bytes (3 words) of guard
+;   band.
+;
+/if dymem_heap               ;set W0 to first address past the stack
+  /then                      ;using the Embed DYMEM heap, MINSTACK0 exists
+         mov     #__SP_init + [v minstack0], w0
+  /else                      ;no heap, set up stack as defined by linker
+         mov     #__SPLIM_init, w0
+  /endif
+         sub     w0, #6, w1  ;make first stack address to causes trap when accessed
+         mov     w1, Splim   ;set hardware stack limit detector
+         nop                 ;needed after changing SPLIM
+
+         mov     #__SP_init, w15 ;initialize the stack pointer
+         ;
+         ;   Set up the Embed DYMEM heap, if enabled.  W0 is the first address
+         ;   past the stack.
+         ;
+/if dymem_heap then          ;set up the Embed DYMEM heap ?
+         mov     #__SPLIM_init - 2, w1 ;pass adr of last word of the heap
+         gcall   dymem_init  ;init the heap
+  /endif
 ;
 ;   Initialize the separate modules.
 ;
