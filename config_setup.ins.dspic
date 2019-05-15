@@ -2,6 +2,8 @@
 ;   intended to be included from the main include file of a project using the
 ;   CONFIG library module.
 ;
+/const   cantest_stat_nomem integer = 128 ;CAN subsystem status for unable to get mem
+
 /flag    cfgovr0             ;CFGOVR0 command will be acted on
 /flag    cfgfail             ;failure occured during configuration
 /flag    cfgrun              ;in normal operating mode, not test mode

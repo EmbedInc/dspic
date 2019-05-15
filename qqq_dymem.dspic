@@ -82,6 +82,19 @@
 ;       address within the block.  Nothing is done if W0 is not a address
 ;       somewhere inside a temporarily-allocated block of dynamic memory.
 ;
+;     DYMEM_SEND
+;
+;       Send a series of DYMEM responses indicating the current state of the
+;       dynamic memory.  This routine only exists when the RSP_DYMEM constant
+;       exists.
+;
+;   Commands:
+;
+;     DYMEM
+;
+;       Causes DYMEM responses to be sent indicating the current state of the
+;       dynamic memory.
+;
 /include "qq2.ins.dspic"
 /include "(cog)src/dspic/dymem.ins.dspic"
          .end

@@ -43,8 +43,8 @@
 ;       Adr + 2  -  Address of the control block for the next chunk.  Control
 ;         blocks are linked in ascending address order.  The first control block
 ;         is pointed to by the local variable TEMPADR.  TEMPADR is 0 when no
-;         temporary memory has been allocated.  Word 1 being zero indicates the
-;         end of the linked list.
+;         temporary memory has been allocated.  This word at Adr+2 being zero
+;         indicates the end of the linked list.
 ;
 ;   Permanent memory allocation
 ;
@@ -314,7 +314,7 @@ atmp_nxgap:                  ;done with this gap, advance to the next
 ;     W2  -
 ;
 ;     W3  -  Pointer to control block for the block immediately preceeding the
-;            best gap found so far.  0 = no suitable gap found yet.
+;            best gap found so far.  0 = no suitable gap found.
 ;
 ;     W4  -
 ;
@@ -514,3 +514,78 @@ dall_pall:
 
 dall_leave:
          leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DYMEM_SEND
+;
+;   Send DYMEM responses indicating the current state of the dynamic memory.
+;
+/if [exist "rsp_dymem:const"] then
+         glbsub  dymem_send, regf0 | regf1
+
+         gcall   cmd_lock_out ;acquire exclusive lock on the response stream
+;
+;   Send 1: adr len heaplast
+;
+;   ADR and LEN are the start address and length of the permanent pool.
+;   HEAPLAST is the address of the last word of the whole heap.
+;
+         mov     #[v rsp_dymem], w0
+         gcall   cmd_put8    ;send DYMEM opcode
+         mov     #1, w0
+         gcall   cmd_put8    ;send ID for this sub-response
+         mov     permstart, w0
+         gcall   cmd_put16   ;ADR
+         mov     permlen, w0
+         gcall   cmd_put16   ;LEN
+         mov     heaplast, w0
+         gcall   cmd_put16   ;HEAPLAST
+;
+;   Send 2: adr len
+;
+;   ADR and LEN are the start address of a temporarily allocated block.  One
+;   response is sent for each block.
+;
+         mov     tempadr, w1 ;get address of first temp control block
+snd_temp:                    ;back here each new temp control block
+         cp0     w1
+         bra     z, snd_dtemp ;hit end of temp control blocks linked list ?
+
+         mov     #[v rsp_dymem], w0
+         gcall   cmd_put8    ;send DYMEM opcode
+         mov     #2, w0
+         gcall   cmd_put8    ;send ID for this sub-response
+         add     w1, #[v ctrlsz], w0
+         gcall   cmd_put16   ;ADR
+         mov     [w1], w0
+         gcall   cmd_put16   ;LEN
+
+         mov     [w1+2], w1  ;advance to next control block in linked list
+         jump    snd_temp    ;back to process this new control block
+
+snd_dtemp:                   ;done sending responses for temporary blocks
+;
+;   Send 0
+;
+;   This indicates the end of this series of DYMEM responses.
+;
+         mov     #[v rsp_dymem], w0
+         gcall   cmd_put8    ;send DYMEM opcode
+         mov     #0, w0
+         gcall   cmd_put8    ;send ID for this sub-response
+
+         gcall   cmd_unlock_out ;release lock on the response stream
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Command DYMEM
+;
+;   This command causes a series of DYMEM responses to be sent, which indicate
+;   the current state of the heap.
+;
+/if [and [Command cm_dymem] [exist "rsp_dymem:const"]] then
+         jump    dymem_send  ;send the responses, return to command interpreter
+  /endif

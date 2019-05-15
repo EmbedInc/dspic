@@ -49,9 +49,7 @@
 ;
 ;   Local state.
 ;
-/if subsys then
-alloc    stack_cantest, [v stacksz_cantest], 2 ;task stack
-  /endif
+
 ;
 ;   Local state in near memory.
 ;
@@ -123,7 +121,7 @@ scn_dbytes:                  ;done sending all the data bytes
 ;   Configure this module according to the static configuration data.
 ;
 /if subsys then
-         glbsub  cantest_cfg, regf0 | regf13 | regf14
+         glbsub  cantest_cfg, regf0 | regf1 | regf13 | regf14
 
          gcall   config_lock ;get exclusive access to CONFIG_xxx routines
 
@@ -138,7 +136,23 @@ scn_dbytes:                  ;done sending all the data bytes
 ;
 ;   This module is enabled.
 ;
-         start_task cantest  ;start the background task.
+         mov     #[v stacksz_cantest], w0
+         gcall   dymem_alloc_perm ;allocate stack for CANTEST task
+         bra     nz, cfg_havemem ;got the requested memory ?
+         ;
+         ;   Failed to get the requested memory.
+         ;
+         mov     #[v cfg_cantest], w0 ;pass subsystem ID
+         mov     #[v cantest_stat_nomem], w1 ;pass status code
+         gcall   config_stat ;report the error
+         jump    cfg_leave
+
+cfg_havemem:                 ;got the dynamic memory, W0 pointing to start
+         mov     w0, w14     ;pass start address of stack
+         mov     #[v stacksz_cantest], w13 ;pass size of stack
+         call    task_new    ;create the new task
+         goto    cantest_task_start ;starting point of the new task
+         ;   Original task continues here.
 
 cfg_leave:
          gcall   config_unlock ;release lock on CONFIG routines
