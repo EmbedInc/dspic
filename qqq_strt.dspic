@@ -22,10 +22,6 @@
 /block
   /var local s string
 
-  /if [not [exist "dymem_heap:vcon"]] then
-    /const dymem_heap bool = [exist "minstack0:vcon"]
-    /endif
-
   /set s [str "Fosc = " [eng freq_osc oscdig] "Hz"]
   /set s [str s ", Fcy = " [eng freq_inst oscdig] "Hz"]
   /set s [str s ", Tcy = " [eng [/ 1 freq_inst] oscdig] "s"]

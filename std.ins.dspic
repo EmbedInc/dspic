@@ -87,6 +87,10 @@
 
 .equiv   debug_icd, [if debug_icd 1 0]
 
+/if [not [exist "dymem_heap:const"]] then
+  /const dymem_heap bool = [exist "minstack0:const"]
+  /endif
+
 .set     nflagb, 0           ;init to no GFLn flag registers allocated
 ;
 ;   Derived constants.
