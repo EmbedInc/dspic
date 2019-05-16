@@ -16,7 +16,7 @@
 ;
 ;   Dynamic memory management.  This module allocates memory from a "heap".
 ;
-;   The heap actually used is different from the native heap created by the
+;   The heap managed here is different from the native heap created by the
 ;   Microchip assembler and linker.  The Microchip heap has to be configured to
 ;   a fixed size.  There is no provision to have it occupy all remaining unused
 ;   memory.
@@ -31,17 +31,16 @@
 ;   These routines support two types of dynamic memory allocation, permanent and
 ;   temporary.  Permanently allocated memory can not be deallocated.  Its
 ;   advantage is that there is no overhead.  Temporarily allocated memory can
-;   be deallocated at a later time.  This requires additional state to keep track
-;   of allocated regions so that they can be deallocated.
+;   be deallocated at a later time.  This requires additional state to keep
+;   track of allocated regions so that they can be deallocated.
 ;
 ;   In this implementation, permanent memory is allocated from the start of the
 ;   heap.  Temporary memory is allocated from the end of the smallest available
 ;   region that is large enough.  When there is no fragmentation, this means
 ;   temporary memory is allocated from the end (high addresses) of the heap.
 ;
-;   These routines are not compatible, and are mutually exclusive, with the
-;   dynamic memory allocation in the C compiler libraries.
-;
+;   The DYMEM routines do not interact with or reference the Microchip heap.
+;   The two can be used independently.
 ;
 ;   Exported routines:
 ;
@@ -59,9 +58,9 @@
 ;       address of the first byte of the new region.  Memory is always allocated
 ;       in whole 16 bit words.  W0 will therefore always be returned even.
 ;
-;       When there is insufficient remaining space on the heap, W0 is returned
-;       0 and the Z flag is set.  When the memory is allocated, W0 will be
-;       non-zero and the Z flag cleared.
+;       When there is insufficient space on the heap, W0 is returned 0 and the Z
+;       flag is set.  When the memory is allocated, W0 will be non-zero and the
+;       Z flag cleared.
 ;
 ;     DYMEM_ALLOC_TEMP
 ;
@@ -72,15 +71,16 @@
 ;       address of the first byte of the new region.  Memory is always allocated
 ;       in whole 16 bit words.  W0 will therefore always be returned even.
 ;
-;       When there is insufficient remaining space on the heap, W0 is returned
-;       0 and the Z flag is set.  When the memory is allocated, W0 will be
-;       non-zero and the Z flag cleared.
+;       When there is insufficient space on the heap, W0 is returned 0 and the Z
+;       flag is set.  When the memory is allocated, W0 will be non-zero and the
+;       Z flag cleared.
 ;
 ;     DYMEM_DEALLOC
 ;
-;       Deallocate a block of temporarily-allocated dynamic memory.  W0 is any
-;       address within the block.  Nothing is done if W0 is not a address
-;       somewhere inside a temporarily-allocated block of dynamic memory.
+;       Deallocate a block of temporarily-allocated dynamic memory.  W0 is the
+;       address of any byte within the block.  Nothing is done if W0 is not a
+;       address somewhere inside a temporarily-allocated block of dynamic
+;       memory.
 ;
 ;     DYMEM_SEND
 ;
@@ -92,8 +92,49 @@
 ;
 ;     DYMEM
 ;
-;       Causes DYMEM responses to be sent indicating the current state of the
-;       dynamic memory.
+;       Causes a set of DYMEM responses to be sent indicating the current state
+;       of the dynamic memory.  Both this command and the DYMEM response must be
+;       enabled for this command to exist.
+;
+;   Responses:
+;
+;     DYMEM: id [dat ... dat]
+;
+;       Provides a piece of information about the current state of the dynamic
+;       memory.  ID identifies the specific information.  The data following ID,
+;       if any, is dependent on ID.
+;
+;       A series of these responses are sent together, providing the complete
+;       information on the current state of the heap.  The responses are sent in
+;       order of ascending ID, starting with 1.  The last response is always ID
+;       0.
+;
+;       The various ID values with their following data are:
+;
+;         0
+;
+;           End of dynamic memory info.  This is the last response of a set of
+;           DYMEM responses.
+;
+;         1: adr len
+;
+;           Location and size of the whole heap as originally defined.  ADR and
+;           LEN are 16 bits.
+;
+;         2: adr len
+;
+;           ADR is the start address and LEN the length of the part of the heap
+;           that dynamic memory can be permanently allocated from.  ADR and LEN
+;           are 16 bits.
+;
+;         3: adr len
+;
+;           Start address and length of a temporarily allocated block of memory.
+;           ADR and LEN are 16 bits.  The block indicated by ADR and LEN is the
+;           actual memory available to the application.  It does not include the
+;           internal overhead for tracking the location of all
+;           temporarily-allocated blocks.  One of these responses is sent for
+;           temporarily-allocated block.
 ;
 /include "qq2.ins.dspic"
 /include "(cog)src/dspic/dymem.ins.dspic"

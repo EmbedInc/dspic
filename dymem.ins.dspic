@@ -14,51 +14,72 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   Dymanic memory management.  See the header comments in QQQ_DYMEM.INS.DSPIC.
+;   Dymanic memory management.  See the header comments in QQQ_DYMEM.INS.DSPIC
+;   for the application interface.
 ;
 ;   Internal data structure
 ;
-;     The heap is divided into two regions, permanent and temporary.
+;     The heap is divided into two regions: the permanent pool, and the
+;     temporary pool.
+;
 ;     Permanently allocated memory is always taken from the start of the
-;     permanent region.  The start and size of this region are adjusted for each
-;     permanently allocated chunk.
+;     permanent pool.  The start and size of this region are adjusted as each
+;     permanent chunk is allocated.  No information is kept on the location and
+;     size of individual permanent chunks.  Once a permanent chunk is allocated,
+;     its memory is effectively no longer part of the heap, and specific
+;     information about the chunk are lost.
 ;
-;     Two local variables are used to describe the permanent region:
+;     Two local variables are used to describe the permanent pool:
 ;
-;       PERMSTART  -  Start address of the permanent region.  Always even.
+;       PERMSTART  -  Start address of the permanent pool.  Always even.
 ;
-;       PERMLEN  -  Length in bytes of the permanent region.  Always even.
+;       PERMLEN  -  Length in bytes of the permanent pool.  Always even.
 ;
-;     The temporary region starts with the first (lowest address) temporarily
+;     The temporary pool starts with the first (lowest address) temporarily
 ;     allocated block, and extends to the end of the heap.
 ;
-;     All the temporarily-allocated chunks of memory are tracked in a linked
-;     list.  A control block of 2 words (4 bytes) is allocated immediately
-;     preceeding each caller-visible chunk.  The words of this control block
-;     contain:
+;     All the temporarily allocated chunks of memory are tracked in a linked
+;     list.  A control entry is allocated immediately preceeding each caller
+;     visible chunk.
+;
+;     To reduce confusion, the following terms are used in this module:
+;
+;       CHUNK  -  Memory that has been allocated from the heap that is visible
+;         to the application.
+;
+;       BLOCK  -  All the memory used on the heap for a particular chunk.
+;
+;       CONTROL ENTRY  -  The additional memory allocated on behalf of a
+;         temporary chunk beyond that which is visible to the application.
+;
+;     Permanent blocks have no control entries, so a permanent block is the same
+;     as its permanent chunk.  Temporary blocks are comprised of a control entry
+;     and its chunk.
+;
+;     The words of a control entry are:
 ;
 ;       Adr + 0  -  Size of this chunk.  This is the caller-visible size, and
-;         therefore does not include the control block for this chunk.
+;         therefore does not include the control entry for this block.
 ;
-;       Adr + 2  -  Address of the control block for the next chunk.  Control
-;         blocks are linked in ascending address order.  The first control block
-;         is pointed to by the local variable TEMPADR.  TEMPADR is 0 when no
-;         temporary memory has been allocated.  This word at Adr+2 being zero
+;       Adr + 2  -  Address of the control entry for the next block.  Control
+;         entries are linked in ascending address order.  The first control
+;         entry is pointed to by the local variable TEMPADR.  TEMPADR is 0 when
+;         no temporary memory has been allocated.  This word at Adr+2 being zero
 ;         indicates the end of the linked list.
 ;
 ;   Permanent memory allocation
 ;
-;     Permanent memory is allocated from the start of the permanent region.
-;     When a chunk is allocated, the start of the permanent region is moved to
+;     Permanent memory is allocated from the start of the permanent pool.  When
+;     a chunk is allocated, the start of the permanent pool is moved to
 ;     immediately after the new chunk, and the length of the permanent region is
-;     lowered by the size of the new chunk.  This incurrs no overhead, but also
+;     lowered by the size of the new chunk.  This incurs no overhead, but also
 ;     keeps no record of permanently allocated chunks.
 ;
 ;   Temporary memory allocation
 ;
 ;     Temporary memory is allocated from the smallest available region that is
 ;     large enough to hold the new block.  Note that the available size must
-;     include the 2 word overhead for the control block.
+;     include the 2 word overhead for the control entry.
 ;
 ;     After multiple temporary allocations and deallocations, it is possible for
 ;     unused gaps to be between allocated blocks.  The size of these gaps are
@@ -67,8 +88,9 @@
 ;     highest address is used.
 ;
 ;     If there is no gap that is large enough, then the new memory is allocated
-;     from the permanent region.  The size of the permanent region is decreased
-;     accordingly.
+;     from the permanent pool.  The size of the permanent pool is decreased
+;     accordingly.  When the first (lowest address) temporary block is
+;     deallocated, its memory is returned to the temporary pool.
 ;
 ;     The new block is always taken from the end (high addresses) of whatever
 ;     region it is allocated from.
@@ -78,16 +100,7 @@
 ;
 ;   Configuration constants.
 ;
-/const   ctrlsz  integer = 4 ;temp memory control block size, bytes
-;
-;   Derived constants.
-;
-/block
-  /var local ii integer
-  /var local r real
-  /var local s string
-
-  /endblock
+/const   ctrlsz  integer = 4 ;temp memory control entry size, bytes
 
 ;*******************************************************************************
 ;
@@ -104,10 +117,11 @@
 ;
 ;   Local state.
 ;
-alloc    permstart           ;starting address of unused memory
-alloc    permlen             ;length of region to allocate permanent mem from
-alloc    tempadr             ;address of first temp control block, 0 = none
-alloc    heaplast            ;last word address of the whole heap
+alloc    heapstart           ;original start of the heap, for reporting only
+alloc    permstart           ;starting address of permanent pool
+alloc    permlen             ;length of permanent pool
+alloc    tempadr             ;address of first temp control entry, 0 = none
+alloc    heaplast            ;address of the last word address of the whole heap
 
 
 .section .code_dymem, code
@@ -128,7 +142,8 @@ alloc    heaplast            ;last word address of the whole heap
 
          add     #1, w0      ;round start adr up to whole word boundary
          bclr    w0, #0
-         mov     w0, permstart ;init start of perm alloc region
+         mov     w0, heapstart ;save where heap started, for later reporting
+         mov     w0, permstart ;init start of permanent pool
 
          bclr    w1, #0      ;round last adr down to whole word boundary
 ;
@@ -157,8 +172,7 @@ alloc    heaplast            ;last word address of the whole heap
 ;
 ;     W2  -
 ;
-;   Find the heap size, and initialize all of it to the region permanent memory
-;   can be allocated from.
+;   Find the heap size, and initialize all of it to the permanent pool.
 ;
          mov     #0, w2      ;init to no heap
          mov     w2, permlen
@@ -167,7 +181,7 @@ alloc    heaplast            ;last word address of the whole heap
          sub     w1, w0, w1  ;last word adr minus first word adr
          bra     ltu, ini_leave ;flipped, no heap at all ?
          add     #2, w1      ;make size of the whole heap in bytes
-         mov     w1, permlen ;init all mem available for permanent alloc
+         mov     w1, permlen ;init all mem ot the permanent pool
 
 ini_leave:
          leaverest
@@ -184,7 +198,7 @@ ini_leave:
 ;   next higher even number of bytes is actually allocated.
 ;
 ;   If the memory was successfully allocated, then W0 is returned the starting
-;   address of the new memory, and the Z flag is cleared.  If there was
+;   address of the new memory, and the Z flag is cleared.  If there is
 ;   insufficient memory available, then W0 is returned 0 and the Z flag is set.
 ;
          glbsubd dymem_alloc_perm, regf1
@@ -239,7 +253,7 @@ aprm_leave:                  ;common exit, W0 all set
 ;   the heap, but can be returned to the heap at a later time (see
 ;   DYMEM_DEALLOC).
 ;
-;   This type of memory allocation incurrs a overhead of 2 words (4 bytes) from
+;   This type of memory allocation incurs a overhead of 2 words (4 bytes) from
 ;   the heap, in addition to the memory actually allocated.  These 2 words are
 ;   returned to the heap when the memory is deallocated.
 ;
@@ -247,15 +261,15 @@ aprm_leave:                  ;common exit, W0 all set
 ;   allocated in whole words.  If a odd number of bytes is requested, then the
 ;   next higher even number of bytes is actually allocated.
 ;
-;   If the memory was successfully allocated, then W0 is returned the starting
-;   address of the new memory, and the Z flag is cleared.  If there was
+;   If the memory is successfully allocated, then W0 is returned the starting
+;   address of the new memory, and the Z flag is cleared.  If there is
 ;   insufficient memory available, then W0 is returned 0 and the Z flag is set.
 ;
          glbsubd dymem_alloc_temp, regf1 | regf2 | regf3 | regf4 | regf5
 ;
 ;   Return failure if trying to allocate 0 bytes.  Allocating a 0 byte chunk
-;   would just waste 2 words for the control block, and it would be impossible
-;   to deallocate the chunk later.
+;   would just waste 2 words for the control entry, and it would be impossible
+;   to deallocate the block later.
 ;
          cp0     w0
          bra     z, atmp_leave ;trying to allocate 0 bytes ?
@@ -267,17 +281,17 @@ aprm_leave:                  ;common exit, W0 all set
          bclr    w0, #0
 ;
 ;   Search for the smallest gap large enough to fit the new block.  If no
-;   suitable gap is found, then switch to allocating from the permanent region.
+;   suitable gap is found, then switch to allocating from the permanent pool.
 ;
 ;   Register usage in this section:
 ;
 ;     W0  -  Size of new block to allocate.
 ;
-;     W1  -  Pointer to current control block.
+;     W1  -  Pointer to current control entry.
 ;
 ;     W2  -  Best gap size found so far.
 ;
-;     W3  -  Pointer to control block for the block immediately preceeding the
+;     W3  -  Pointer to control entry for the block immediately preceeding the
 ;            best gap found so far.  0 = no suitable gap found yet.
 ;
 ;     W4  -  Size of gap after the current block.
@@ -286,7 +300,7 @@ aprm_leave:                  ;common exit, W0 all set
 ;
          mov     #0xFFFF, w2 ;init best gap size to largest possible
          mov     #0, w3      ;init to no suitable gap found yet
-         mov     tempadr, w1 ;init pointer to current control block
+         mov     tempadr, w1 ;init pointer to current control entry
 atmp_gap:                    ;back here to examine each new gap
          cp0     w1
          bra     z, atmp_dgap ;done scanning the gaps
@@ -302,7 +316,7 @@ atmp_nxadr:                  ;next address is in W4
 
          sub     w4, w1, w4  ;make size of this block plus gap
          mov     [w1], w5    ;get size of this chunk
-         sub     w4, w5, w4  ;make size of gap plus control block
+         sub     w4, w5, w4  ;make size of gap plus control entry
          sub     #[v ctrlsz], w4 ;make size of this gap
          ;
          ;   Check this gap to see if it is better than what we found so far.
@@ -315,11 +329,11 @@ atmp_nxadr:                  ;next address is in W4
          ;   This current gap is better than what was found previously.  Update
          ;   the saved gap state to this gap.
          ;
-         mov     w1, w3      ;update pointer to control block before best gap
+         mov     w1, w3      ;update pointer to control entry before best gap
          mov     w4, w2      ;update size of best gap so far
 
 atmp_nxgap:                  ;done with this gap, advance to the next
-         mov     [w1+2], w1  ;point to next control block in the linked list
+         mov     [w1+2], w1  ;point to next control entry in the linked list
          jump    atmp_gap    ;back to check this new gap
 ;
 ;   Done scanning all the gaps.  Current register contents:
@@ -330,29 +344,29 @@ atmp_nxgap:                  ;done with this gap, advance to the next
 ;
 ;     W2  -
 ;
-;     W3  -  Pointer to control block for the block immediately preceeding the
+;     W3  -  Pointer to control entry for the block immediately preceeding the
 ;            best gap found so far.  0 = no suitable gap found.
 ;
 ;     W4  -
 ;
 ;     W5  -
 ;
-atmp_dgap:                   ;done scanning all the gaps in the temporary region
+atmp_dgap:                   ;done scanning all the gaps in the temporary pool
          cp0     w3
          bra     z, atmp_perm ;no suitable gap found, alloc from permanent pool
 ;
 ;   Allocate the new memory from the gap after the block at W3.  The gap after
-;   this block is large enough to hold the new chunk with its control block.
+;   this block is large enough to hold the new block.
 ;
 ;   Register usage:
 ;
 ;     W0  -  Size of new block to allocate.
 ;
-;     W1  -  Pointer to control block after new chunk.
+;     W1  -  Pointer to control after after new block.
 ;
-;     W2  -  Pointer to the control block of the new chunk.
+;     W2  -  Pointer to the control entry of the new block.
 ;
-;     W3  -  Pointer to control block for the block immediately preceeding the
+;     W3  -  Pointer to control entry for the block immediately preceeding the
 ;            gap.
 ;
 ;     W4  -  First address after gap.
@@ -368,15 +382,15 @@ atmp_dgap:                   ;done scanning all the gaps in the temporary region
          add     #2, w4
 atmp_gend:                   ;W4 is address past end of gap
 
-         sub     w4, w0, w2  ;make adr of new control block
-         mov     w2, [w3+2]  ;point previous block to this new block
-         sub     w0, #[v ctrlsz], [w2] ;set chunk size in new control block
-         mov     w1, [w2+2]  ;set pointer to next control block after this
+         sub     w4, w0, w2  ;make adr of new control entry
+         mov     w2, [w3+2]  ;point previous control entry to this new entry
+         sub     w0, #[v ctrlsz], [w2] ;set chunk size in new control entry
+         mov     w1, [w2+2]  ;set pointer to next control entry after this
 
          add     w2, #[v ctrlsz], w0 ;return pointer to start of caller's chunk
          jump    atmp_leave
 ;
-;   There is no gap in the temporary region large enough to hold the new memory.
+;   There is no gap in the temporary pool large enough to hold the new memory.
 ;   Check whether it can be allocated from the permanent pool.
 ;
 atmp_perm:                   ;check permanent pool
@@ -395,7 +409,7 @@ atmp_perm:                   ;check permanent pool
 ;
 ;     W2  -  Start address of the permanent pool.
 ;
-;     W3  -  Address of the new control block.
+;     W3  -  Address of the new control entry.
 ;
 ;     W4  -
 ;
@@ -409,12 +423,12 @@ atmp_pfit:                   ;the permanent pool is large enough
          sub     w3, w2, w4  ;update remaining size of the permanent pool
          mov     w4, permlen
 
-         sub     w0, #[v ctrlsz], [w3] ;set chunk size in new control block
-         mov     tempadr, w4 ;point new block to previous first block
+         sub     w0, #[v ctrlsz], [w3] ;set chunk size in new control entry
+         mov     tempadr, w4 ;point new control entry to previous first entry
          mov     w4, [w3+2]
-         mov     w3, tempadr ;update start of linked list pointer
+         mov     w3, tempadr ;update start of control blocks linked list pointer
 
-         add     w3, #[v ctrlsz], w0 ;make start address of caller-visible chunk
+         add     w3, #[v ctrlsz], w0 ;return the start address of the new chunk
 
 atmp_leave:                  ;common exit, W0 all set
          cp0     w0          ;set Z according to success
@@ -430,14 +444,14 @@ atmp_leave:                  ;common exit, W0 all set
 ;
          glbsubd dymem_dealloc, regf1 | regf2 | regf3
 ;
-;   Scan the linked list of chunks looking for the one containing the address in
+;   Scan the linked list of blocks looking for the one containing the address in
 ;   W0.  Register usage:
 ;
-;     W0  -  The target address to look for.
+;     W0  -  Address within the chunk to deallocate.
 ;
-;     W1  -  Pointer to the current control block.
+;     W1  -  Pointer to the current control entry
 ;
-;     W2  -  Pointer to the previous control block in the linked list.
+;     W2  -  Pointer to the previous control entry in the linked list.
 ;
 ;     W3  -  Scratch.
 ;
@@ -445,11 +459,11 @@ atmp_leave:                  ;common exit, W0 all set
 ;   is past the target address, then there is no point looking further since the
 ;   remaining chunks will also be past the target address.
 ;
-         mov     tempadr, w1 ;init pointer to the current chunk
+         mov     tempadr, w1 ;init pointer to the current block
          mov     #0, w2      ;init to there is no previous linked list entry
 dall_block:                  ;back here to examine each new block
          cp0     w1
-         bra     z, dall_leave ;exhausted the chunks, didn't find target address ?
+         bra     z, dall_leave ;exhausted the blocks, didn't find target address ?
 
          add     w1, #[v ctrlsz], w3 ;make start address of this chunk
          cp      w0, w3      ;compare target address to chunk start
@@ -459,15 +473,15 @@ dall_block:                  ;back here to examine each new block
          cp      w0, w3      ;compare target address to after chunk
          bra     ltu, dall_found ;this chunk contains the target address ?
 
-         mov     w1, w2      ;save pointer to previous block in linked list
-         mov     [w1+2], w1  ;advance to the next block in the linked list
+         mov     w1, w2      ;save pointer to previous entry in the linked list
+         mov     [w1+2], w1  ;advance to the next entry in the linked list
          jump    dall_block
 ;
 ;   The chunk containing the target address has been found.  Register usage:
 ;
-;     W1  -  Pointer to the control words of the block to deallocate.
+;     W1  -  Pointer to the control entry of the block to deallocate.
 ;
-;     W2  -  Pointer to the previous control block in the linked list.
+;     W2  -  Pointer to the previous control entry in the linked list.
 ;
 ;     W3  -
 ;
@@ -496,7 +510,7 @@ dall_found:
 ;     W3  -
 ;
 dall_perm:
-         mov     [w1+2], w2  ;point to the next control block in the linked list
+         mov     [w1+2], w2  ;point to the next control entry in the linked list
          cp0     w2
          bra     z, dall_pall ;the block to dealloc is the only temp block ?
          ;
@@ -536,30 +550,47 @@ dall_leave:
 ;
 ;   Subroutine DYMEM_SEND
 ;
-;   Send DYMEM responses indicating the current state of the dynamic memory.
+;   Send a set of DYMEM responses indicating the current state of the dynamic
+;   memory.
 ;
 /if [exist "rsp_dymem:const"] then
          glbsub  dymem_send, regf0 | regf1
 
          gcall   cmd_lock_out ;acquire exclusive lock on the response stream
 ;
-;   Send 1: adr len heaplast
+;   Send 1: adr len
 ;
-;   ADR and LEN are the start address and length of the permanent pool.
-;   HEAPLAST is the address of the last word of the whole heap.
+;   Send the original location and length of the heap.
 ;
          mov     #[v rsp_dymem], w0
          gcall   cmd_put8    ;send DYMEM opcode
          mov     #1, w0
          gcall   cmd_put8    ;send ID for this sub-response
-         mov     permstart, w0
+
+         mov     heapstart, w0
          gcall   cmd_put16   ;ADR
-         mov     permlen, w0
+
+         mov     heaplast, w1 ;make first adr past end of heap
+         add     #2, w1
+         sub     w1, w0, w0  ;make original length of the heap
          gcall   cmd_put16   ;LEN
-         mov     heaplast, w0
-         gcall   cmd_put16   ;HEAPLAST
 ;
 ;   Send 2: adr len
+;
+;   Send the location and length of the permanent pool.
+;
+         mov     #[v rsp_dymem], w0
+         gcall   cmd_put8    ;send DYMEM opcode
+         mov     #2, w0
+         gcall   cmd_put8    ;send ID for this sub-response
+
+         mov     permstart, w0
+         gcall   cmd_put16   ;ADR
+
+         mov     permlen, w0
+         gcall   cmd_put16   ;LEN
+;
+;   Send 3: adr len
 ;
 ;   ADR and LEN are the start address of a temporarily allocated block.  One
 ;   response is sent for each block.
@@ -571,10 +602,12 @@ snd_temp:                    ;back here each new temp control block
 
          mov     #[v rsp_dymem], w0
          gcall   cmd_put8    ;send DYMEM opcode
-         mov     #2, w0
+         mov     #3, w0
          gcall   cmd_put8    ;send ID for this sub-response
+
          add     w1, #[v ctrlsz], w0
          gcall   cmd_put16   ;ADR
+
          mov     [w1], w0
          gcall   cmd_put16   ;LEN
 
@@ -585,7 +618,7 @@ snd_dtemp:                   ;done sending responses for temporary blocks
 ;
 ;   Send 0
 ;
-;   This indicates the end of this series of DYMEM responses.
+;   This indicates the end of this set of DYMEM responses.
 ;
          mov     #[v rsp_dymem], w0
          gcall   cmd_put8    ;send DYMEM opcode
