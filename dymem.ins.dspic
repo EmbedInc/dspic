@@ -188,18 +188,29 @@ ini_leave:
 ;   insufficient memory available, then W0 is returned 0 and the Z flag is set.
 ;
          glbsubd dymem_alloc_perm, regf1
-
+;
+;   Check for trying to allocate 0 bytes.  This shouldn't happen, so we return
+;   failure.  That makes it more likely the underlying error in the application
+;   will be discovered.
+;
+         cp0     w0
+         bra     z, aprm_leave ;trying to allocate 0 bytes ?
+;
+;   Check whether the requested memory is available.
+;
          add     #1, w0      ;round size up to whole words
          bclr    w0, #0
 
          mov     permlen, w1 ;get size of available memory
          cp      w0, w1      ;compare requested amount to available amount
          bra     leu, aprm_fit ;new request fits, do the alloc
-;
-;   The request exceeds the available memory.
-;
+         ;
+         ;   The request exceeds the available memory.
+         ;
          mov     #0, w0      ;indicate failure
          jump    aprm_leave
+
+aprm_fit:                    ;there is enough memory to cover the request
 ;
 ;   Enough memory is available to satisfy the request.  Register contents:
 ;
@@ -209,7 +220,6 @@ ini_leave:
 ;
 ;   Do the allocation.
 ;
-aprm_fit:
          sub     w1, w0, w1  ;update remaining mem after this alloc
          mov     w1, permlen
          mov     permstart, w1 ;get start adr of available memory
@@ -242,6 +252,13 @@ aprm_leave:                  ;common exit, W0 all set
 ;   insufficient memory available, then W0 is returned 0 and the Z flag is set.
 ;
          glbsubd dymem_alloc_temp, regf1 | regf2 | regf3 | regf4 | regf5
+;
+;   Return failure if trying to allocate 0 bytes.  Allocating a 0 byte chunk
+;   would just waste 2 words for the control block, and it would be impossible
+;   to deallocate the chunk later.
+;
+         cp0     w0
+         bra     z, atmp_leave ;trying to allocate 0 bytes ?
 ;
 ;   Make the size of the whole block to allocate, not just the caller-visible
 ;   chunk.  This is rounded up to whole words.
