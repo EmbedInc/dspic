@@ -16,15 +16,19 @@
 ;
 ;   MDEV configurable subsystem for testing CAN frame reception.
 ;
-;   The integer preprocessor constant CFG_CANTEST must be the ID of the CANTEST
-;   configurable subsystem.  This configurable subsystem is not created if
-;   CFG_CANTEST does not exist.
-;
 ;   This subsystem requires exclusive access to getting received CAN frames.
 ;
-;   The subsystem configuration data is:
+;   Configuration constants:
 ;
-;    ENAB  -  The subsystem is enabled when not 0, disabled when 0.
+;     CFG_CANTEST, integer
+;
+;       ID for this MDEV configurable subsystem.  No code is generated if this
+;       constant does not exist.
+;
+;     RSP_CANFR, integer
+;
+;       CANFR response opcode.  No code is generated if this constand does not
+;       exist.
 ;
 /include "qq2.ins.dspic"
 /include "(cog)src/dspic/cantest.ins.dspic"

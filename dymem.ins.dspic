@@ -122,9 +122,49 @@ alloc    permstart           ;starting address of permanent pool
 alloc    permlen             ;length of permanent pool
 alloc    tempadr             ;address of first temp control entry, 0 = none
 alloc    heaplast            ;address of the last word address of the whole heap
+;
+;   Local state in near memory.
+;
+.section .near_dymem, bss, near ;varibles in near RAM
+
+alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_lock, 0
 
 
 .section .code_dymem, code
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro LOCK
+//
+//   Wait for the mutex to be available, then acquire it.
+//
+/macro lock
+  /write
+  /write "         ;Acquire the exclusive lock on the heap structures"
+  /write "         ;"
+[lab lockch]:                ;check the current state of the lock
+         btss    flags, #flg_lock ;currently locked ?
+         jump    [lab nolock] ;no, go acquire it
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    [lab lockch] ;back to check the lock again
+[lab nolock]:                ;not currently locked
+         bset    flags, #flg_lock ;acquire the lock
+  /write
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro UNLOCK
+//
+//   Release the lock acquired with macro UNLOCK.
+//
+/macro unlock
+         bclr    flags, #flg_lock ;release the lock on the heap data structures
+  /endmac
+
 ;*******************************************************************************
 ;
 ;   Subroutine DYMEM_INIT
@@ -139,6 +179,8 @@ alloc    heaplast            ;address of the last word address of the whole heap
 ;     W1  -  Address of the last word of the memory to use as the heap.
 ;
          glbsub  dymem_init, regf0 | regf1 | regf2
+
+         clr     flags       ;init all the local flags to off
 
          add     #1, w0      ;round start adr up to whole word boundary
          bclr    w0, #0
@@ -202,6 +244,8 @@ ini_leave:
 ;   insufficient memory available, then W0 is returned 0 and the Z flag is set.
 ;
          glbsubd dymem_alloc_perm, regf1
+
+         lock                ;get exclusive access to the heap structures
 ;
 ;   Check for trying to allocate 0 bytes.  This shouldn't happen, so we return
 ;   failure.  That makes it more likely the underlying error in the application
@@ -242,6 +286,7 @@ aprm_fit:                    ;there is enough memory to cover the request
          mov     w1, w0      ;return start of newly allocated region
 
 aprm_leave:                  ;common exit, W0 all set
+         unlock              ;release lock on the heap structures
          cp0     w0          ;set Z according to success
          leaverest
 
@@ -266,6 +311,8 @@ aprm_leave:                  ;common exit, W0 all set
 ;   insufficient memory available, then W0 is returned 0 and the Z flag is set.
 ;
          glbsubd dymem_alloc_temp, regf1 | regf2 | regf3 | regf4 | regf5
+
+         lock                ;get exclusive access to the heap structures
 ;
 ;   Return failure if trying to allocate 0 bytes.  Allocating a 0 byte chunk
 ;   would just waste 2 words for the control entry, and it would be impossible
@@ -431,6 +478,7 @@ atmp_pfit:                   ;the permanent pool is large enough
          add     w3, #[v ctrlsz], w0 ;return the start address of the new chunk
 
 atmp_leave:                  ;common exit, W0 all set
+         unlock              ;release lock on the heap structures
          cp0     w0          ;set Z according to success
          leaverest
 
@@ -443,6 +491,8 @@ atmp_leave:                  ;common exit, W0 all set
 ;   that is currently allocated.
 ;
          glbsubd dymem_dealloc, regf1 | regf2 | regf3
+
+         lock                ;get exclusive access to the heap structures
 ;
 ;   Scan the linked list of blocks looking for the one containing the address in
 ;   W0.  Register usage:
@@ -544,6 +594,7 @@ dall_pall:
          mov     w3, tempadr ;indicate there are no temporary blocks
 
 dall_leave:
+         unlock              ;release lock on the heap structures
          leaverest
 
 ;*******************************************************************************
@@ -557,6 +608,7 @@ dall_leave:
          glbsub  dymem_send, regf0 | regf1
 
          gcall   cmd_lock_out ;acquire exclusive lock on the response stream
+         lock                ;get exclusive access to the heap structures
 ;
 ;   Send 1: adr len
 ;
@@ -625,6 +677,7 @@ snd_dtemp:                   ;done sending responses for temporary blocks
          mov     #0, w0
          gcall   cmd_put8    ;send ID for this sub-response
 
+         unlock              ;release lock on the heap structures
          gcall   cmd_unlock_out ;release lock on the response stream
          leaverest
   /endif

@@ -20,6 +20,7 @@
 ;   Configuration constants.
 ;
 /const   stacksz_cantest integer = 128 ;private task stack size, bytes
+/const   cantest_stat_nomem integer = 128 ;subsystem status, didn't get dyn mem
 ;
 ;   Derived constants.
 ;
@@ -30,41 +31,21 @@
   /var local b bool
 
   /set b [exist "cfg_cantest:const"] ;subsystem ID defined ?
-  /set b [or b [exist "rsp_canfr:const"]] ;CAN frame response opcode defined ?
+  /set b [and b [exist "rsp_canfr:const"]] ;CAN frame response opcode defined ?
   /const subsys bool = b     ;create the subsystem
-
   /endblock
-
-;*******************************************************************************
-;
-;   Variables.
-;
-;*******************
-;
-;   Global state.
-;
-.section .ram_cantest, bss   ;variables in normal RAM
-
-;*******************
-;
-;   Local state.
-;
-
-;
-;   Local state in near memory.
-;
 
 
 .section .code_cantest, code
 ;*******************************************************************************
 ;
-;   Subroutine SEND_CANFR
+;   Local subroutine SEND_CANFR
 ;
 ;   Send the CANFR response for the current received CAN frame state.  The
 ;   CANIN_xxx state must be valid.
 ;
-/if [exist "rsp_canfr:const"] then
-         glbsub  send_canfr, regf0 | regf1 | regf2
+/if subsys then
+         locsub  send_canfr, regf0 | regf1 | regf2
 
          gcall   cmd_lock_out ;acquire exclusive lock on the response stream
 
