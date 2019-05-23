@@ -95,7 +95,6 @@
     /if [not [exist "debug_icdram:vcon"]] then
       /const debug_icdram bool = debug_icd
       /endif
-.equiv   debug, [if debug 1 0]
     /quit
     /endif
   //
