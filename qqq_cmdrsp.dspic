@@ -21,7 +21,13 @@
 //   resulting .as file ignored and not assembled.  The purpose of preprocessing
 //   this file is to produce the QQ2_CMDRSP.INS.PAS include file.
 //
-/const   buildname string = "qq2"
-/include [str buildname "_cmdrsp.ins.dspic"] //get the CMD_xxx and RSP_xx definitions
-/include "(cog)src/dspic/cmdrsp.ins.dspic"
+//   To simplify the dependencies, this file does NOT reference the project
+//   include file.  This means that standard constants defined in the assembler
+//   environment are not available here.  The code here and in the
+//   CMDRSP.INS.DSPIC library module does not have access to the definitions in
+//   STD.INS.DSPIC.
+//
+/const buildname string = "qq2"
+/include [str buildname "_cmdrsp.ins.dspic"] //get the CMD_xxx and RSP_xxx definitions
+/include "(cog)src/dspic/cmdrsp.ins.dspic" //write them to a Pascal include file
          .end

@@ -17,8 +17,11 @@
 //   Export the command and response opcodes as symbolic constants to the Pascal
 //   environment.
 //
+//   The code here is "stand-alone".  It does not have access to the definitions
+//   in the firmware project include file nor STD.INS.DSPIC.
+//
 
-////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////
 //
 //   Subroutine STRING_TOKEN str ind tok
 //
@@ -63,17 +66,21 @@
     /endblock
   /endsub
 
-////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////
 //
 //   Start of main routine.
 //
+/var new fnam string
 /var new sy string //bare (not qualified) symbol name
 /var new p integer //string parse index
 /var new tk string //scratch token
 /var new name string //command or response name
 /var new opc integer //opcode value
 
-/writepush [str buildname "_cmdrsp.ins.pas"]
+/set fnam [str buildname "_cmdrsp.ins.pas"]
+/writepush fnam
+/show "  Writing " fnam
+
 /write "const"
 //
 //   Do the CMD_xxx symbols.

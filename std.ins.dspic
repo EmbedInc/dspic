@@ -32,20 +32,6 @@
 ;     FREQ_INST  -  Instruction cycle frequency in Hz.  The default is
 ;       FREQ_OSC / 4.
 ;
-;     DEBUG_ICD  -  Boolean.  TRUE means built for debugging with a in-circuit
-;       debugger.  This may cause some system resources to be reserved for the
-;       debugger.  NOPs are added to some macros to make it appear the debugger
-;       can stop on the macro when it actually skids a instruction or two.  The
-;       default is FALSE.
-;
-;     DEBUG_ICDRAM  -  Forces the chunk of near memory used by the ICD to be
-;       reserved by the linker.  This is forced to TRUE when DEBUG_ICD is set,
-;       and otherwise defaults to FALSE.
-;
-;     DEBUG  -  Boolean.  TRUE means built for source level debugging.  This
-;       does not imply support for the ICD or RealIce is required.  DEBUG is
-;       forced to TRUE if DEBUG_ICD is TRUE.
-;
 ;     USING_C30  -  Boolean.  The firmware build includes C30 modules, not just
 ;       ASM30 modules.  This may cause additional C callable entry points to be
 ;       defined for some standard subsystems.  Defaults to FALSE.
@@ -53,30 +39,81 @@
 ;     USING_XC16  -  Boolean.  Just like USING_C30, except for the XC16 compiler
 ;       instead of the C30 compiler.
 ;
-/if [not [exist "freq_inst"]] then
-  /const freq_inst real = [/ freq_osc 4]
-  /endif
 
-/if [not [exist "debug_icd"]] then
-  /const debug_icd bool = false
-  /endif
-/if [exist "debug_icdram"] then
-  /if [and debug_icd [not debug_icdram]] then
-    /del debug_icdram
+////////////////////////////////////////
+//
+//   Set up the debugging environment.
+//
+//   If any DEBUG_xxx constants exist, then it is assumed that the old system
+//   for setting debug switches is in use.  Otherwise, the MAKE_DEBUG program is
+//   run to create the debug switches.  Either way, the new constant DEBUGGING
+//   is always created.
+//
+/block
+  /var local dbg bool = false //found at least one DEBUG_xxx constant
+  /var local dbgon bool = false //OR of all DEBUG_xxx constants
+  /var local sy string       //scratch symbol name
+  /var local fnam string     //scratch file name
+  /loop symbols sym const
+    /set sy [sym sym name]
+    /if [< [slen sy] 7] then
+      /repeat
+      /endif
+    /if [<> [substr 1 6 sy] "debug_"] then
+      /repeat
+      /endif
+    /if [<> [sym sym dtype] "BOOL"] then
+      /repeat
+      /endif
+    /set dbg True
+    /set dbgon [or dbgon [chars sym]]
+    /endloop
+
+  /if dbg then               //old style debug switches in use ?
+    /if [<> [evar "debug"] ""] then
+      /show "  *** ERROR ***"
+      /show "  Using the DEBUG environment variable is incompatible with debug switches"
+      /show "  set in the project include file."
+         .error  "Debug"
+         .end
+      /stop
+      /endif
+    /if [not [exist "debugging:const"]] then
+      /const debugging bool = dbgon
+      /endif
+    /if [not [exist "debug:const"]] then
+      /const debug bool = debugging
+      /endif
+    /if [not [exist "debug_icd:const"]] then
+      /const debug_icd bool = false
+      /endif
+    /if [exist "debug_icdram:vcon"] then
+      /if [and debug_icd [not debug_icdram]] then
+        /del debug_icdram
+        /endif
+      /endif
+    /if [not [exist "debug_icdram:vcon"]] then
+      /const debug_icdram bool = debug_icd
+      /endif
+.equiv   debug, [if debug 1 0]
+    /quit
     /endif
-  /endif
-/if [not [exist "debug_icdram"]] then
-  /const debug_icdram bool = debug_icd
-  /endif
+  //
+  //   The debug switches are defined via the DEBUG environment variable.
+  //
+  /set fnam [str "(cog)src/" srcdir "/debug_" buildname ".ins.dspic"]
+  /run "make_debug """ fnam """ icd"
+  /include fnam
+  /endblock
 
-/if [not [exist "debug"]] then
-  /const debug bool = false
-  /endif
-/var new dbg bool = debug
-/del debug
-/const   debug   bool = [or dbg debug_icd]
-/del dbg
+.equiv   debugging, [if debugging 1 0]
+.equiv   debug, [if debugging 1 0]
+.equiv   debug_icd, [if debug_icd 1 0]
 
+////////////////////////////////////////
+//
+//   Set up other constants.
+//
 /if [not [exist "using_c30"]] then
   /const using_c30 bool = false
   /endif
@@ -85,7 +122,9 @@
   /endif
 /const   using_c bool = [or using_c30 using_xc16]
 
-.equiv   debug_icd, [if debug_icd 1 0]
+/if [not [exist "freq_inst"]] then
+  /const freq_inst real = [/ freq_osc 4]
+  /endif
 
 /if [not [exist "dymem_heap:const"]] then
   /const dymem_heap bool = [exist "minstack0:const"]
@@ -106,8 +145,8 @@
 ;
 ;   Macro NOSKID
 ;
-.macro noskid
-  .if debug_icd
+.macro   noskid
+  .if debug
          nop
          nop
     .endif
@@ -739,7 +778,8 @@
 /macro fpload
   /if [exist -1 arg] then
     /show "  Dumb place for a label, moron."
-         .error  "Dumb label"
+    /show "  The " [ucase [qstr [arg 0]]] " macro does not support a label."
+         .error  "Label"
          .end
     /stop
     /endif
@@ -788,7 +828,8 @@
 /macro fpput
   /if [exist -1 arg] then
     /show "  Dumb place for a label, moron."
-         .error  "Dumb label"
+    /show "  The " [ucase [qstr [arg 0]]] " macro does not support a label."
+         .error  "Label"
          .end
     /stop
     /endif
@@ -832,7 +873,8 @@
 /macro fpget
   /if [exist -1 arg] then
     /show "  Dumb place for a label, moron."
-         .error  "Dumb label"
+    /show "  The " [ucase [qstr [arg 0]]] " macro does not support a label."
+         .error  "Label"
          .end
     /stop
     /endif
@@ -955,8 +997,8 @@
 //
 /macro waitcy
   /if [exist -1 arg] then
-    /show "Dumb place for a label, moron.  The " [qstr [ucase [arg -1] " macro does"
-    /show "not support a label."
+    /show "  Dumb place for a label, moron."
+    /show "  The " [ucase [qstr [arg 0]]] " macro does not support a label."
          .error  "Label"
     /stop
     /endif
@@ -1001,8 +1043,8 @@
 //
 /macro busywait
   /if [exist -1 arg] then
-    /show "Dumb place for a label, moron.  The " [qstr [ucase [arg -1] " macro does"
-    /show "not support a label."
+    /show "  Dumb place for a label, moron."
+    /show "  The " [ucase [qstr [arg 0]]] " macro does not support a label."
          .error  "Label"
     /stop
     /endif
@@ -1031,8 +1073,8 @@
 //
 /macro minwait
   /if [exist -1 arg] then
-    /show "Dumb place for a label, moron.  The " [qstr [ucase [arg -1] " macro does"
-    /show "not support a label."
+    /show "  Dumb place for a label, moron."
+    /show "  The " [ucase [qstr [arg 0]]] " macro does not support a label."
          .error  "Label"
     /stop
     /endif
@@ -1463,7 +1505,7 @@ _\name:
 ;   Macro SELECT_OUTPIN n, id
 ;
 ;   Configure the RPn pin to the peripheral output identified by ID.  N must be
-;   the 0-63 remappable pin number, and ID must be the ID of the perpheral
+;   the 0-63 remappable pin number, and ID must be the ID of the peripheral
 ;   output to map to that pin.  Only the selection for the indicated pin is
 ;   changed.  Other selections in the same register are preserved.
 ;
@@ -1672,12 +1714,7 @@ _\name:
 //   All registers are preserved to the dispatched routine or the fall-thru
 //   code.
 //
-/var new dispatch_unique_n integer = 0
-
 /macro dispatch
-  /set dispatch_unique_n [+ dispatch_unique_n 1] ;make unique number this invocation
-  /var local after string = [str "dispatchlabel" dispatch_unique_n]
-  /var local s string
   /var local maxind integer = 16#FFFF
   /if [exist 2 arg] then
     /set maxind [arg 2]
@@ -1687,14 +1724,12 @@ _\name:
          ;   Dispatch to specific routine based on the value in W0.
          ;
          add     #4, w15     ;make room on stack for the jump address
-         push    w1          ;save registers that will be trashed
+         push    w1          ;save register that will be trashed
+
   /if [<> maxind 16#FFFF] then
          mov     #[v maxind], w1 ;get max valid dispatch value
          cp      w0, w1
-         bra     leu, $+8    ;within range, continue ?
-         pop     w1          ;restore trashed register
-         sub     #4, w15     ;remove jump address placeholder from stack
-         jump    [chars after] ;go to immediately after this macro
+         bra     gtu, [lab outrange] ;index is out of range of the table ?
     /endif
 
          push    w2          ;save additional register that will be trashed
@@ -1703,9 +1738,10 @@ _\name:
          mov     #tbloffset([arg 1]), w1 ;get table address into W2:W1
          mov     #tblpage([arg 1]), w2
     /else                    ;table is implied to be immediately after this macro
-         mov     #tbloffset([chars after]), w1 ;get table address into W2:W1
-         mov     #tblpage([chars after]), w2
+         mov     #tbloffset([lab after]), w1 ;get table address into W2:W1
+         mov     #tblpage([lab after]), w2
     /endif
+         and     #0x7F, w2   ;remove control bits sometimes left by TBLPAGE
          add     w1, w0, w1  ;add 2x index to make the table entry address
          addc    #0, w2
          add     w1, w0, w1
@@ -1720,10 +1756,14 @@ _\name:
          pop     w1
          return              ;jump to the address written onto the stack
 
-  /set s [str after ":"]
-  /call startcomm s
-  /set s [str s "first instruction after DISPATCH macro"]
-  /write s
+  /if [<> maxind 16#FFFF] then
+[lab outrange]:              ;index value is out of range of the table
+         pop     w1          ;restore trashed register
+         sub     #4, w15     ;remove placeholder for jump address from the stack
+    /endif
+
+[lab after]:                 ;first address after this macro
+  /write
   /endmac
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1880,14 +1920,14 @@ _\name:
 //   defined.  ENTPNT is a sequence of characters, not a string.
 //
 /function Command
-/if [CmdRef [arg 1]]
-  /then
-    /funcval TRUE
+  /if [CmdRef [arg 1]]
+    /then
+      /funcval TRUE
          glbent  [arg 1]
-  /else
-    /funcval FALSE
-  /endif
-/endfunc
+    /else
+      /funcval FALSE
+    /endif
+  /endfunc
 
 ////////////////////////////////////////////////////////////////////////////////
 //
