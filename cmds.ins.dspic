@@ -110,7 +110,7 @@ allocg   usb_fwseq           ;USB converter firmware sequence number
 ;
 /if [Command cm_ping] then
          gcall   [chars cmd]_lock_out
-         mov     #rsp_pong, w0
+         mov     #[v rsp_pong], w0
          gcall   [chars cmd]_put8 ;send the PONG response
          return
   /endif
@@ -130,7 +130,7 @@ allocg   usb_fwseq           ;USB converter firmware sequence number
 
          gcall   [chars cmd]_lock_out
 
-         mov     #rsp_fwinfo, w0
+         mov     #[v rsp_fwinfo], w0
          gcall   [chars cmd]_put8 ;FWINFO opcode
          mov     #fwtype, w0
          gcall   [chars cmd]_put8 ;firmare type ID
@@ -144,7 +144,7 @@ allocg   usb_fwseq           ;USB converter firmware sequence number
          cp0     w0
          bra     z, fwi_dusb ;USB device firmware info is unknown ?
 
-         mov     #rsp_fwinfo, w0
+         mov     #[v rsp_fwinfo], w0
          gcall   [chars cmd]_put8 ;FWINFO opcode
          mov     usb_fwtype, w0
          gcall   [chars cmd]_put8 ;firmare type ID
@@ -191,7 +191,7 @@ fwi_dusb:                    ;done sending USB device firmware info
     /endif
 
          gcall   [chars cmd]_lock_out
-         mov     #rsp_name, w0
+         mov     #[v rsp_name], w0
          gcall   [chars cmd]_put8 ;send NAME response opcode
          mov     #[slen devname], w0
          gcall   [chars cmd]_put8 ;send length of string to follow

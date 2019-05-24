@@ -532,7 +532,7 @@ cmd_drain_done:
          mov     #[v sendnnop], w1 ;init number of NOPs left to send
          gcall   [chars cmd]_lock_out ;acquire exclusive lock on the response stream
 loop_nop:
-         mov     #rsp[chars suff]_nop, w0
+         mov     #[v rsp[chars suff]_nop], w0
          gcall   [chars cmd]_put8 ;send one NOP
          sub     #1, w1      ;count one less NOP left to send
          bra     nz, loop_nop ;back to send the next NOP

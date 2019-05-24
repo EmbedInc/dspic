@@ -103,6 +103,7 @@
   /set fnam [str "(cog)src/" srcdir "/debug_" buildname ".ins.dspic"]
   /run "make_debug """ fnam """ icd"
   /include fnam
+  /const debug bool = debugging //for compatibility with old code
   /endblock
 
 .equiv   debugging, [if debugging 1 0]
