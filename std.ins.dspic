@@ -52,8 +52,8 @@
 /block
   /var local dbg bool = false //found at least one DEBUG_xxx constant
   /var local dbgon bool = false //OR of all DEBUG_xxx constants
-  /var local sy string       //scratch symbol name
-  /var local fnam string     //scratch file name
+  /var local sy string //scratch symbol name
+  /var local fnam string //scratch file name
   /loop symbols sym const
     /set sy [sym sym name]
     /if [< [slen sy] 7] then
@@ -69,7 +69,7 @@
     /set dbgon [or dbgon [chars sym]]
     /endloop
 
-  /if dbg then               //old style debug switches in use ?
+  /if dbg then //old style debug switches in use ?
     /if [<> [evar "debug"] ""] then
       /show "  *** ERROR ***"
       /show "  Using the DEBUG environment variable is incompatible with debug switches"
@@ -107,7 +107,7 @@
   /endblock
 
 .equiv   debugging, [if debugging 1 0]
-.equiv   debug, [if debugging 1 0]
+.equiv   debug,  [if debugging 1 0]
 .equiv   debug_icd, [if debug_icd 1 0]
 
 ////////////////////////////////////////
@@ -145,7 +145,7 @@
 ;
 ;   Macro NOSKID
 ;
-.macro   noskid
+.macro noskid
   .if debug
          nop
          nop
@@ -1920,14 +1920,14 @@ _\name:
 //   defined.  ENTPNT is a sequence of characters, not a string.
 //
 /function Command
-  /if [CmdRef [arg 1]]
-    /then
-      /funcval TRUE
+/if [CmdRef [arg 1]]
+  /then
+    /funcval TRUE
          glbent  [arg 1]
-    /else
-      /funcval FALSE
-    /endif
-  /endfunc
+  /else
+    /funcval FALSE
+  /endif
+/endfunc
 
 ////////////////////////////////////////////////////////////////////////////////
 //

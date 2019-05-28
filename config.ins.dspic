@@ -673,7 +673,7 @@ sind_leave:
          glbsub  config_ovr0_window, regf0 | regf1
 
          gcall   cmd_lock_out ;acquire the lock on the response stream to the host
-         mov     #rsp_cfgovr0, w0 ;get the CFGOVR0 response opcode
+         mov     #[v rsp_cfgovr0], w0 ;get the CFGOVR0 response opcode
          setflag cfgovr0     ;enable the CFGOVR0 command
          gcall   cmd_put8    ;send the CFGOVR0 response
          gcall   cmd_unlock_out ;release lock on response stream to host
@@ -741,7 +741,7 @@ config_stat glbentd
          gcall   cmd_lock_out ;acquire lock on response stream to host
 
          push    w0          ;temp save subsystem ID
-         mov     #rsp_cfgstat, w0
+         mov     #[v rsp_cfgstat], w0
          gcall   cmd_put8    ;send CFGSTAT response opcode
          pop     w0
 
@@ -865,7 +865,7 @@ cfgsys_done:
          mov     w0, w2      ;save the number of config bytes in W2
 
          gcall   cmd_lock_out ;acquire exclusive lock on response stream
-         mov     #rsp_cfg, w0
+         mov     #[v rsp_cfg], w0
          gcall   cmd_put8    ;send CFG response opcode
          mov     w1, w0
          gcall   cmd_put8    ;send config ID

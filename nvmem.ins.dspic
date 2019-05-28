@@ -292,7 +292,7 @@ er_is:                       ;skip to here if memory already erased
 ;
 /if [Command cm_nvmem_appsize] then
          gcall   cmd_lock_out ;acquire lock on the response stream
-         mov     #rsp_nvmem_appsize, w0
+         mov     #[v rsp_nvmem_appsize], w0
          gcall   cmd_put8    ;send NVMEM_APPSIZE response opcode
 
          gcall   nvol_size   ;get size of whole non-volatile memory into W1:W0
@@ -323,7 +323,7 @@ er_is:                       ;skip to here if memory already erased
          subb    #0, w2
 
          gcall   cmd_lock_out ;acquire lock on response stream
-         mov     #rsp_nvmem_stat, w0
+         mov     #[v rsp_nvmem_stat], w0
          gcall   cmd_put8    ;send NVMEM_STAT response opcode
 
          mov     #[v crcsize], w3 ;init number of checksum bytes left to send
@@ -413,7 +413,7 @@ nvu_nfound:
 ;
 nvu_send:
          gcall   cmd_lock_out ;acquire lock on the response stream
-         mov     #rsp_nvmem_used, w0
+         mov     #[v rsp_nvmem_used], w0
          gcall   cmd_put8    ;send NVMEM_USED response opcode
          mov     w1, w0      ;move the 32 bit value to send into W1:W0
          mov     w2, w1

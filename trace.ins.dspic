@@ -371,7 +371,7 @@ sam_leave:                   ;common exit point for routine TRACE_SAMPLE
          skip_nflag tracefull
          setflag tracesent   ;indicate this trace has been sent
 
-         mov     #rsp_trace, w0 ;send response opcode
+         mov     #[v rsp_trace], w0 ;send response opcode
          gcall   cmd_put8
 
          mov     nsamp, w0   ;send number of samples

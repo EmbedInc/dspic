@@ -111,7 +111,7 @@
 ;     W3  -  Number of bytes left to do.
 ;
          gcall   cmd_lock_out ;acquire lock on response stream
-         mov     #rsp_nvol, w0 ;send NVOL response opcode
+         mov     #[v rsp_nvol], w0 ;send NVOL response opcode
          gcall   cmd_put8
          mov     w2, w0      ;send high word of address
          gcall   cmd_put16
@@ -211,7 +211,7 @@ nvwbuf_byte:                 ;back here to write each byte to non-volatile memor
 ;
 /if [Command cm_nvsize] then
          gcall   cmd_lock_out ;acquire exclusive lock on response stream
-         mov     #rsp_nvsize, w0
+         mov     #[v rsp_nvsize], w0
          gcall   cmd_put8    ;send NVSIZE response opcode
 
          mov     #[and nvbytes 16#FFFF], w0 ;get NV size into W1:W0

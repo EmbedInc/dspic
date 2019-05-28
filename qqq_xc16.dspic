@@ -116,7 +116,7 @@ db0_len:                     ;back here to check each new byte
 ;   Send the DBG0 response.
 ;
          gcall   cmd_lock_out ;acquire lock on response stream
-         mov     #rsp_dbg0, w0
+         mov     #[v rsp_dbg0], w0
          gcall   cmd_put8    ;DBG0 response opcode
          mov     w2, w0
          gcall   cmd_put8    ;number of characters in the string
@@ -179,7 +179,7 @@ db1_len:                     ;back here to check each new byte
 ;   Send the DBG1 response.
 ;
          gcall   cmd_lock_out ;acquire lock on response stream
-         mov     #rsp_dbg1, w0
+         mov     #[v rsp_dbg1], w0
          gcall   cmd_put8    ;DBG1 response opcode
          mov     w2, w0
          gcall   cmd_put16   ;data word from caller
@@ -247,7 +247,7 @@ db2_len:                     ;back here to check each new byte
 ;   Send the DBG2 response.
 ;
          gcall   cmd_lock_out ;acquire lock on response stream
-         mov     #rsp_dbg2, w0
+         mov     #[v rsp_dbg2], w0
          gcall   cmd_put8    ;DBG2 response opcode
          mov     w4, w0
          gcall   cmd_put16   ;high words of 32 bit data

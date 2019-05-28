@@ -27,7 +27,7 @@
 //   CMDRSP.INS.DSPIC library module does not have access to the definitions in
 //   STD.INS.DSPIC.
 //
-/const buildname string = "qq2"
+/const   buildname string = "qq2"
 /include [str buildname "_cmdrsp.ins.dspic"] //get the CMD_xxx and RSP_xxx definitions
 /include "(cog)src/dspic/cmdrsp.ins.dspic" //write them to a Pascal include file
          .end
