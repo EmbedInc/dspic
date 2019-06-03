@@ -1005,7 +1005,7 @@
   /var local n integer = [arg 1]
   /var local s string
 
-  /if [< n 0] then
+  /if [<= n 0] then
     /quitmac                 ;nothing to do ?
     /endif
   //
@@ -1086,7 +1086,7 @@
   /var local cy integer      ;number of instructions to wait
 
   /set cy [trunc [+ [* time freq_inst] 0.999]] ;total cycles to wait
-  /set cy [max 0 [- cy mincy]] ;minus cycles already waited
+  /set cy [- cy mincy]       ;minus cycles already waited
          waitcy  [v cy]      ;write the instructions to do the wait
   /endmac
 
