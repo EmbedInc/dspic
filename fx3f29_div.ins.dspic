@@ -1,0 +1,116 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fx3f29_div_ins:const"]] then
+  /const fx3f29_div_ins bool = true
+
+
+.section .code_fx3f29_div, code
+;*******************************************************************************
+;
+;   Subroutine FX3F29_DIVU
+;
+;   Fixed point 3.29 format unsigned divide.
+;
+;   W1:W0 / W3:W2 --> W1:W0
+;
+         glbsub  fx3f29_divu, regf2 | regf3 | regf4 | regf5 | regf6
+;
+;   This hardware can't divide by a 32 bit value, so we will do it out the long
+;   way.  Register usage:
+;
+;     W1:W0  -  Quotient.  As each new quotient bit is generated, it is shifted
+;       into the LSB.
+;
+;     W3:W2  -  Denominator.
+;
+;     W5:W4  -  Numerator.  Each iteration, the quotient bit is 1 when this
+;       value is greater than or equal to the adjusted denominator in W3:W2.
+;       When the quotient bit is 1, the denominator is subtracted from this
+;       numerator.  Each iteration, this numerator is shifted left 1 bit.
+;
+;     W6  -  Number of quotient bits left to generate.
+;
+         mov.d   w0, w4      ;init numerator
+;
+;   If both input values are equal, then the first quotient bit generated will
+;   be 1 with the remaining quotient bits 0.  This means the native result is
+;   in 1.31 fixed point format.  The desired 3.29 bit format can be achieved by
+;   shifting the denominator left 2 bits before the divide.  However, if that
+;   would shift a 1 bit out, then the numerator must be shifted right instead.
+;
+         btsc    w3, #15     ;OK to shift denominator left ?
+         jump    divu_numr2  ;no, shift numerator right instead
+         sl      w2, w2      ;shift denominator left 1 bit
+         rlc     w3, w3
+
+         btsc    w3, #15     ;OK to shift denominator left ?
+         jump    divu_numr1  ;no, shift numerator right instead
+         sl      w2, w2      ;shift denominator left 1 bit
+         rlc     w3, w3
+         jump    divu_dshift ;done shifting denominator
+
+divu_numr2:                  ;shift the numerator right 2 bits
+         lsr     w5, w5
+         rrc     w4, w4
+divu_numr1:                  ;shift the numerator right 1 bit
+         lsr     w5, w5
+         rrc     w4, w4
+
+divu_dshift:                 ;done shifting the denominator and numerator
+;
+;   Do the divide.  One quotient bit is generated each loop iteration.
+;
+         mov     #32, w6     ;init number of quotient bits left to make
+
+divu_qbit:                   ;back here to make each new quotient bit
+         sl      w0, w0      ;create new quotient bit, init it to 0
+         rlc     w1, w1
+
+         cp      w4, w2      ;compare numerator to denominator
+         cpb     w5, w3
+         bra     ltu, divu_qbnext ;this quotient bit is 0, on to next
+         ;
+         ;   This quotient bit is 1.
+         ;
+         bset    w0, #0      ;set this quotient bit to 1
+         sub     w4, w2, w4  ;remove denominator from the numerator
+         subb    w5, w3, w5
+
+divu_qbnext:                 ;update state for next quotient bit
+         sl      w4, w4      ;shift numerator left 1 bit
+         rlc     w5, w5
+         bra     c, divu_ovfl ;shifted out a 1 bit, overflow ?
+         sub     #1, w6      ;count one less quotient bit left to do
+         bra     nz, divu_qbit ;back to do the next quotient bit
+;
+;   Round the result.  This means adding 1 to the quotient if the next quotient
+;   bit would be 1.
+;
+         cp      w4, w2      ;clear borrow (set C) if NUM >= DEN (next bit would be 1)
+         cpb     w5, w3
+         addc    #0, w0      ;add the rounding bit
+         addc    #0, w1
+
+divu_leave:
+         leaverest
+
+divu_ovfl:                   ;overflow
+         mov     #0xFFFF, w0 ;return the maximum possible value
+         mov     #0xFFFF, w1
+         jump    divu_leave
+
+  /endif                     ;end of file interlock

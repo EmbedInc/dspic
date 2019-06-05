@@ -1,0 +1,47 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Fixed point 3.29 format math routines.
+;
+;   These routines generally work on the two input values being W1:W0 and W3:W2,
+;   with the result written to W1:W0.
+;
+/include "qq2.ins.dspic"
+;
+;   Each routine is in a separate include file so only those routines actually
+;   used will be included in the build.  This file should only reference the
+;   include files for the routines that are directly called by the application.
+;   Some of these routines call others, but those automatically cause the files
+;   for implicitly called routines to be included.  Each file contains a
+;   interlock so that no harm is done by referencing a file more than once.
+;
+/include "(cog)src/dspic/fx3f29_div.ins.dspic"
+/include "(cog)src/dspic/fx3f29_mul.ins.dspic"
+;
+;   The firmware build script will need to grab all the files that are
+;   ultimately used, including from any implicit dependencies.  The commands to
+;   get the complete set of files is given here for easy copying into the build
+;   script.  No harm is done if unused files are grabbed.  These will not be
+;   included in the build unless actually referenced.
+;
+/if false then
+
+call     src_get_ins_dspic dspic fx3f29_div
+call     src_get_ins_dspic dspic fx3f29_mul
+
+  /endif
+
+         .end

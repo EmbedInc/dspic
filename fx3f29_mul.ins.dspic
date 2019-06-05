@@ -1,0 +1,102 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fx3f29_mul_ins:const"]] then
+  /const fx3f29_mul_ins bool = true
+
+
+.section .code_fx3f29_mul, code
+;*******************************************************************************
+;
+;   Subroutine FX3F29_MULU
+;
+;   Fixed point 3.29 format unsigned multiply.
+;
+;   W1:W0 * W3:W2 --> W1:W0
+;
+         glbsub  fx3f29_mulu, regf4 | regf5 | regf6 | regf7 | regf8
+;
+;   4 separate 16x16 bit multiplies are performed, with their high and low
+;   result words combined as follows:
+;
+;     W1*W3(H)   W1*W3(L)
+;                W1*W2(H)   W1*W2(L)
+;                W0*W3(H)   W0*W3(L)
+;                           W0*W2(H)   W0*W2(L)
+;     --------   --------   --------   --------
+;           W5         W4         W8
+;           W1         W0
+;
+;   Since the input values each have 29 fraction bits, the result will have 58
+;   fraction bits, thereby leaving 6 integer bits.  The raw 64 bit result from
+;   above is shifted 3 bits left.  Only the upper 32 bits are kept.  The next
+;   lower bit is used to round the high 32 bits, with the remaining low bits
+;   discarded.
+;
+         mul.uu  w1, w3, w4  ;init high result words with high product
+
+         mul.uu  w1, w2, w6  ;make first middle product in W7:W6
+         mov     w6, w8      ;init result low word
+         add     w4, w7, w4  ;add it into the accumulator
+         addc    #0, w5
+
+         mul.uu  w0, w3, w6  ;make second middle product in W7:W6
+         add     w8, w6, w8  ;add it into the accumulator
+         addc    w4, w7, w4
+         addc    #0, w5
+
+         mul.uu  w0, w2, w6  ;make low product in W7:W6
+         add     w8, w7, w8  ;add it into result, move high words into W1:W0
+         addc    w4, #0, w0
+         addc    w5, #0, w1
+;
+;   The high 48 bits of the product are in W1:W0:W8 with 6 integer bits.
+;
+;   Shift this left 3 bits to restore the 3.29 fixed point format.
+;
+         ;
+         ;   Check for overflow.  If the high 3 bits are not 0, then the
+         ;   result is too large to represent.
+         ;
+         lsr     w1, #13, w4 ;extract just the high 3 bits
+         bra     nz, mulu_ovfl ;not zero, overflow ?
+         ;
+         ;   Do the shift.
+         ;
+         sl      w1, #3, w1  ;set high bits of high word
+         lsr     w0, #13, w4 ;move low bits of high word into place
+         ior     w1, w4, w1  ;merge them into high word
+
+         sl      w0, #3, w0  ;set high bits of low word
+         lsr     w8, #13, w4 ;move low bits of low word into place
+         ior     w0, w4, w0  ;merge them into low word
+;
+;   Round the 32 bits result in W1:W0.  Due to the left shift of 3 bits, the
+;   next lower bit is in W8<12>.
+;
+         btst.c  w8, #12     ;move the rounding bit into C
+         addc    #0, w0      ;do the rounding
+         addc    #0, w1
+
+mulu_leave:
+         leaverest
+
+mulu_ovfl:                   ;overflow
+         mov     #0xFFFF, w0 ;return maximum unsigned value
+         mov     #0xFFFF, w1
+         jump    mulu_leave
+
+  /endif                     ;end of file interlock
