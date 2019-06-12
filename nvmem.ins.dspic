@@ -203,6 +203,33 @@ ckp_byte:                    ;back here each new byte to add to the checksum
 
 ;*******************************************************************************
 ;
+;   Subroutine NVMEM_READY
+;
+;   Set up the non-volatile memory ready for app use.
+;
+;   The checksum is checked.  If it checks, the flags are set accordingly and
+;   nothing more is done.  If the checksum test fails, then the memory is erased
+;   and the flags set accordingly.
+;
+;   After this call, applications should check the NVVALID flag.  If set, they
+;   can read configuration data from the non-volatile memory.  If cleared,
+;   default data should be written to the non-volatile memory.
+;
+         glbsub  nvmem_ready
+
+         mcall   nvmem_check ;check the data and checksum, set flags accordingly
+         skip_nflag nvvalid  ;the data is corrupt ?
+         jump    rdy_leave   ;the data is intact, nothing more to do
+;
+;   The non-volatile memory is corrupt.
+;
+         mcall   nvmem_erase ;erase the whole memory, if not already erased
+
+rdy_leave:
+         leaverest
+
+;*******************************************************************************
+;
 ;   Subroutine NVMEM_CKSUM_SET
 ;
 ;   Set the non-volatile memory checksum for the current contents of the memory.

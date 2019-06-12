@@ -27,6 +27,11 @@
 ;       is set if all nv memory bits are set to 1 (the erased state), and
 ;       cleared otherwise.
 ;
+;     NVMEM_READY
+;
+;       Get the non-volatile memory ready for use.  The flags are set according
+;       to the memory contents.  If the memory is corrupt, then it is erased.
+;
 ;     NVMEM_CKSUM_SET
 ;
 ;       Set the checksum according to the current nv memory contents.  The
@@ -47,6 +52,20 @@
 ;       Erases the non-volatile memory unless it is already known to be erased,
 ;       according to the NVERASED flag.  Other state kept by the NVMEM module is
 ;       updated accordingly.
+;
+;   Global flags
+;
+;     NVVALID
+;
+;       The non-volatile memory contents appears to be valid (checksum checks).
+;
+;     NVERASED
+;
+;       The whole non-volatile memory is erased.
+;
+;     NVWRCKS
+;
+;       The non-volatile memory has been written to sinc the last checksum test.
 ;
 ;   The following commands are implemented, depending on being enabled by their
 ;   CMD_xxx constants:

@@ -1257,12 +1257,11 @@ _\name:
   /set struct_align [max struct_align align] ;update alignment of whole structure
 
   /call align_adr [v struct_offset] [v align] struct_offset
+  /const [chars name] integer = struct_offset
 .equiv   [chars name], [v struct_offset]
 
   /set struct_offset [+ struct_offset size]
   /call align_adr [v struct_offset] [v struct_align] struct_size
-
-.set     struct_offset, [v struct_offset]
   /endmac
 
 ;********************
@@ -2965,8 +2964,8 @@ _\name:                      ;define the C30 entry point label
          field   fifob_ofs_put, 1 ;buffer offset where to write next data byte
          field   fifob_ofs_get, 1 ;buffer offset where to read next data byte from
 
-.equiv   fifob_ofs_buf, struct_offset ;start of data buffer
-.equiv   fifob_size, struct_offset ;size of FIFO without the data buffer
+.equiv   fifob_ofs_buf, [v struct_offset] ;start of data buffer
+.equiv   fifob_size, [v struct_offset] ;size of FIFO without the data buffer
 
 ;********************
 ;
