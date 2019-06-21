@@ -1,0 +1,59 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32_flt32s_ins"]] then
+  /const fp32_flt32s_ins bool = true
+
+  /include "(cog)src/dspic/fp32_flt32u.ins.dspic"
+
+.section .code_fp32_flt32s, code
+;*******************************************************************************
+;
+;   Subroutine FP32_FLT32S
+;
+;   Convert a 32 bit signed fixed point value to IEEE 32 bit floating point.
+;
+;   On entry:
+;
+;     W1:W0  -  Fixed point input value.
+;
+;     W2  -  Number of fraction bits in the fixed point input value.  This can
+;       be negative to indicate the binary point is some bits right of the LSB
+;       of the fixed point value.
+;
+;   On return:
+;
+;     W1:W0  -  IEEE 32 bit floating point value.
+;
+         glbsub  fp32_flt32s
+
+         btsc    w2, #15     ;zero or positive ?
+         jump    flt32s_neg  ;negative
+;
+;   The input value is positive.
+;
+         gcall   fp32_flt48u ;convert as unsigned
+         return
+;
+;   The input value is negative.
+;
+flt32s_neg:
+         subr    w0, #0, w0  ;flip the sign of the input value
+         subbr   w1, #0, w1
+         gcall   fp32_flt48u ;convert the positive value to floating point
+         bset    w1, #15     ;set the sign of the result to negative
+         return
+  /endif

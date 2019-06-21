@@ -1,0 +1,171 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32_flt32u_ins"]] then
+  /const fp32_flt32u_ins bool = true
+
+.section .code_fp32_flt32u, code
+;*******************************************************************************
+;
+;   Subroutine FP32_FLT32U
+;
+;   Convert a 32 bit (2 16-bit word) unsigned fixed point value to IEEE 32 bit
+;   floating point.
+;
+;   On entry:
+;
+;     W1:W0  -  Fixed point input value.
+;
+;     W2  -  Number of fraction bits in the fixed point input value.  This can
+;       be negative to indicate the binary point is some bits right of the LSB
+;       of the fixed point value.
+;
+;   On return:
+;
+;     W1:W0  -  IEEE 32 bit floating point value.
+;
+         glbsub  fp32_flt32u, regf2 | regf3 | regf4 | regf5
+;
+;   Check for the special case of 0.  Later code requires at least one bit to be
+;   set somewhere in the input number.
+;
+         cp      w0, #0
+         cpb     w1, #0
+         bra     z, flt32u_zero ;is zero special case ?
+;
+;   Initialize the floating point exponent field value in W2.  This will be
+;   initialized as if the highest 1 bit is in bit 7 of the high word (bit 7 of
+;   W1) since this is the position that requires no shifting to make the
+;   mantissa from W1:W0.
+;
+;   Higher values of W2 result in a lower exponent.  The W2 value of 23 means
+;   that the bits in W1:W0 are already in the right position for the floating
+;   point mantissa.  That would result in a exponent field value of 127.  We
+;   therefore compute 150 - W2 to initialize the exponent field value in W2.
+;
+         mov     #150, w4    ;get value to subtract from
+         sub     w4, w2, w2  ;init exponent field for mantissa in curr position
+;
+;   Find the most significant 1 bit.  W3 will be set to the number of bits in
+;   from the left of the first 1 bit in W1.  The input value is shifted a whole
+;   word left if necessary to guarantee the highest 1 bit is in W1.  The zero
+;   special case was handled earlier, so there is a 1 bit guaranteed to be
+;   somewhere in W1:W0.
+;
+;   W3 will be 1 if the highest bit is in the MSB of W2 and 16 if it is in the
+;   LSB.
+;
+         ff1l    w1, w3      ;make number of bits in from left of first 1 bit
+         bra     nc, flt32u_hw1 ;the first 1 is in the high word ?
+         ;
+         ;   The high word is 0.  Shift up one word and retry.
+         ;
+         mov     w0, w1      ;shift mantissa left one word
+         mov     #0, w0
+         sub     #16, w2     ;update the exponent to compensate
+
+         ff1l    w1, w3      ;make number of bits in from left of first 1 bit
+
+flt32u_hw1:                  ;highest 1 bit is W3 bits in from left of W2
+;
+;   The highest 1 bit is W3 bits in from the left end of W2.  W1:W0 needs to be
+;   shifted so that this is in bit 7, which would correspond to a W3 value of
+;   9.  Therefore, if W3 is 9, the mantissa is already in place.  If it is less
+;   than 9, the mantissa must be shifted right.  If it is more than 9 the
+;   mantissa must be shifted left.
+;
+;   Now shift the mantissa in W1:W0 so that the highest bit ends up in bit 7 of
+;   W1.
+;
+         sub     #9, w3      ;make number of bits to shift left
+         bra     z, flt32u_dshift ;already in place, done shifting ?
+         bra     gt, flt32u_shleft ;need to shift left ?
+         ;
+         ;   Shift the mantissa -W3 bits right.  W3 is -1 to -8.
+         ;
+         subr    w3, #0, w3  ;make number of bits to shift right
+         add     w2, w3, w2  ;update the exponent to the shift
+         subr    w3, #16, w4 ;bits to shift low parts left for next word
+
+         sl      w1, w4, w5  ;part of W1 to shift into W0
+         lsr     w1, w3, w1  ;make final W1
+
+         sl      w0, w4, w4  ;save shifted-out bits in high end of W4
+         lsr     w0, w3, w0  ;move low W0 bits into place
+         ior     w0, w5, w0  ;merge in contribution from W1 to make final W0
+         ;
+         ;   The mantissa in W1:W0 has been right shifted so that the highest 1
+         ;   is in W1<7>.  W4 contains the bits shifted off the low end.
+         ;
+         ;   Now round the shifted value according the last shifted-off bit.
+         ;   Note that this could cause the highest 1 to be one bit higher.  In
+         ;   that case, the number is shifted right 1 bits, and W2 incremented
+         ;   to compensate.
+         ;
+         sl      w4, w4      ;move rounding bit into C
+         addc    #0, w0      ;apply rounding
+         addc    #0, w1
+         btss    w1, #8      ;carry caused overflow into next higher bit ?
+         jump    flt32u_dshift ;no, done with the shift
+
+         lsr     w1, w1      ;shift one more bit right
+         rrc     w0, w0
+         add     #1, w2      ;update the exponent to compensate for the shift
+         jump    flt32u_dshift ;done shifting mantissa into place
+         ;
+         ;   Shift the mantissa W3 bits left.  W3 is 1 to 7.
+         ;
+flt32u_shleft:
+         sub     w2, w3, w2  ;update the exponent to the shift
+         subr    w3, #16, w4 ;bits to shift high parts right for next word
+
+         sl      w1, w3, w1  ;move high part of W1 into place
+         lsr     w0, w4, w5  ;part of W0 to shift into W1
+         ior     w1, w5, w1  ;assemble final W1
+
+         sl      w0, w3, w0  ;move the w0 bits into place
+
+flt32u_dshift:               ;done shifting the mantissa into place
+;
+;   Merge in the exponent and sign fields to make the final floating point
+;   number in W1:W0.
+;
+         ;
+         ;   Range-check the exponent in W2.
+         ;
+         btsc    w2, #15     ;exponent didn't underflow ?
+         jump    flt32u_zero ;underflow, return zero
+         mov     #255, w3    ;get max possible exponent field value
+         cp      w2, w3
+         bra     gtu, flt32u_max ;overflow, return maximum possible value
+
+         and     #0x7F, w1   ;clear the exponent and sign fields
+         sl      w2, #7, w2  ;move the exponent field into position
+         ior     w1, w2, w1  ;merge it into the floating point number
+
+flt32u_leave:                ;floating point result is in W1:W0
+         leaverest
+
+flt32u_zero:                 ;return floating point 0
+         mov     #0, w0
+         mov     #0, w1
+         jump    flt32u_leave
+
+flt32u_max:                  ;return maximum possible value
+         mov     #0x7FFF, w1
+         mov     #0xFFFF, w0
+         jump    flt32u_leave
+  /endif

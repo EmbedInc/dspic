@@ -25,8 +25,10 @@
 ;   for implicitly called routines to be included.  Each file contains a
 ;   interlock so that no harm is done by referencing a file more than once.
 ;
-/include "(cog)src/dspic/fp32_fixs.ins.dspic"
 /include "(cog)src/dspic/fp32_fixu.ins.dspic"
+/include "(cog)src/dspic/fp32_fixs.ins.dspic"
+/include "(cog)src/dspic/fp32_flt32u.ins.dspic"
+/include "(cog)src/dspic/fp32_flt32s.ins.dspic"
 /include "(cog)src/dspic/fp32_flt48u.ins.dspic"
 /include "(cog)src/dspic/fp32_flt48s.ins.dspic"
 ;
@@ -38,8 +40,10 @@
 ;
 /if false then
 
-call     src_get_ins_dspic dspic fp32_fixs
 call     src_get_ins_dspic dspic fp32_fixu
+call     src_get_ins_dspic dspic fp32_fixs
+call     src_get_ins_dspic dspic fp32_flt32u
+call     src_get_ins_dspic dspic fp32_flt32s
 call     src_get_ins_dspic dspic fp32_flt48u
 call     src_get_ins_dspic dspic fp32_flt48s
 
