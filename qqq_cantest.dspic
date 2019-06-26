@@ -18,6 +18,53 @@
 ;
 ;   This subsystem requires exclusive access to getting received CAN frames.
 ;
+;
+;   Exported routines
+;
+;     CANTEST_CFG
+;
+;       Configures this subsystem according to its configuration data in
+;       non-volatile memory.
+;
+;       When this subsystem is enabled, a task is created that processes
+;       received CAN frames.  The stack for this task is dynamically allcoated.
+;
+;
+;   Responses that can be emitted by this module:
+;
+;     CANFR: 13 flags id dat ... dat
+;
+;       Indicates one received CAN frame.  This response is sent
+;       asynchronously by the CANTEST module when a CAN frame is received.
+;
+;       FLAGS is a byte containing several fields:
+;
+;             7       6       5       4       3       2       1       0
+;         -----------------------------------------------------------------
+;         |       |       |       |       |                               |
+;         |   X   |   X   |  RTR  |  EXT  |             NDAT              |
+;         |       |       |       |       |                               |
+;         -----------------------------------------------------------------
+;
+;         X:  Reserved bit.  Sent 0 for now.
+;
+;         RTR:  Set for remote transmit request.
+;
+;         EXT:  Set for extended frame.  Extended frames use 29 bit IDs whereas
+;           standard frames use 11 bit IDs.
+;
+;         NDAT:  Number of data bytes.  This is always 0-8.
+;
+;       ID is the frame identifier.  Standard frames (EXT = 0) use a 11 bit ID
+;       and extended frames (EXT = 1) a 29 bit ID.  ID is two bytes for standard
+;       frames and 4 bytes for extended frames.  The EXT bit in the flags byte
+;       must be checked to determine the number of ID bytes.  In both cases the
+;       ID is right justified into the 16 or 32 bit ID word with the high bits
+;       zero.
+;
+;       Exactly NDAT data bytes follow ID.
+;
+;
 ;   Configuration constants:
 ;
 ;     CFG_CANTEST, integer
@@ -27,7 +74,7 @@
 ;
 ;     RSP_CANFR, integer
 ;
-;       CANFR response opcode.  No code is generated if this constand does not
+;       CANFR response opcode.  No code is generated if this constant does not
 ;       exist.
 ;
 /include "qq2.ins.dspic"

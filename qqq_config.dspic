@@ -200,44 +200,44 @@
 ;       the indicated ID.  N is the 16 bit number of data bytes.  Exactly N data
 ;       bytes follow N.
 ;
-;    CFGSTAT: 10 subsys status
+;     CFGSTAT: 10 subsys status
 ;
-;      Sent asynchronously to indicate various events or status during system
-;      configuration.
+;       Sent asynchronously to indicate various events or status during system
+;       configuration.
 ;
-;      SUBSYS is the ID of the subsystem sending the response.
+;       SUBSYS is the ID of the subsystem sending the response.
 ;
-;      STATUS indicates a particular status or event related to the subsystem.
-;      STATUS values with the low bit 0 (0 to 127) indicate normal conditions
-;      and events, and do not indicate any failure or error.  STATUS values with
-;      the high bit set (128 to 255) indicate some kind of failure during
-;      initialization.
+;       STATUS indicates a particular status or event related to the subsystem.
+;       STATUS values with the low bit 0 (0 to 127) indicate normal conditions
+;       and events, and do not indicate any failure or error.  STATUS values
+;       with the high bit set (128 to 255) indicate some kind of failure during
+;       initialization.
 ;
-;      Subsystems are not required to send a STAT response when a failure is
-;      detected, although that is usually helpful.  Failures are flagged
-;      internally, and the system does not enter normal operation if any failure
-;      was flagged during configuration.
+;       Subsystems are not required to send a STAT response when a failure is
+;       detected, although that is usually helpful.  Failures are flagged
+;       internally, and the system does not enter normal operation if any
+;       failure was flagged during configuration.
 ;
-;      Values of STATUS for the main system (ID 0) are:
+;       Values of STATUS for the main system (ID 0) are:
 ;
-;        0  -  System startup completed, beginning normal operation.
+;         0  -  System startup completed, beginning normal operation.
 ;
-;        1  -  Startup completed, in test mode.
+;         1  -  Startup completed, in test mode.
 ;
-;        7  -  Startup not completed yet.  This is only sent in response to a
-;          CFGSTAT command while configuration is still in progress.
+;         7  -  Startup not completed yet.  This is only sent in response to a
+;           CFGSTAT command while configuration is still in progress.
 ;
-;        255  -  Failure, not entering normal operating mode.
+;         255  -  Failure, not entering normal operating mode.
 ;
-;      The first 8 (0 - 7) and the last 8 (248 - 255) main system status codes
-;      are reserved to indicate the final status of the system after
-;      configuration has completed.  The remaining codes (8 - 247) are specific
-;      to individual implementations.  After the asynchronous STAT response for
-;      SUBSYS 0 with one of the reserved codes is sent, no more STAT responses
-;      will be asynchronously sent.
+;       The first 8 (0 - 7) and the last 8 (248 - 255) main system status codes
+;       are reserved to indicate the final status of the system after
+;       configuration has completed.  The remaining codes (8 - 247) are specific
+;       to individual implementations.  After the asynchronous STAT response for
+;       SUBSYS 0 with one of the reserved codes is sent, no more STAT responses
+;       will be asynchronously sent.
 ;
-;      The CFGSTAT command causes the status for the main system (SUBSYS 0) to
-;      be sent.
+;       The CFGSTAT command causes the status for the main system (SUBSYS 0) to
+;       be sent.
 ;
 ;
 ;   Pre-processor configuration parameters:

@@ -112,6 +112,11 @@
   /var local r real
   /var local s string
 
+  /set s "Configuration data starts at "
+  /append s [int config_start "base 16 usin"] "h"
+  /append s " (" config_start ")"
+  /show "  " s
+
   /endblock
 
 ;*******************************************************************************
