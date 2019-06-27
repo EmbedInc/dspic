@@ -1,0 +1,69 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   MDEV configurable subsystem for testing a Modbus UART.  The integer constant
+;   CFG_SERTEST is the MDEV subsystem ID of this system.
+;
+;   This module takes one byte of configuration data with these values:
+;
+;     0  -  Module disabled.
+;
+;     1  -  Module enabled.
+;
+;     The remaining values are reserved for future use and disable the module
+;     for now.
+;
+;   When enabled, the module creates a new task that continually reads serial
+;   events and sends SEREVENT responses accordingly.
+;
+;
+;   Commands:
+;
+;     SERSEND: n dat ... dat
+;
+;       Send bytes out the serial interface.  N is the number of bytes to send
+;       minus 1.  Exactly N+1 data bytes follow N.
+;
+;
+;   Responses:
+;
+;     SEREVENT: ev
+;
+;       Indicates one received serial interface event.  EV is 16 bits describing
+;       the event.  Bits set in EV mean:
+;
+;         Bit 15  -  Hard error.  Overrun, framing, etc.
+;
+;         Bit 14  -  Parity error.  The low 8 bits are the data byte as
+;           received.
+;
+;         Bit 13  -  Packet gap.  Long enough time has elapsed since the last
+;           received byte so that the next byte would be interpreted as the
+;           start of a new packet according to the Modbus specification.
+;
+;         When all upper 8 bits are 0, then the low 8 bits contain a ordinary
+;         received data byte.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   name    string = "ser" ;name of the UART used for this serial interface
+
+/include "(cog)src/dspic/sertest.ins.dspic"
+.end

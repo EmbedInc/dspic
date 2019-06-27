@@ -63,6 +63,10 @@
   /const txpinreg = ""
   /endif
 
+/if [not [exist "rtspinreg"]] then
+  /const rtspinreg = ""
+  /endif
+
 /if [not [exist "fifoi_sz"]] then
   /const fifoi_sz integer = 256
   /endif
@@ -508,6 +512,14 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
   /if [<> txpinreg ""] then
          mov     #[chars txpinreg], w1
          mov     #[v txpinid], w0
+         mov.b   w0, [w1]
+    /endif
+;
+;   Map the RTS output, if configured.
+;
+  /if [<> rtspinreg ""] then
+         mov     #[chars rtspinreg], w1
+         mov     #[v rtspinid], w0
          mov.b   w0, [w1]
     /endif
 ;

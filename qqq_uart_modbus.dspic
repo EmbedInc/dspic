@@ -246,6 +246,9 @@
 /const   txpinreg = "Rpor5+1" ;byte adr of reg for remappable output pin func ID
 /const   txpinid integer = 2#000001 ;remappable output ID for UART TX function
 
+/const   rtspinreg = ""      ;byte adr of reg for RTS function ID, "" not used
+/const   rtspinid integer = 2#011100 ;remappable output ID for RTS function
+
 /const   fifoi_sz integer = 256 ;software input FIFO size, capacity in words
 /const   fifoo_sz integer = 256 ;software output FIFO size, capacity in words
 /const   altpins bool = False ;do not use alternate UART pins

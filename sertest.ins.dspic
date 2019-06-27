@@ -1,0 +1,134 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Module for testing a isolated serial interface via the configuration port.
+;
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   stacksz integer = 128 ;private task stack size, bytes
+/const   sertest_stat_nomem integer = 128 ;subsystem status, didn't get dyn mem
+;
+;   Derived constants.
+;
+/if [not [exist "name:vcon"]] then
+  /const name string = ""
+  /endif
+
+/if [= name ""]
+  /then                      ;no unique name for the UART subroutines
+    /const uname string = ""
+  /else                      ;UART subroutine names will be customized
+    /const uname string = [str "_" name]
+  /endif
+
+/const   subsys  bool = [exist "cfg_sertest:const"] ;create the MDEV subsystem
+
+
+.section .code_sertest, code
+;*******************************************************************************
+;
+;   Subroutine SERTEST_CFG
+;
+;   Configure this module according to the static configuration data.
+;
+/if subsys then
+         glbsub  sertest_cfg, regf0 | regf1 | regf13 | regf14
+
+         gcall   config_lock ;get exclusive access to CONFIG_xxx routines
+
+         mov     #[v cfg_sertest], w0 ;request config data for this module
+         gcall   config_setup ;set up for reading config, N config bytes into W0
+         cp      w0, #1      ;check number of config bytes
+         bra     nz, cfg_leave ;not the required number of config bytes ?
+
+         gcall   config_i8u  ;get config byte
+         cp      w0, #1
+         bra     nz, cfg_leave ;disabled ?
+;
+;   This module is enabled.
+;
+         mov     #[v stacksz], w0
+         gcall   dymem_alloc_perm ;allocate stack for SERTEST task
+         bra     nz, cfg_havemem ;got the requested memory ?
+         ;
+         ;   Failed to get the requested memory.
+         ;
+         mov     #[v cfg_sertest], w0 ;pass subsystem ID
+         mov     #[v sertest_stat_nomem], w1 ;pass status code
+         gcall   config_stat ;report the error
+         jump    cfg_leave
+
+cfg_havemem:                 ;got the dynamic memory, W0 pointing to start
+         mov     w0, w14     ;pass stack start address
+         mov     #[v stacksz], w13 ;pass stack size
+         call    task_new    ;create the new task
+         goto    sertest_task_start ;starting point of the new task
+         ;   Original task continues here.
+
+cfg_leave:
+         gcall   config_unlock ;release lock on CONFIG routines
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   SERTEST task.
+;
+/if subsys then
+sertest_task_start:          ;task execution start point
+
+tsk_loop:                    ;start of main operating loop
+         gcall   uart[chars uname]_get ;get next serial input event
+         mov     w0, w1      ;save the event info in W1
+
+         gcall   cmd_lock_out ;acquire lock on config port response stream
+         mov     #[v rsp_serevent], w0
+         gcall   cmd_put8    ;send SEREVEVENT response opcode
+         mov     w1, w0
+         gcall   cmd_put16   ;send event descriptor
+         gcall   cmd_unlock_out ;release lock on config port response stream
+
+         jump    tsk_loop
+  /endif
+
+;*******************************************************************************
+;
+;   Command SERSEND n dat ... dat
+;
+;   Send bytes out the serial interface.  N is the number of bytes to send minus
+;   1.  Exactly N+1 data bytes follow N.
+;
+/if [Command cm_sersend] then
+         gcall   cmd_get8    ;get the number of data bytes into W0
+         add     #1, w0
+         gcall   cmd_putbufn ;read the data bytes into the scratch buffer
+
+         gcall   uart[chars uname]_lock ;acquire lock on sending to the serial port
+         mov     ncmdbuf, w1 ;init number of bytes left to send, is at least 1
+         mov     #cmdbuf, w2 ;init source pointer
+ssend_byte:                  ;back here to send each new byte
+         mov.b   [w2++], w0  ;fetch the byte, update source pointer
+         gcall   uart[chars uname]_put ;send it
+         sub     #1, w1      ;count one less byte left to do
+         bra     nz, ssend_byte ;back to send next byte
+         gcall   uart[chars uname]_unlock ;release lock on the serial output
+
+         return
+  /endif
+
+.end
