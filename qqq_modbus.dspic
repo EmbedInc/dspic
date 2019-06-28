@@ -27,12 +27,48 @@
 ;   The descriptions of the exported symbols use the generic name (result when
 ;   NAME set to the empty string).
 ;
-;   The exported subroutines are:
+;   This module can be a MDEV configurable subsystem.  This is done by defining
+;   the integer constant CFG_MODBUS.  Its value indicates the MDEV subsystem ID
+;   for this module within the particular firmware build.  Module initialization
+;   is different depending on whether it is a MDEV configurable subsystem or
+;   not.
+;
+;
+;   Subroutines exported when not a MDEV configurable subsystem:
 ;
 ;     MODBUS_INIT
 ;
 ;       Initialize the module.  This must be the first call into the library
 ;       code.
+;
+;     MODBUS_START
+;
+;       Start the Modbus packet receiving background task.
+;
+;
+;   Subroutine exported when a MDEV configurable subsystem:
+;
+;     MODBUS_CFG
+;
+;       Initializes and configures this module according to the configuration
+;       data in non-volatile memory for this subsystem.  The configuration data
+;       is:
+;
+;         FLAGS  -  Set of flag bits:
+;
+;           0  -  Master mode, not slave.
+;           1  -  Special character preceeds each packet.
+;
+;         ADR  -  Slave address.  Only relevant in slave mode.
+;
+;           0      -  Unassigned.
+;           1-247  -  Address.
+;
+;         SCHAR  -  Special character that preceeds each packet.  This is only
+;           relevant when FLAGS bit 1 is set.
+;
+;
+;   Subroutines that are always exported:
 ;
 ;     MODBUS_STATS_CLEAR
 ;
@@ -68,10 +104,6 @@
 ;
 ;       Disables the non-standard feature of preceeding all packets with a
 ;       special character.
-;
-;     MODBUS_START
-;
-;       Start the Modbus packet receiving background task.
 ;
 ;     MODBUS_PACK_GET
 ;
@@ -124,6 +156,7 @@
 ;         MODBUS_EV_RPACKUS  -  Received valid packet for this slave
 ;         MODBUS_EV_SBYTE  -  Sent packet byte
 ;         MODBUS_EV_SPACK  -  Sent whole packet
+;
 ;
 ;   The preprocessor constants for configuring the module are:
 ;

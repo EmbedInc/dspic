@@ -1,0 +1,77 @@
+;   ***************************************************************
+;   * Copyright (C) 2005, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   MDEV configurable subsystem for testing Modbus packet reception.  The
+;   integer constant CFG_MODTEST indicates the MDEV subsystem ID for this
+;   module.
+;
+;   This module takes one byte of configuration data with these values:
+;
+;     0  -  Module disabled.
+;
+;     1  -  Module enabled.
+;
+;     The remaining values are reserved for future use and disable the module
+;     for now.
+;
+;   When enabled, the module creates a new task that continually receives
+;   Modbus packets and sends a MODPACK response to the configuration port for
+;   each Modbus packet.
+;
+;
+;   Commands:
+;
+;     MODSEND: adr n dat ... dat
+;
+;       Send a Modbus packet.  ADR is the packet address, which is only relevant
+;       when the Modbus module is configured in master mode.
+;
+;       In slave mode, all outgoing packets use the existing slave address,
+;       regardless of the ADR byte value.  If the slave address is unassigned,
+;       then attempts to send Modbus packets are ignored.
+;
+;       Exactly N+1 data bytes follow the N parameter.  The packet address and
+;       checksum will be automatically added.  If the Modbus module is
+;       configured for a special start character to preceed all packet, then
+;       this start character is also automatically added.  The idle time to
+;       indicate the start of a new packet is automatically guaranteed.
+;
+;
+;   Responses:
+;
+;     MODPACK: adr n dat ... dat
+;
+;       ADR is the packet address.  N is the number of packet bytes - 1.
+;       Exactly N+1 packet bytes follow.
+;
+;       The packet bytes are only the Modbus PDU.  Any additional bytes due to
+;       the transport are stripped off.  The packet address and checksum, for
+;       example, are not included.  The packet address is indicated by the ADR
+;       byte, and the checksum was correct else the packet would have been
+;       discarded.  If the Modbus interface is configured to include a packet
+;       start byte, then that byte was found, else the packet would have been
+;       discarded.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   name    string = "" ;unique name added to the MODBUS_xxx routines
+
+/include "(cog)src/dspic/modtest.ins.dspic"
+.end

@@ -1,0 +1,161 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Module for testing Modbus packet reception via the configuration port.
+;
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   stacksz integer = 128 ;private task stack size, bytes
+/const   modtest_stat_nomem integer = 128 ;subsystem status, didn't get dyn mem
+;
+;   Derived constants.
+;
+/if [not [exist "name:vcon"]] then
+  /const name string = ""
+  /endif
+
+/if [= name ""]
+  /then                      ;no unique name for the UART subroutines
+    /const uname string = ""
+  /else                      ;MODBUS subroutine names will be customized
+    /const uname string = [str "_" name]
+  /endif
+
+/const   subsys  bool = [exist "cfg_modtest:const"] ;create the MDEV subsystem
+
+
+.section .code_modtest, code
+;*******************************************************************************
+;
+;   Subroutine MODTEST_CFG
+;
+;   Configure this module according to the static configuration data.
+;
+/if subsys then
+         glbsub  modtest_cfg, regf0 | regf1 | regf13 | regf14
+
+         gcall   config_lock ;get exclusive access to CONFIG_xxx routines
+
+         mov     #[v cfg_modtest], w0 ;request config data for this module
+         gcall   config_setup ;set up for reading config, N config bytes into W0
+         cp      w0, #1      ;check number of config bytes
+         bra     nz, cfg_leave ;not the required number of config bytes ?
+
+         gcall   config_i8u  ;get config byte
+         cp      w0, #1
+         bra     nz, cfg_leave ;disabled ?
+;
+;   This module is enabled.
+;
+         mov     #[v stacksz], w0
+         gcall   dymem_alloc_perm ;allocate stack for MODTEST task
+         bra     z, cfg_nomem ;failed to get the requested memory ?
+
+         mov     w0, w14     ;pass stack start address
+         mov     #[v stacksz], w13 ;pass stack size
+         call    task_new    ;create the new task
+         goto    modtest_task_start ;starting point of the new task
+         ;   Original task continues here.
+
+cfg_leave:
+         gcall   config_unlock ;release lock on CONFIG routines
+         leaverest
+;
+;   Failed to allocate dynamic memory.
+;
+cfg_nomem:
+         mov     #[v cfg_modtest], w0 ;pass subsystem ID
+         mov     #[v modtest_stat_nomem], w1 ;pass status code
+         gcall   config_stat ;report the error
+         jump    cfg_leave
+  /endif
+
+;*******************************************************************************
+;
+;   MODTEST task.
+;
+/if subsys then
+modtest_task_start:          ;task execution start point
+
+tsk_loop:                    ;start of main operating loop
+         mov     #0xFFFF, w0 ;set to max possible timeout
+         gcall   modbus[chars uname]_pack_get ;get the next Modbus packet
+         cp0     w2          ;check number of bytes
+         bra     z, tsk_loop ;no packet, timeout, back to try again ?
+;
+;   A Modbus packet has been received.  Current register contents:
+;
+;     W1  -  Pointer to first packet byte.
+;
+;     W2  -  Number of packet bytes.
+;
+;     W3  -  Packet address.
+;
+;   Send the Modbus packet over the configuration port as a MODPACK response.
+;   Register usage:
+;
+;     W0  -  Data byte.
+;
+;     W1  -  Pointer to next Modbus packet byte.
+;
+;     W2  -  Number of packet bytes left to send.
+;
+;     W3  -  Packet address.
+;
+         gcall   cmd_lock_out ;acquire lock on config port response stream
+         mov     #[v rsp_modpack], w0
+         gcall   cmd_put8    ;send MODPACK response opcode
+
+         mov     w3, w0
+         gcall   cmd_put8    ;packet address
+
+         sub     w2, #1, w0
+         gcall   cmd_put8    ;number of data bytes - 1
+
+tsk_byte:                    ;back here each new data byte
+         mov.b   [w1++], w0  ;get this data byte into W0
+         gcall   cmd_put8    ;send it
+         sub     #1, w2      ;count one less data byte left to do
+         bra     nz, tsk_byte ;back for the next data byte
+
+         gcall   cmd_unlock_out ;release lock on config port response stream
+
+         gcall   modbus[chars uname]_pack_release ;done with this received packet
+         jump    tsk_loop    ;back to get next packet
+  /endif
+
+;*******************************************************************************
+;
+;   Command MODSEND adr n dat ... dat
+;
+;   Send Modbus packet.  ADR is the address.  N is the number of packet bytes
+;   minus 1.
+;
+/if [Command cm_modsend] then
+         gcall   cmd_get8    ;get the packet address into W3
+         mov     w0, w3
+
+         gcall   cmd_get8    ;get the number of data bytes
+         add     #1, w0
+         gcall   cmd_putbufn ;read the data bytes into the scratch buffer
+
+         mov     w3, w0      ;pass the packet address
+         mov     #cmdbuf, w1 ;pass pointer to start of packet data
+         mov     ncmdbuf, w2 ;pass number of packet data bytes
+         gjump   modbus[chars uname]_pack_put ;send the packet, end the command
+  /endif

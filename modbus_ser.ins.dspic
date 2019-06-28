@@ -27,9 +27,14 @@
 ;
 /const   maxbytes integer = 256 ;maximum possible bytes in complete modbus packet
 /const   stacksz integer = 128 ;internal task stack size, bytes
+/const   modbus_stat_nomem integer = 128 ;subsystem status, didn't get dyn mem
 ;
 ;   Derived constants.
 ;
+/if [not [exist "name:vcon"]] then
+  /const name string = ""
+  /endif
+
 /if [= name ""]
   /then                      ;no unique name for the subroutines
     /const uname string = ""
@@ -37,11 +42,11 @@
     /const uname string = [str "_" name]
   /endif
 
-/if [not [exist "master"]] then
+/if [not [exist "master:vcon"]] then
   /const master bool = false
   /endif
 
-/if [not [exist "startchar"]] then
+/if [not [exist "startchar:vcon"]] then
   /const startchar string = ""
   /endif
 /if [> [slen startchar] 1] then
@@ -51,25 +56,27 @@
   /stop 3
   /endif
 
-/if [not [exist "callback_recv"]] then
+/if [not [exist "callback_recv:vcon"]] then
   /const callback_recv string = ""
   /endif
 
-/if [not [exist "callback_recvus"]] then
+/if [not [exist "callback_recvus:vcon"]] then
   /const callback_recvus string = ""
   /endif
 
-/if [not [exist "callback_send"]] then
+/if [not [exist "callback_send:vcon"]] then
   /const callback_send string = ""
   /endif
 
-/if [not [exist "debug_cmddel"]] then
+/if [not [exist "debug_cmddel:vcon"]] then
   /const debug_cmddel bool = false
   /endif
 
-/if [not [exist "debug_icd"]] then
+/if [not [exist "debug_icd:vcon"]] then
   /const debug_icd bool = false
   /endif
+
+/const   subsys  bool = [exist "cfg_modbus:const"] ;MDEV configurable subsystem ?
 
 ;*******************************************************************************
 ;
@@ -87,11 +94,15 @@
 ;
 alloc    slaveadr            ;1-247 slave address, 0 for not assigned
 alloc    stchar              ;packet start character, preceeds all Modbus packets
-alloc    stack_modbus, [v stacksz], 2 ;Modbus reception task stack
 alloc    buf1,   [v maxbytes], 1 ;packet reception double buffers
 alloc    buf2,   [v maxbytes], 1
 alloc    len1                ;number of bytes in BUF1
 alloc    len2                ;number of bytes in BUF2
+alloc    stack_p             ;pointer to start of stack
+
+/if [not subsys] then
+         alloc   stack, [v stacksz], 2 ;Modbus reception task stack
+  /endif
          ;
          ;   Statistic counters.
          ;
@@ -137,7 +148,12 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;
 ;   Initialize the state managed by this module.
 ;
+/if subsys
+  /then
+         locsub  modbus_init, regf0
+  /else
          glbsub  modbus[chars uname]_init, regf0
+  /endif
 
          mov     #0, w0
          mov     w0, slaveadr ;init to slave address not assigned
@@ -156,6 +172,10 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
          mov     w0, stchar
   /endif
 
+/if [not subsys] then
+         mov     #stack, w0
+         mov     w0, stack_p ;set pointer to start of task stack
+  /endif
          leaverest
 
 ;*******************************************************************************
@@ -305,14 +325,90 @@ getst_nclear:                ;done clearing the counters, if at all
 
 ;*******************************************************************************
 ;
+;   Subroutine MODBUS_CFG
+;
+;   Configure and initialize this module.
+;
+/if subsys then
+         glbsub  modbus[chars uname]_cfg, regf0 | regf1
+
+         gcall   config_lock ;get exclusive access to CONFIG_xxx routines
+
+         mov     #[v cfg_modbus], w0 ;request config data for this module
+         gcall   config_setup
+         cp      w0, #3      ;check for min expected number of config bytes
+         bra     ltu, cfg_leave ;less than min required config bytes ?
+
+         mcall   modbus_init ;initialize the module
+;
+;   Process FLAGS configuration byte.
+;
+         gcall   config_i8u  ;get FLAGS byte and save it in W1
+         mov     w0, w1
+
+         btss    w1, #0      ;master mode ?
+         jump    cfg_dmaster ;no, skip this section
+         mcall   modbus[chars uname]_master ;config to master mode
+cfg_dmaster:
+
+         btsc    w1, #1      ;no extra start char ?
+         jump    cfg_dnstart ;no, skip this section
+         mcall   modbus_ser_startchar_off ;config to no extra packet start char
+cfg_dnstart:
+;
+;   Process ADR configuration byte.  The FLAGS byte is in W1.
+;
+         gcall   config_i8u  ;get slave address
+         btsc    w1, #0      ;slave mode ?
+         jump    cfg_dslave  ;no, skip this section
+         mcall   modbus[chars uname]_adr_set ;config to slave mode and set slave address
+cfg_dslave:
+;
+;   Process SCHAR configuration byte.  The FLAGS byte is in W1.
+;
+         gcall   config_i8u  ;get special packet start character
+         btss    w1, #1      ;start character in use ?
+         jump    cfg_dstart  ;no, skip this section
+         mcall   modbus[chars uname]_startchar ;config to start char and set the char
+cfg_dstart:
+;
+;   Start the internal task.
+;
+         mov     #[v stacksz], w0 ;pass amount of memory to allocate
+         gcall   dymem_alloc_perm ;allocate the task stack
+         bra     z, cfg_nomem ;didn't get the requested memory ?
+         mov     w0, stack_p ;save pointer to start of stack
+
+         mcall   modbus_start ;start the packet receiving task
+
+cfg_leave:
+         gcall   config_unlock ;release lock on CONFIG routines
+         leaverest
+;
+;   Failed to allocate dynamic memory.
+;
+cfg_nomem:
+         mov     #[v cfg_modbus], w0 ;pass subsystem ID
+         mov     #[v modbus_stat_nomem], w1 ;pass status code
+         gcall   config_stat ;report the error
+         jump    cfg_leave
+  /endif
+
+;*******************************************************************************
+;
 ;   Subroutine MODBUS_START
 ;
 ;   Start the modbus packet reception task.
 ;
-         glbsubd modbus[chars uname]_start, regf13 | regf14
+/if subsys
+  /then
+         locsub  modbus_start, regf13 | regf14
+  /else
+         glbsub  modbus[chars uname]_start, regf13 | regf14
+  /endif
 
-         mov     #[v stacksz], w13 ;pass size of data stack
-         mov     #stack_modbus, w14 ;pass start address of data stack
+         mov     #[v stacksz], w13 ;pass size of the stack
+         mov     stack_p, w14 ;pass start address of the stack
          call    task_new    ;create Modbus packet reception task
          goto    modbus_task ;start point of the new task
 
@@ -745,7 +841,7 @@ prel_leave:
 ;   If this device is a Modbus master, then the packet address is passed in W0.
 ;
 ;   It is permissible for multiple tasks to call this routine asynchronously.  A
-;   internal mutex is used to guarantee only a single task is receiving a single
+;   internal mutex is used to guarantee only a single task is sendin a single
 ;   packet at a time, while all other tasks are stalled awaiting their turn.
 ;   The callback routines are called with the mutex held.
 ;
