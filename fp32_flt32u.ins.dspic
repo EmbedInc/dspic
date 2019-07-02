@@ -37,7 +37,7 @@
 ;
 ;     W1:W0  -  IEEE 32 bit floating point value.
 ;
-         glbsub  fp32_flt32u, regf2 | regf3 | regf4 | regf5
+         glbsubd fp32_flt32u, regf2 | regf3 | regf4 | regf5
 ;
 ;   Check for the special case of 0.  Later code requires at least one bit to be
 ;   set somewhere in the input number.

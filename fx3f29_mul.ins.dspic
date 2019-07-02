@@ -27,7 +27,7 @@
 ;
 ;   W1:W0 * W3:W2 --> W1:W0
 ;
-         glbsub  fx3f29_mulu, regf4 | regf5 | regf6 | regf7 | regf8
+         glbsubd fx3f29_mulu, regf4 | regf5 | regf6 | regf7 | regf8
 ;
 ;   4 separate 16x16 bit multiplies are performed, with their high and low
 ;   result words combined as follows:

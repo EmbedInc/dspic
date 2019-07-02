@@ -27,7 +27,7 @@
 ;
 ;   W1:W0 / W3:W2 --> W1:W0
 ;
-         glbsub  fx3f29_divu, regf2 | regf3 | regf4 | regf5 | regf6
+         glbsubd fx3f29_divu, regf2 | regf3 | regf4 | regf5 | regf6
 ;
 ;   This hardware can't divide by a 32 bit value, so we will do it out the long
 ;   way.  Register usage:

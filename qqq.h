@@ -148,19 +148,19 @@ void config_skip (                     //skip over config bytes
   machine_intu_t);                     //number of bytes to skip
 
 machine_intu_t                         //0-N byte index into config bytes
-  config_index (void);                 //get index of next config byte
+config_index (void);                   //get index of next config byte
 
 void config_index_set (                //set index of next config byte to read
   machine_intu_t);                     //new index
 
-machine_intu_t                         //remaining config bytes from current index
-  config_left (void);                  //get number of config bytes left to read
+machine_intu_t                         //N config bytes at current index to end
+config_left (void);                    //get number of config bytes left to read
 
 void config_unlock (void);             //release exclusive lock on CONFIG routines
 
 //******************************************************************************
 //
-//   Floating point manipulation routines.
+//   Fixed and floating point manipulation routines.
 //
 int32s_t                               //returned 32 bit signed fixed point number
 fp32_fixs (                            //FLOAT to fixed point, rounded and saturated
@@ -171,6 +171,26 @@ int32u_t                               //returned 32 bit unsigned fixed point nu
 fp32_fixu (                            //FLOAT to fixed point, rounded and saturated
   float,                               //floating point input value
   machine_ints_t);                     //number of fraction bits in result, may be negative
+
+float                                  //resulting floating point value
+fp32_flt32s (                          //32 bit signed fixed point to floating point
+  int32s_t,                            //signed fixed point value
+  machine_ints_t);                     //number of fraction bits, may be negative
+
+float                                  //resulting floating point value
+fp32_flt32u (                          //32 bit unsigned fixed point to floating point
+  int32u_t,                            //unsigned fixed point value
+  machine_ints_t);                     //number of fraction bits, may be negative
+
+int32u_t                               //resulting 3.29 unsigned fixed point quotient
+fx3f29_divu (                          //3.29 unsigned fixed point divide
+  int32u_t,                            //3.29 unsigned fixed point numerator
+  int32u_t);                           //3.29 unsigned fixed point denominator
+
+int32u_t                               //resulting 3.29 unsigned fixed point product
+fx3f29_divu (                          //3.29 unsigned fixed point multiply
+  int32u_t,                            //3.29 unsigned fixed point term
+  int32u_t);                           //3.29 unsigned fixed point term
 
 //******************************************************************************
 //
@@ -273,7 +293,7 @@ void modbus_pack_release (void);       //release last received Modbus packet
 
 void modbus_pack_put (                 //send Modbus packet, multi-task safe
   machine_intu_t,                      //address, only used if master
-  int8u_t *,                           //data byte address, no adr or checksum
+  int8u_t *,                           //data bytes address, no adr or checksum
   machine_intu_t);                     //1-253 number of data bytes
 
 void modbus_stats_get (                //get current snapshot of statistics counters
