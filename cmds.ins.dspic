@@ -82,6 +82,14 @@ allocg   usb_fwseq           ;USB converter firmware sequence number
 ;
 ;   Local state.
 ;
+.section .near_cmds, bss, near ;varibles in near RAM
+
+alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_debug, 0
+
 
 
 .section .code_cmds[chars suff], code
@@ -99,6 +107,8 @@ allocg   usb_fwseq           ;USB converter firmware sequence number
          mov     w0, usb_fwver
          mov     w0, usb_fwseq
   /endif
+
+         clr     flags       ;init all flag bits to off
 
          leaverest
 
@@ -385,4 +395,227 @@ sende_dbytes:                ;done writing all data bytes
          gcall   can_send_id
 
          gjump   can_send    ;send frame, release lock, return from command
+  /endif
+
+;*******************************************************************************
+;
+;   Command DEBUG onoff
+;
+;   Enable/disable debug responses with IDs 128-255.  ONOFF values:
+;
+;     0 - disable
+;
+;     1 - enable
+;
+;     The remaining values are reserved for future use and disable the debug
+;     responses for now.
+;
+/if [Command cm_debug] then
+         gcall   cmd_get8    ;get ONOFF into W0
+         bclr    flags, #flg_debug ;init to debug off
+         cp      w0, #1
+         skip_nz             ;really is off ?
+         bset    flags, #flg_debug ;no, set to on
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine DEBUG0
+;
+;   Send DEBUG0 response: id
+;
+;   The response is always sent for IDs 0-127.  The response is only sent for
+;   IDs 128-255 when debug responses are globally enabled, as can be done with
+;   the DEBUG command.
+;
+;   ID is passed in the low 8 bits of W0.
+;
+/if [exist "rsp_debug0:const"] then
+         glbsubd debug0, regf0 | regf3
+
+         btss    w0, #7      ;debug responses must be enabled ?
+         jump    dbg0_send   ;no
+         btss    flags, #flg_debug ;enabled ?
+         jump    dbg0_leave  ;no
+
+dbg0_send:                   ;send the response
+         gcall   cmd_lock_out ;acquire lock on response stream
+
+         mov     w0, w3      ;temp save ID
+         mov     #[v rsp_debug0], w0 ;send response opcode
+         gcall   cmd_put8
+         mov     w3, w0      ;send ID
+         gcall   cmd_put8
+
+         gcall   cmd_unlock_out ;release lock on response stream
+
+dbg0_leave:
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine DEBUG1
+;
+;   Send DEBUG1 response: id dat
+;
+;   DAT is 8 bits.  The response is always sent for IDs 0-127.  The response is
+;   only sent for IDs 128-255 when debug responses are globally enabled, as can
+;   be done with the DEBUG command.
+;
+;   ID is passed in the low 8 bits of W0.  DAT is in the low 8 bits of W1.
+;
+/if [exist "rsp_debug1:const"] then
+         glbsubc debug1s
+         glbsubc debug1u
+
+         glbsub  debug1, regf0 | regf3
+
+         btss    w0, #7      ;debug responses must be enabled ?
+         jump    dbg1_send   ;no
+         btss    flags, #flg_debug ;enabled ?
+         jump    dbg1_leave  ;no
+
+dbg1_send:                   ;send the response
+         gcall   cmd_lock_out ;acquire lock on response stream
+
+         mov     w0, w3      ;temp save ID
+         mov     #[v rsp_debug1], w0 ;send response opcode
+         gcall   cmd_put8
+         mov     w3, w0      ;send ID
+         gcall   cmd_put8
+         mov     w1, w0      ;send DAT
+         gcall   cmd_put8
+
+         gcall   cmd_unlock_out ;release lock on response stream
+
+dbg1_leave:
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine DEBUG2
+;
+;   Send DEBUG2 response: id dat
+;
+;   DAT is 16 bits.  The response is always sent for IDs 0-127.  The response is
+;   only sent for IDs 128-255 when debug responses are globally enabled, as can
+;   be done with the DEBUG command.
+;
+;   ID is passed in the low 8 bits of W0.  DAT is in W1.
+;
+/if [exist "rsp_debug2:const"] then
+         glbsubc debug2s
+         glbsubc debug2u
+
+         glbsub  debug2, regf0 | regf3
+
+         btss    w0, #7      ;debug responses must be enabled ?
+         jump    dgb2_send   ;no
+         btss    flags, #flg_debug ;enabled ?
+         jump    dgb2_leave  ;no
+
+dgb2_send:                   ;send the response
+         gcall   cmd_lock_out ;acquire lock on response stream
+
+         mov     w0, w3      ;temp save ID
+         mov     #[v rsp_debug2], w0 ;send response opcode
+         gcall   cmd_put8
+         mov     w3, w0      ;send ID
+         gcall   cmd_put8
+         mov     w1, w0      ;send DAT
+         gcall   cmd_put16
+
+         gcall   cmd_unlock_out ;release lock on response stream
+
+dgb2_leave:
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine DEBUG3
+;
+;   Send DEBUG3 response: id dat
+;
+;   DAT is 24 bits.  The response is always sent for IDs 0-127.  The response is
+;   only sent for IDs 128-255 when debug responses are globally enabled, as can
+;   be done with the DEBUG command.
+;
+;   ID is passed in the low 8 bits of W0.  DAT is in the low 24 bits of W2:W1.
+;
+/if [exist "rsp_debug3:const"] then
+         glbsubc debug3s
+         glbsubc debug3u
+         mov     w2, w1
+         mov     w3, w2
+
+         glbsub  debug3, regf0 | regf1 | regf3
+
+         btss    w0, #7      ;debug responses must be enabled ?
+         jump    dbg3_send   ;no
+         btss    flags, #flg_debug ;enabled ?
+         jump    dbg3_leave  ;no
+
+dbg3_send:                   ;send the response
+         gcall   cmd_lock_out ;acquire lock on response stream
+
+         mov     w0, w3      ;temp save ID
+         mov     #[v rsp_debug3], w0 ;send response opcode
+         gcall   cmd_put8
+         mov     w3, w0      ;send ID
+         gcall   cmd_put8
+         mov     w1, w0      ;send DAT
+         mov     w2, w1
+         gcall   cmd_put24
+
+         gcall   cmd_unlock_out ;release lock on response stream
+
+dbg3_leave:
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine DEBUG4
+;
+;   Send DEBUG4 response: id dat
+;
+;   DAT is 32 bits.  The response is always sent for IDs 0-127.  The response is
+;   only sent for IDs 128-255 when debug responses are globally enabled, as can
+;   be done with the DEBUG command.
+;
+;   ID is passed in the low 8 bits of W0.  DAT is in W2:W1.
+;
+/if [exist "rsp_debug4:const"] then
+         glbsubc debug4s
+         glbsubc debug4u
+         mov     w2, w1
+         mov     w3, w2
+
+         glbsub  debug4, regf0 | regf1 | regf3
+
+         btss    w0, #7      ;debug responses must be enabled ?
+         jump    dbg4_send   ;no
+         btss    flags, #flg_debug ;enabled ?
+         jump    dbg4_leave  ;no
+
+dbg4_send:                   ;send the response
+         gcall   cmd_lock_out ;acquire lock on response stream
+
+         mov     w0, w3      ;temp save ID
+         mov     #[v rsp_debug4], w0 ;send response opcode
+         gcall   cmd_put8
+         mov     w3, w0      ;send ID
+         gcall   cmd_put8
+         mov     w1, w0      ;send DAT
+         mov     w2, w1
+         gcall   cmd_put32
+
+         gcall   cmd_unlock_out ;release lock on response stream
+
+dbg4_leave:
+         leaverest
   /endif

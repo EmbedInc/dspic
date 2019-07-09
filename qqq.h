@@ -211,7 +211,7 @@ machine_intu_t                         //data in low byte + UART_EV_xxx_K flags
 uart_get (void);                       //get next event
 
 machine_intu_t                         //TRUE or FALSE
-machine_get_ready (void);              //find if event is immediately available
+uart_get_ready (void);                 //find if event is immediately available
 
 void uart_lock (void);                 //acquire exclusive lock for sending
 
@@ -331,16 +331,44 @@ void cmd_put24s (int32s_t);
 void cmd_put32u (int32u_t);
 void cmd_put32s (int32s_t);
 
-void debug0 (                          //send debug info to host
-  const char *);                       //string to show as debug output
+//   DEBUGn responses with IDs 0-127 are always sent.  DEBUGn response with IDs
+//   128-255 are only sent when these are globally enabled with the DEBUG
+//   command.  These are initialized to disabled at startup.
+//
+void debug0 (                          //send DEBUG0 response to host
+  machine_intu_t);                     //ID
 
-void debug1 (                          //send debug info to host
-  machine_intu_t,                      //16 bit value
-  const char *);                       //string that will be shown with value
+void debug1s (                         //send DEBUG1 response to host
+  machine_intu_t,                      //ID
+  machine_ints_t);                     //8 bit signed data
 
-void debug2 (                          //send debug info to host
-  int32u_t,                            //32 bit value
-  const char *);                       //string that will be shown with value
+void debug1u (                         //send DEBUG1 response to host
+  machine_intu_t,                      //ID
+  machine_intu_t);                     //8 bit unsigned data
+
+void debug2s (                         //send DEBUG2 response to host
+  machine_intu_t,                      //ID
+  int16s_t);                           //16 bit signed data
+
+void debug2u (                         //send DEBUG2 response to host
+  machine_intu_t,                      //ID
+  int16u_t);                           //16 bit unsigned data
+
+void debug3s (                         //send DEBUG3 response to host
+  machine_intu_t,                      //ID
+  int32s_t);                           //24 bit signed data
+
+void debug3u (                         //send DEBUG3 response to host
+  machine_intu_t,                      //ID
+  int32u_t);                           //24 bit unsigned data
+
+void debug4s (                         //send DEBUG4 response to host
+  machine_intu_t,                      //ID
+  int32s_t);                           //32 bit signed data
+
+void debug4u (                         //send DEBUG4 response to host
+  machine_intu_t,                      //ID
+  int32u_t);                           //32 bit unsigned data
 
 //******************************************************************************
 //
