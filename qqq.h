@@ -18,6 +18,7 @@
 //   capabilities of the underlying system that are available to C code.
 //
 #include "qq2_machine.h"               //define machine-dependent data types
+#include "qq2_debug.h"                 //define debug switches
 #include "qq2_const.h"                 //define constants from asm environment
 
 //******************************************************************************

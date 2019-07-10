@@ -2228,6 +2228,7 @@ alloc    gfl[v word], 2, 2
 
 #define false 0
 #define true 1
+#define NIL (0)
 typedef  unsigned char int8u_t;
 typedef  signed  char int8s_t;
 typedef  unsigned short int16u_t;
