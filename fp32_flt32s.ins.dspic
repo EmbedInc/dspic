@@ -17,7 +17,7 @@
 /if [not [exist "fp32_flt32s_ins"]] then
   /const fp32_flt32s_ins bool = true
 
-  /include "(cog)src/dspic/fp32_flt32u.ins.dspic"
+  /include "(cog)src/dspic/fp32_flt48u.ins.dspic"
 
 .section .code_fp32_flt32s, code
 ;*******************************************************************************
