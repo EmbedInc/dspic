@@ -16,9 +16,7 @@
 *
 *   With the PIC command line option omitted, all linker files in the current
 *   dsPIC tools installation will be processed and an include file created for
-*   each of them.  The dsPIC tools installation directory is indicated by the
-*   DSPICDIR environment variable.  The resulting include files are written to
-*   the current directory.
+*   each of them.
 *
 *   If the PIC command line option is provided, then only the file for that
 *   PIC will be created.  PIC must be the model number without the preceeding
@@ -34,9 +32,9 @@ const
 var
   onlypic:                             {only create include file for this PIC}
     %include '(cog)lib/string32.ins.pas';
-  tnam, tnam2:                         {scratch treenames}
-    %include '(cog)lib/string_treename.ins.pas';
   npics: sys_int_machine_t;            {number of PICs include file written for}
+  tnam:                                {scratch treename}
+    %include '(cog)lib/string_treename.ins.pas';
   stat: sys_err_t;                     {completion status}
 {
 ********************************************************************************
@@ -419,13 +417,9 @@ begin
     ;
   npics := 0;                          {init number of include files created}
 
-  sys_envvar_get (                     {get dsPIC tools directory from environment variable}
-    string_v('dsPICDir'),              {environment variable name}
-    tnam,                              {returned value}
-    stat);
-  sys_error_abort (stat, '', '', nil, 0);
-  string_pathname_join (tnam, string_v('support'), tnam2); {make dir with GLD and INC subdirs}
-  do_dir (tnam2);                      {process this directory and all subdirectories recursively}
+  string_vstring (                     {set top of tree to search}
+    tnam, '(cog)extern/mplab/support16'(0), -1);
+  do_dir (tnam);                       {scan all linker files in the tree}
 
   if onlypic.len > 0
     then begin                         {creating file for a specific PIC only}
