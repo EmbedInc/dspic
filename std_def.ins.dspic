@@ -103,8 +103,8 @@
 ;   the file.
 ;
     /if [= buildname ""]
-      /then                  ;flat source structure
-        /set snam [str "(cog)source/" srcdir "/" fwname]
+      /then                  ;top level SOURCE directory
+        /set snam [str "(cog)source/" srcdir "/seq/" fwname]
       /else                  ;this build has its own directory
         /set snam [str "(cog)source/" srcdir "/" buildname "/seq/" fwname]
       /endif
