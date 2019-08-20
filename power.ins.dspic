@@ -1,0 +1,177 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Pulse on demand power supply controller using OC module in PWM mode with
+;   feedback via the shutdown input.  See the comments in QQQ_POWER.DSPIC for
+;   details.
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/if [not [exist "name:vcon"]] then
+  /const name string = "power"
+  /endif
+
+/if [not [exist "ocn:vcon"]] then
+  /const ocn integer = 1
+  /endif
+
+/if [not [exist "dpulset:vcon"]] then
+  /show "  DPULSET, desired pulse time, not set"
+         .error  "DPULSET"
+         .end
+  /stop
+  /endif
+
+/if [not [exist "pstretch:vcon"]] then
+  /const pstretch real = 0.0
+  /endif
+
+/if [not [exist "dperiod:vcon"]] then
+  /show "  DPERIOD, desired PWM period, not set"
+         .error  "DPERIOD"
+         .end
+  /stop
+  /endif
+
+/if [not [exist "fltsel:vcon"]] then
+  /const fltsel string = "A"
+  /endif
+
+/if [not [exist "fltname:vcon"]] then
+  /const fltname string = ""
+  /endif
+/if [not [exist "fltpullup:vcon"]] then
+  /const fltpullup bool = false
+  /endif
+/if [not [exist "fltpulldn:vcon"]] then
+  /const fltpulldn bool = false
+  /endif
+;
+;   Compute derived configuration constants.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /set ii [rnd [* [- dpulset pstretch] freq_inst]] ;pulse width, cycles
+  /set ii [max ii 1]         ;guarantee min value required later
+  /const pulsecy integer = ii ;set final pulse width in instruction cycles
+  /const pulset real = [/ pulsecy freq_inst] ;actual pulse time, seconds
+  /const percy integer = [rnd [* dperiod freq_inst]] ;period, cycles
+  /const period real = [/ percy freq_inst] ;actual PWM period, seconds
+
+  /if debug_icd
+    /then
+      /show "  Disabled due to ICD debugging"
+    /else
+      /set s ""
+      /set s [str s "Pulse width " pulsecy " cycles " [eng pulset] "s"]
+      /set s [str s ", stretched to " [eng [+ pulset pstretch]] "s"]
+      /set s [str s ", PWM period " percy " cycles " [eng period] "s"]
+      /show "  " s
+    /endif
+  /endblock
+
+
+.section .code_[chars name], code
+;*******************************************************************************
+;
+;   Subroutine <name>_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  [chars name]_init, regf0 | regf1
+
+         clr     Oc[v ocn]con1 ;keep module off during configuration
+
+/if [<> fltname ""] then
+  /const flt_port string = Inbit_[chars fltname]_port
+  /const flt_bit integer = Inbit_[chars fltname]_bit
+  /if fltpullup then
+         bset    CNPU[chars flt_port], #[v flt_bit] ;enable pullup
+    /endif
+  /if fltpulldn then
+         bset    CNPD[chars flt_port], #[v flt_bit] ;enable pulldown
+    /endif
+  /endif
+
+//   Do not attempt to run the power supply if the hardware might be
+//   single-stepped.  If stepping was stopped when the switch was on, then the
+//   inductor would saturate.  This can cause excessive current thru the switch,
+//   cause the input power supply to drop too low, and result in too high output
+//   voltage depending on configuration.
+//
+/if debug_icd then
+         .end
+  /stop
+  /endif
+
+         mov     #[chars fltpinreg], w1 ;point to register for selecting fault input pin
+         mov     #[v fltpin], w0 ;get remappable fault input pin number
+         mov.b   w0, [w1]    ;select RPn pin for fault input
+
+         mov     #[chars ocpinreg], w1 ;point to register for selecting output pin function
+         mov     #[v ocpinid], w0 ;get the function code for our output
+         mov.b   w0, [w1]    ;select this PWM output for the RPn output pin
+
+         clr     Oc[v ocn]tmr ;init timer to start of PWM period
+
+         mov     #[- percy 1], w0 ;set PWM period
+         mov     w0, Oc[v ocn]rs
+
+         mov     #[- pulsecy 1], w0 ;set pulse width
+         mov     w0, Oc[v ocn]r
+
+         mov     #0b0000000000011111, w0
+                 ;  0--------------- fault self-clears when fault condition removed
+                 ;  -0-------------- PWM output goes low on fault
+                 ;  --0------------- output is actively driven during fault
+                 ;  ---0------------ output not inverted, pulse is high
+                 ;  ----XXX--------- unused
+                 ;  -------0-------- not cascaded with another OCx module
+                 ;  --------0------- synched, not triggered operation
+                 ;  ---------X------ triggered status bit
+                 ;  ----------0----- OCx output pin will be driven
+                 ;  -----------11111 sync on timer match OCxRS
+         mov     w0, Oc[v ocn]con2
+
+/block
+  /var local ii integer = 0 //bits to select fault input
+  /if [= fltsel "A"] then
+    /set ii [or ii [shiftl 1 7]]
+    /endif
+  /if [= fltsel "B"] then
+    /set ii [or ii [shiftl 1 8]]
+    /endif
+
+         mov     #0b0001110000000110 | [v ii], w0
+                 ;  XX-------------- unused
+                 ;  --0------------- continue in idle mode, not used
+                 ;  ---111---------- clock source is peripheral clock
+                 ;  ------X--------- unused
+                 ;  -------F-------- fault B input is enabled, from II above
+                 ;  --------F------- fault A input is enabled, from II above
+                 ;  ---------X------ unused
+                 ;  ----------XX---- fault status
+                 ;  ------------0--- trigger condition only cleared by firmware
+                 ;  -------------110 edge-aligned PWM mode
+         mov     w0, Oc[v ocn]con1
+  /endblock
+
+         leaverest

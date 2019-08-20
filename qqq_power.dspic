@@ -1,0 +1,70 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   This module uses a OC module to run a switching power supply.  The OC module
+;   output controls the switch.  Pulses are generated continually using PWM
+;   mode.  The fault input to the OC module is asserted by external hardware
+;   when the power supply output voltage exceeds its regulation threshold.  This
+;   stops the pulses until the output is again below the threshold.
+;
+;   The overall power supply therefore is a pulse on demand controller.  It
+;   requires no firmware intervention once started.
+;
+;   ----------------------------------------------------------------------------
+;
+;   This supply *** INSERT DESCRIPTION OF THIS PARTICULAR SUPPLY HERE ***
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   name    = "ledpwr"  ;name of this module
+/const   ocn     integer = 2 ;1-N number of the OC module to use
+/const   dpulset real = 2.5e-6 ;desired pulse time, seconds
+/const   pstretch real = 0.0 ;amount pulse is stretched by the hardware, seconds
+/const   dperiod real = 15.0e-6 ;desired PWM period, seconds
+;
+;   PWM output.
+;
+/const   ocpinid integer = 2#010001 ;remappable pin ID for OCn output
+/const   ocpinreg = "Rpor6+0" ;byte adr of reg for remappable OCn output function ID
+;
+;   Fault input.  This input must be asserted (driven low) by the external
+;   hardware when the output is above its regulation threshold.
+;
+;   Note the FLTPIN can be a code for a internal signal, not just the RPn or
+;   RPIn number of a mappable pin.  Outputs of comparators and the like can
+;   usually be selected.  See the "Virtual Connections" section of the
+;   datasheet.
+;
+/const   fltsel  string = "A" ;input compare fault input select, A or B
+/const   fltpin  integer = 56 ;RPn or RPIn remappable pin number for fault input
+/const   fltpinreg = "Rpinr11+0" ;reg to select RPn number for fault function
+         ;
+         ;   This section is only required if this module is to enable the
+         ;   passive pullup or pulldown on the fault input.  To not cause a
+         ;   pullup or pulldown to be asserted here, delete all these constants,
+         ;   or set FLTNAME to the empty string and both FLTPULLxx to FALSE.
+         ;
+/const   fltname = "v25low"  ;INBIT name of fault input pin
+/const   fltpullup bool = false ;enable pullup on fault input
+/const   fltpulldn bool = true ;enable pulldown on fault input
+
+/include "(cog)src/dspic/power.ins.dspic"
+
+.end
