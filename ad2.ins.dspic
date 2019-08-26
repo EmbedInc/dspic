@@ -126,7 +126,7 @@
 //
 //     CHn_PORT  -  Lower case name of the I/O port the input pin is in.
 //
-//     CHn_BIT  -  Bit with the I/O port the input pin is in.
+//     CHn_BIT  -  Bit within the I/O port the input pin is in.
 //
 //     CHn_NAME  -  Name of the global variable the final result will be written
 //       to.
@@ -144,6 +144,13 @@
 //     CHn_NFILT  -  Number of filter stages, may be 0.
 //
 //     CHn_FILTBITSx  -  Integer number of bits to shift right per filter stage.
+//       X is the 1-N sequential number of the filter stage.
+//
+//     CHn_MAC_PROCESS  -  Name of the macro that implements the processing of
+//       the raw value for this channel.  This is the empty string to indicate
+//       the standard processing using the resistances, voltages, etc.  When
+//       this string is not empty, then the macro is invoked instead of the
+//       standard processing.
 //
 //   The derived values are:
 //
@@ -286,6 +293,9 @@
 //   while that for a signed value must be signed.  The runtime code per
 //   channel configures itself based on the CHn_SIGNED constant.
 //
+//   These constants are not computed if a PROCESS macro is defined for this
+//   channel.
+//
 
 //******************
 //
@@ -312,49 +322,51 @@
   /var local maxin real      ;Vin resulting in max A/D value
 
   /set ch chl[v lg]_ch       ;get hardware channel number for this logical channel
-  //
-  //   Find the overall offset and gain from Vin to the A/D input voltage.
-  //
-  /set r2r 0.0               ;init to R2 and R3 do not exist (open)
-  /set r3r 0.0
-  /if [= ch[v ch]_r1 0.0]
-    /then                    ;direct connection to input, no scaling or offset
-      /set r1r 1             ;arbitrary value that doesn't cause arithmetic problems
-    /else                    ;R1 is non-zero, R2 and R3 contributions may exist
-      /set r1r [/ 1 ch[v ch]_r1] ;set reciprocal of R1
-      /if [<> ch[v ch]_r2 0.0] then ;R2 connection exists ?
-        /set r2r [/ 1 ch[v ch]_r2] ;make relative contribution thru R2
-        /endif
-      /if [<> ch[v ch]_r3 0.0] then ;R3 connection exists ?
-        /set r3r [/ 1 ch[v ch]_r3] ;make relative contribution thru R3
-        /endif
-    /endif
-  /set sumr [+ r1r r2r r3r]  ;make sum of all resistance reciprocals
+  /if [= ch[v ch]_mac_process ""] then ;no PROCESS macro defined ?
+    //
+    //   Find the overall offset and gain from Vin to the A/D input voltage.
+    //
+    /set r2r 0.0             ;init to R2 and R3 do not exist (open)
+    /set r3r 0.0
+    /if [= ch[v ch]_r1 0.0]
+      /then                  ;direct connection to input, no scaling or offset
+        /set r1r 1           ;arbitrary value that doesn't cause arithmetic problems
+      /else                  ;R1 is non-zero, R2 and R3 contributions may exist
+        /set r1r [/ 1 ch[v ch]_r1] ;set reciprocal of R1
+        /if [<> ch[v ch]_r2 0.0] then ;R2 connection exists ?
+          /set r2r [/ 1 ch[v ch]_r2] ;make relative contribution thru R2
+          /endif
+        /if [<> ch[v ch]_r3 0.0] then ;R3 connection exists ?
+          /set r3r [/ 1 ch[v ch]_r3] ;make relative contribution thru R3
+          /endif
+      /endif
+    /set sumr [+ r1r r2r r3r] ;make sum of all resistance reciprocals
 
-  /call adv 0 v0             ;make A/D voltage with Vin = 0
-  /call adv 1 r              ;make A/D voltage with Vin = 1
-  /set gain [- r v0]         ;gain from Vin to A/D voltage
-  //
-  //   Create CHn_OFS.
-  //
-  /set r [* maxfilt [/ v0 maxv]] ;filtered value from Vin = 0
-  /set r [- 0 r]             ;amount to add for Vin 0 to result in 0
-  /const ch[v ch]_ofs integer = [rnd r] ;add to filtered value to make 0
-  //
-  //   Create CHn_MULT.
-  //
-  /set maxin [/ [- maxv v0] gain] ;Vin for max A/D reading
-  /set ii [+ maxfilt ch[v ch]_ofs] ;filtered value after offset from MAXV in
-  /if ch[v ch]_signed
-    /then                    ;offset result could be negative
-      /set ii [rnd [/ ii 65536]] ;make signed 16 bit filtered result
-    /else                    ;offset is always positive
-      /set ii [rnd [/ ii 32768]] ;make unsigned 16 bit filtered result
-    /endif
-  /set r [/ maxin ii]        ;mult factor to make Volts
-  /set r [/ r ch[v ch]_units] ;add scale for final output units
-  /set r [* r 65536]         ;scale for result in high 16 bit of 32
-  /const ch[v ch]_mult integer = [rnd r] ;16 bit mult factor to apply at run time
+    /call adv 0 v0           ;make A/D voltage with Vin = 0
+    /call adv 1 r            ;make A/D voltage with Vin = 1
+    /set gain [- r v0]       ;gain from Vin to A/D voltage
+    //
+    //   Create CHn_OFS.
+    //
+    /set r [* maxfilt [/ v0 maxv]] ;filtered value from Vin = 0
+    /set r [- 0 r]           ;amount to add for Vin 0 to result in 0
+    /const ch[v ch]_ofs integer = [rnd r] ;add to filtered value to make 0
+    //
+    //   Create CHn_MULT.
+    //
+    /set maxin [/ [- maxv v0] gain] ;Vin for max A/D reading
+    /set ii [+ maxfilt ch[v ch]_ofs] ;filtered value after offset from MAXV in
+    /if ch[v ch]_signed
+      /then                  ;offset result could be negative
+        /set ii [rnd [/ ii 65536]] ;make signed 16 bit filtered result
+      /else                  ;offset is always positive
+        /set ii [rnd [/ ii 32768]] ;make unsigned 16 bit filtered result
+      /endif
+    /set r [/ maxin ii]      ;mult factor to make Volts
+    /set r [/ r ch[v ch]_units] ;add scale for final output units
+    /set r [* r 65536]       ;scale for result in high 16 bit of 32
+    /const ch[v ch]_mult integer = [rnd r] ;16 bit mult factor to apply at run time
+    /endif                   ;end of no PROCESS macro defined case
   /endloop                   ;back to do next logical channel
 
 //   Show some of the configuration.
@@ -678,7 +690,7 @@ ini_fword:
 dochan[v ch]:
     /endif
   //
-  //   Switch the A/D to the next channel and update the dispatch vector to tne
+  //   Switch the A/D to the next channel and update the dispatch vector to the
   //   routine for that channel.
   //
   /if [> nchan 1] then       ;scanning multiple channels ?
@@ -688,17 +700,20 @@ dochan[v ch]:
          nextchan [v ch[v ch]_next] ;set up for reading the next channel
     /endif
   //
-  //   Apply the filters, if any.
+  //   Define the FILTER macro for this channel.  This filters the current
+  //   reading according to the filter setup for this channel.  It does nothing
+  //   if no filters are configured for this channel.
   //
-  /loop with f from 1 to ch[v ch]_nfilt ;once for each filter stage
-    /var local ffbits integer = ch[v ch]_filtbits[v f]
-    /write "         ;"
-    /write "         ;   Apply filter " f ", shift = " ffbits " bits."
-    /write "         ;"
-    /if [= f 1] then         ;right before doing first filter stage ?
+  /macro filter
+    /loop with f from 1 to ch[v ch]_nfilt ;once for each filter stage
+      /var local ffbits integer = ch[v ch]_filtbits[v f]
+      /write "         ;"
+      /write "         ;   Apply filter " f ", shift = " ffbits " bits."
+      /write "         ;"
+      /if [= f 1] then       ;right before doing first filter stage ?
          mov     #an[v ch]f[v f], w2 ;point W2 to the filter to update
-      /write
-      /endif
+        /write
+        /endif
          sub     w0, [w2++], w0 ;NEW - FILT --> W1:W0
          subb    w1, [w2--], w1
 
@@ -712,67 +727,82 @@ dochan[v ch]:
 
          mov     w0, [w2++]  ;write result to the filter state, advance pointer
          mov     w1, [w2++]
-    /endloop
+      /endloop
+    /endmac
   //
-  //   Apply the offset if it is non-zero.  Unsigned values are clipped at 0 if
-  //   they go negative.
+  //   Process this reading.  If a PROCESS macro was supplied, then it is called
+  //   to process the reading.  Otherwise, our standard processing is applied.
+  //   That first filters the new reading, then applies the offset and scaling
+  //   derived from the Rn and Vn setup parameters.
   //
-  /set ii ch[v ch]_ofs       ;get the offset into more handy form
-  /if [<> ii 0] then         ;there is a offset to add ?
-    /write "         ;"
-    /write "         ;   Add the fixed offset."
-    /write "         ;"
+  /if [<> ch[v ch]_mac_process ""]
+    /then                    ;explicit code to process this reading was supplied
+         [chars ch[v ch]_mac_process] [chars ch[v ch]_name] ;process via user-supplied macro
+    /else                    ;no user-supplied code, do canned offset and scale processing
+         filter              ;filter the reading
+      //
+      //   Apply the offset if it is non-zero.  Unsigned values are clipped at 0 if
+      //   they go negative.
+      //
+      /set ii ch[v ch]_ofs   ;get the offset into more handy form
+      /if [<> ii 0] then     ;there is a offset to add ?
+         ;
+         ;   Add the fixed offset.
+         ;
          mov     #0x[chars [int [and ii 16#FFFF] "fw 4 lz base 16 usin"]], w2 ;add offset low word
          add     w0, w2, w0
          mov     #0x[chars [int [shiftr ii 16] "fw 4 lz base 16 usin"]], w2 ;add offset high word
          addc    w1, w2, w1
-    /if [and [not ch[v ch]_signed] [< ii 0]] then ;unsigned could have gone negative ?
+        /if [and [not ch[v ch]_signed] [< ii 0]] then ;unsigned could have gone negative ?
          bra     nn, [lab nn] ;result didn't go negative ?
          mov     #0, w0      ;did go negative, clip at 0
          mov     #0, w1
 [lab nn]:
-      /endif                 ;done dealing with unsigned possibly going negative
-    /endif                   ;done adding fixed offset
-  //
-  //   Apply the scale factor.  The high 16 bits of the filtered result are
-  //   multiplied by CHn_MULT to make a 32 bit result in W1:W0.  The multiply
-  //   factor has been scaled so that the high word of that result is the final
-  //   value.  Rounding will be applied.
-  //
-  //   For signed values, the high word of the filtered result are the highest
-  //   16 bits.  For unsigned values, the sign bit of the filtered result is not
-  //   used.  Unsigned values are therefore shifted left 1 bit before the
-  //   multiply, to maximize the number of meaningful bits.  The multiply factor
-  //   has already been scaled accordingly.
-  //
+          /endif             ;done dealing with unsigned possibly going negative
+        /endif               ;done adding fixed offset
+      //
+      //   Apply the scale factor.  The high 16 bits of the filtered result are
+      //   multiplied by CHn_MULT to make a 32 bit result in W1:W0.  The multiply
+      //   factor has been scaled so that the high word of that result is the final
+      //   value.  Rounding will be applied.
+      //
+      //   For signed values, the high word of the filtered result are the highest
+      //   16 bits.  For unsigned values, the sign bit of the filtered result is not
+      //   used.  Unsigned values are therefore shifted left 1 bit before the
+      //   multiply, to maximize the number of meaningful bits.  The multiply factor
+      //   has already been scaled accordingly.
+      //
          ;
          ;   Apply the scale factor.
          ;
-  /if [not ch[v ch]_signed] then ;unsigned ?
+      /if [not ch[v ch]_signed] then ;unsigned ?
          rlc     w0, w0      ;maximize input value into high 16 bits
          rlc     w1, w1
-    /write
-    /endif
+        /write
+        /endif
 
          mov     #[v ch[v ch]_mult], w0 ;get the mult factor
-  /if ch[v ch]_signed
-    /then                    ;value could be negative, use signed arithmetic
+      /if ch[v ch]_signed
+        /then                ;value could be negative, use signed arithmetic
          mul.su  w1, w0, w0  ;scale value, result in high word
-    /else                    ;value is always positive, use unsigned arithmetic
+        /else                ;value is always positive, use unsigned arithmetic
          mul.uu  w1, w0, w0  ;scale value, result in high word
-    /endif
+        /endif
          rlc     w0, w0      ;get next bit into C
          addc    #0, w1      ;round up if next lower bit is 1
-  //
-  //   Save the result.
-  //
-  /write
+      //
+      //   Save the result.
+      //
+      /write
          mov     w1, [chars ch[v ch]_name] ;save the final result
+    /endif                   ;done with user-supplied versus canned code cases
 
   /if [<> lg nchan] then     ;not last channel ?
     /write
          jump    done_chan   ;all done processing value for this channel
     /endif
+
+  /del macro "filter"        ;done with filter code specific to this channel
   /endloop
 
 ;***************************************

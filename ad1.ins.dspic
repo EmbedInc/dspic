@@ -43,6 +43,7 @@
   /var exist ad_v2 real
   /var exist ad_r3 real
   /var exist ad_v3 real
+  /var exist ad_mac_process string
 
   /set ad_pname ""
   /set ad_vname ""
@@ -53,6 +54,7 @@
   /set ad_v2 0.0
   /set ad_r3 0.0
   /set ad_v3 adrefv
+  /set ad_mac_process ""
 //
 //   Delete any existing AD_FILTBITSx constants or variables.
 //
@@ -138,6 +140,7 @@
   /const ch[v ch]_v2 real = ad_v2
   /const ch[v ch]_r3 real = ad_r3
   /const ch[v ch]_v3 real = ad_v3
+  /const ch[v ch]_mac_process string = ad_mac_process
 
   /set ii 0                  ;init number of filter stages
   /loop with f from 1

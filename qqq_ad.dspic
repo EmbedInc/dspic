@@ -179,6 +179,49 @@
 ;
 ;       FILT2 is then considered the final filtered result.
 ;
+;     AD_MAC_PROCESS
+;
+;       Name of the macro to run to process readings for this channel.  When
+;       such a macro is defined (AD_MAC_PROCESS is not the empty string), then
+;       the default processing is not performed, and the following settings are
+;       not used and become irrelevant:
+;
+;         AD_UNITS
+;         AD_SIGNED
+;         AD_R1
+;         AD_R2
+;         AD_V2
+;         AD_R3
+;         AD_V3
+;
+;       The A/D is first switched to acquiring the next channel, then this macro
+;       is called.  On entry, W1:W0 contain the A/D reading left-justified into
+;       the second highest bit.  For example, for 12 bit A/D readings, W1:W0
+;       contain, in binary: 0xxxxxxxxxxxx000 0000000000000000.  The raw A/D
+;       reading bits are denoted with X.  This same value is also in the local
+;       32-bit variable READING.
+;
+;       The macro FILTER is available in the PROCESS macro.  It performs the
+;       filtering on the W1:W0 reading as defined by the AD_FILTBITSx
+;       configuration state for this channel.  The final filtered result is
+;       left in W1:W0 in the same format as the input value.
+;
+;       No filtering or other implicit processing is performed on the reading
+;       when this macro is defined.  Any desired processing must be included in
+;       the macro.
+;
+;       The macro call arguments are listed below.  These parameters can be
+;       accessed in the macro with the ARG function.  See the PREPIC and ESCR
+;       documentation files for details of the preprocessor syntax.  The macro
+;       call arguments are:
+;
+;         1  -  Name of the 16 bit global variable that the final result should
+;               be written to.  This parameter is the bare characters of the
+;               name, not a string.
+;
+;       W0-W3 may be trashed.  All other registers must be preserved by this
+;       macro.
+;
 ;   The interrupt routine in AD2.INS.DSPIC uses the fast register save area.
 ;   This means no other interrupts can use it (use PUSH.S and POP.S).
 ;
