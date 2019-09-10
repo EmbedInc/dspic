@@ -152,26 +152,54 @@
          mov     w0, Oc[v ocn]con2
 
 /block
-  /var local ii integer = 0 //bits to select fault input
+  /var local ii integer = 0
+
+  /set ii 2#0001110000000110
+;           XX-------------- unused
+;           --0------------- continue in idle mode, not used
+;           ---111---------- clock source is peripheral clock
+;           ------X--------- unused
+;           -------F-------- fault B input is enabled, added below
+;           --------F------- fault A input is enabled, added below
+;           ---------X------ unused
+;           ----------XX---- fault status
+;           ------------0--- trigger condition only cleared by firmware
+;           -------------110 edge-aligned PWM mode
   /if [= fltsel "A"] then
     /set ii [or ii [shiftl 1 7]]
     /endif
   /if [= fltsel "B"] then
     /set ii [or ii [shiftl 1 8]]
     /endif
+  /const occon1 integer = ii ;value for the OCxCON1 register
 
-         mov     #0b0001110000000110 | [v ii], w0
-                 ;  XX-------------- unused
-                 ;  --0------------- continue in idle mode, not used
-                 ;  ---111---------- clock source is peripheral clock
-                 ;  ------X--------- unused
-                 ;  -------F-------- fault B input is enabled, from II above
-                 ;  --------F------- fault A input is enabled, from II above
-                 ;  ---------X------ unused
-                 ;  ----------XX---- fault status
-                 ;  ------------0--- trigger condition only cleared by firmware
-                 ;  -------------110 edge-aligned PWM mode
+         mov     #[v occon1], w0 ;set OCCON1, start the PWM
          mov     w0, Oc[v ocn]con1
   /endblock
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine <name>_OFF
+;
+;   Switch off the power supply.
+;
+         glbsub  [chars name]_off
+
+         clr     Oc[v ocn]con1 ;disable the PWM module
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine <name>_ON
+;
+;   Re-enable the power supply.
+;
+         glbsub  [chars name]_on, regf0
+
+         mov     #[v occon1], w0 ;set OCCON1, restart the PWM
+         mov     w0, Oc[v ocn]con1
 
          leaverest

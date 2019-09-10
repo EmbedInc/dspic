@@ -23,6 +23,22 @@
 ;   The overall power supply therefore is a pulse on demand controller.  It
 ;   requires no firmware intervention once started.
 ;
+;   Exported routines:
+;
+;     <name>_INIT
+;
+;       Initializes the hardware managed by this module.  Starts the power
+;       supply.  This must be the first call into this module.
+;
+;     <name>_OFF
+;
+;       Switches off the power supply.  No pulses will be generated.
+;
+;     <name>_ON
+;
+;       Switches on the power supply.  Resume normal operation after call to
+;       name_OFF.
+;
 ;   ----------------------------------------------------------------------------
 ;
 ;   This supply *** INSERT DESCRIPTION OF THIS PARTICULAR SUPPLY HERE ***

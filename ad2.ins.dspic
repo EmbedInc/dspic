@@ -522,6 +522,12 @@ ini_fword:
          bra     nz, ini_fword ;back to init next filter word
   /endif                     ;end of at least one filter exists
 ;
+;   Do initialization required by custom code, if any.
+;
+/if [exist "app_init:macro"] then
+         app_init:macro      ;do app-supplied initialization
+  /endif
+;
 ;   Configure the A/D converter.
 ;
          clr     T[v adtimer]con ;make sure the timer can't trigger the A/D
