@@ -194,9 +194,9 @@
 /var new nfiltw integer = 0  ;16 bit words used by all filters
 /const   nchan   integer = ad_nusedch ;make easier constant for number of used channels
 
-/set ii [- [exp 2 adbits] 1] ;max raw A/D value
-/const   maxv    real = [* adrefv [/ [+ ii .5] [+ ii 1]]]
-/const   maxfilt integer = [shiftl ii [- 31 adbits]] ;filtered value for full scale
+/const   adfull  integer = [- [exp 2 adbits] 1] ;max raw A/D value
+/const   maxv    real = [* adrefv [/ [+ adfull .5] [+ adfull 1]]]
+/const   maxfilt integer = [shiftl adfull [- 31 adbits]] ;filtered value for full scale
 //
 //   Compute the conversion timing setup.
 //

@@ -629,6 +629,189 @@
     /endblock
   /endsub
 
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine SCALE_CONFIG result input name
+//
+//   Compute the setup for scaling a value to produce a particular result.  The
+//   scaling is set up such that the input value of INPUT results in RESULT.
+//   INPUT and RESULT can be floating point values.  The actual scaling (see
+//   macro SCALE, below) is performed by multiplying the 16 bit unsigned integer
+//   input value by a 16 bit unsigned scale factor, leaving the result in the
+//   high word of the 32 bit unsigned integer product.
+//
+//   In case a 16 bit scale factor is insufficient (RESULT > INPUT), a
+//   shift count is generated that indicates how many bits to shift the result
+//   left after multiply by a suitable scale factor.  In the special case of
+//   RESULT = INPUT, no actual multiply will be performed.  The input value will
+//   be loaded into the high word of the result.
+//
+//   This subroutine creates or sets the following variables:
+//
+//     <name>_mult
+//
+//       16 bit unsigned integer to multiply the input value by.  This will be
+//       the special value of 65536 if the input value is just to be copied to
+//       the output.
+//
+//     <name>_shiftl
+//
+//       Number of bits to shift the 32 bit product left by to leave the result
+//       in the high word.
+//
+//   This subroutine only sets/creates preprocessor state.  It does not produce
+//   any instructions.  It is intended that the SCALE macro (below) be used to
+//   perform the actual scaling at run time.
+//
+/subroutine scale_config
+  /var local res real = [arg 1]
+  /var local inp real = [arg 2]
+  /var local name string = [qstr [arg 3]]
+  /var local r real          ;scratch floating point
+  /var local ii integer      ;scratch integers
+  /var local jj integer
+  /var exist [chars name]_mult integer ;final integer mult factor
+  /var exist [chars name]_shiftl integer ;bits to shift product left
+
+
+
+/write ";   SCALE_CONFIG " res " " inp " " name
+
+
+
+  /set r [* [/ res inp] 65536.0] ;scale factor for result in product high word
+  /set jj 0                  ;init number of bits to shift product left
+  /loop
+    /set ii [rnd r]          ;make integer mult factor
+    /if [<= ii 65536] then   ;mult factor is within range ?
+      /quit
+      /endif
+    /set r [/ r 2]           ;shift mult factor right one bit
+    /set jj [+ jj 1]         ;shift product left one bit to compensate
+    /endloop                 ;back to check new mult factor
+//
+//   II is the integer mult factor and JJ is the number of bits to shift the
+//   product left after the multiply.
+//
+  /set [chars name]_mult ii  ;save final values
+  /set [chars name]_shiftl jj
+  /endsub
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro SCALE Wn name [RES32]
+//
+//   Perform scaling of the 16 bit unsigned integer in Wn according to the
+//   configuration set up by subroutine SCALE_CONFIG, above.
+//
+//   Wn is the name of the general register containing the input value.  This
+//   can be any register W0 - W13.  The scaled result is left in the high word
+//   of the odd:even register pair that Wn is part of.  The low word is trashed.
+//
+//   For example, if the first argument is W3, then the input is in W3, the
+//   result will be in W3, and W2 is trashed.  If the first argument is W4, then
+//   the input is in W4, the result in W5, and W4 is trashed.
+//
+//   Wn is raw characters, not a string.  It must be "W" followed by a integer
+//   value 0 thru 15.
+//
+//   NAME is the same name passed to the SCALE_CONFIG subroutine.  This is also
+//   raw characters, not a string.
+//
+//   The optional argument "RES32" specifies that the result should be a 32 bit
+//   value in the full high:low register pair.  The result in the high register
+//   is still the same, but the low register will have valid additional lower
+//   bits.  "RES32" is case-insensitive.
+//
+/macro scale
+  /var local wn string = [qstr [arg 1]]
+  /var local name string = [qstr [arg 2]]
+  /var local win integer     ;W register number of input value
+  /var local wsc integer     ;W register number of scale factor
+  /var local wlo integer     ;W register number of low word of pair
+  /var local whi integer     ;W register number of high word of pair
+  /var local s string        ;scratch string
+  /var local ok bool         ;no error found
+  /var local shl integer = [chars name]_shiftl ;bits to shift product left
+  /var local res32 bool = false ;result in full 32 bit register pair
+
+  /set s [ucase [qstr [arg 3]]] ;get optional third argument string
+  /if [<> [slen s] 0] then   ;third argument exists ?
+    /if [<> s "RES32"] then  ;unrecognized ?
+      /show "Invalid parameter: """ s """"
+         .error  "Arg 3"
+         .end
+      /stop
+      /endif
+    /set res32 true          ;indicate to create 32 bit result
+    /endif
+
+
+/write ";   SCALE " wn ", " name [if res32 ", res32" ""]
+/write ";"
+
+  /block
+    /set ok false            ;init to Wn parameter is not valid
+    /if [<> [ucase [sindx 1 wn]] "W"] then
+      /quit
+      /endif
+    /set s [substr 2 [- [slen wn] 1] wn] ;extract what should be W reg number
+    /if [not [isint [chars s]]] then
+      /quit
+      /endif
+    /set win [chars s]       ;get input register number
+    /if [or [< win 0] [> win 13]] then ;W number out of range ?
+      /quit
+      /endif
+    /set ok true             ;WIN is the input W register number
+    /endblock
+  /if [not ok] then
+    /show "Invalid W register designator """ wn """"
+         .error  "Wn"
+         .end
+    /stop
+    /endif
+
+  /set wlo [and win [~ 1]]   ;make number of low register of pair
+  /set whi [+ wlo 1]         ;make number of high register of pair
+  /set wsc whi               ;init mult factor register number to high word
+  /if [= wsc win] then       ;input is in high word ?
+    /set wsc wlo             ;switch scale factor to low word
+    /endif
+//
+//   Do the raw scaling so that the scaled result is in WHI.
+//
+  /if [= [chars name]_mult 65536]
+    /then                    ;special case of input = output ?
+      /if [<> win whi] then  ;input not already in output position ?
+         mov     w[v win], w[v whi] ;copy input value to scaled output
+        /endif
+      /if [<> shl 0] then    ;need to shift result ?
+         sl      w[v whi], #[v shl], w[v whi] ;shift result to make final value
+        /endif
+      /if res32 then         ;create 32 bit result ?
+         mov     #0, w[v wlo] ;set low bits of result
+        /endif
+    /else                    ;need to perform actual scaling ?
+         mov     #[v [chars name]_mult], w[v wsc] ;get scale factor
+         mul.uu  w[v win], w[v wsc], w[v wlo] ;do the multiply
+      /if [<> shl 0] then    ;need to shift result ?
+         sl      w[v whi], #[v shl], w[v whi] ;move high bits into place
+        /if res32
+          /then              ;create 32 bit result
+         push    w[v wlo]    ;temp save original low word
+         lsr     w[v wlo], #[- 16 shl], w[v wlo] ;position low contribution into high word
+         ior     w[v whi], w[v wlo], w[v whi] ;assemble final high word
+         pop     w[v wlo]    ;restore original low word of product
+         sl      w[v wlo], #[v shl], w[v wlo] ;shift low word into place
+          /else              ;only need 16 bit result in high word
+         lsr     w[v wlo], #[- 16 shl], w[v wlo] ;position low bits in low word
+         ior     w[v whi], w[v wlo], w[v whi] ;assemble final result in high word
+          /endif
+        /endif
+    /endif
+  /endmac
+
 ;********************
 ;
 ;   Macro INTR_PRIORITY reg, bit, prio
