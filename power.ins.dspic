@@ -117,11 +117,7 @@
 //   cause the input power supply to drop too low, and result in too high output
 //   voltage depending on configuration.
 //
-/if debug_icd then
-         .end
-  /stop
-  /endif
-
+/if [not debug_icd] then
          mov     #[chars fltpinreg], w1 ;point to register for selecting fault input pin
          mov     #[v fltpin], w0 ;get remappable fault input pin number
          mov.b   w0, [w1]    ;select RPn pin for fault input
@@ -151,10 +147,10 @@
                  ;  -----------11111 sync on timer match OCxRS
          mov     w0, Oc[v ocn]con2
 
-/block
-  /var local ii integer = 0
+  /block
+    /var local ii integer = 0
 
-  /set ii 2#0001110000000110
+    /set ii 2#0001110000000110
 ;           XX-------------- unused
 ;           --0------------- continue in idle mode, not used
 ;           ---111---------- clock source is peripheral clock
@@ -165,17 +161,18 @@
 ;           ----------XX---- fault status
 ;           ------------0--- trigger condition only cleared by firmware
 ;           -------------110 edge-aligned PWM mode
-  /if [= fltsel "A"] then
-    /set ii [or ii [shiftl 1 7]]
-    /endif
-  /if [= fltsel "B"] then
-    /set ii [or ii [shiftl 1 8]]
-    /endif
-  /const occon1 integer = ii ;value for the OCxCON1 register
+    /if [= fltsel "A"] then
+      /set ii [or ii [shiftl 1 7]]
+      /endif
+    /if [= fltsel "B"] then
+      /set ii [or ii [shiftl 1 8]]
+      /endif
+    /const occon1 integer = ii ;value for the OCxCON1 register
 
          mov     #[v occon1], w0 ;set OCCON1, start the PWM
          mov     w0, Oc[v ocn]con1
-  /endblock
+    /endblock
+  /endif                     ;end of debugging with ICD case
 
          leaverest
 
@@ -187,8 +184,9 @@
 ;
          glbsub  [chars name]_off
 
+/if [not debug_icd] then
          clr     Oc[v ocn]con1 ;disable the PWM module
-
+  /endif
          leaverest
 
 ;*******************************************************************************
@@ -199,7 +197,9 @@
 ;
          glbsub  [chars name]_on, regf0
 
+/if [not debug_icd] then
          mov     #[v occon1], w0 ;set OCCON1, restart the PWM
          mov     w0, Oc[v ocn]con1
+  /endif
 
          leaverest
