@@ -134,7 +134,7 @@
 ;           actual memory available to the application.  It does not include the
 ;           internal overhead for tracking the location of all
 ;           temporarily-allocated blocks.  One of these responses is sent for
-;           temporarily-allocated block.
+;           each temporarily-allocated block.
 ;
 /include "qq2.ins.dspic"
 /include "(cog)src/dspic/dymem.ins.dspic"
