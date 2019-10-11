@@ -933,7 +933,7 @@ case event_right_press_k:              //CONTINUE
 
 //******************************************************************************
 //
-//   Function MENU_VAL_FX32U (TITLE, &VAL, MINV, MAXV, FDIG)
+//   Function MENU_VAL_FX16U (TITLE, &VAL, MINV, MAXV, FDIG)
 //
 //   Like MENU_VAL_FX32U except that the value is 16 bit unsigned fixed point
 //   instead of 32 bit.
