@@ -230,7 +230,7 @@
 ;     macro GETBYTE
 ;
 ;       Get the next command stream byte into W0.  The default is to call
-;       UART_PUT, as customized by UART_NAME.
+;       UART_GET, as customized by UART_NAME.
 ;
 ;     macro LOCK
 ;

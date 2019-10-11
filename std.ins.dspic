@@ -675,7 +675,7 @@
 
 
 
-/write ";   SCALE_CONFIG " res " " inp " " name
+  /write ";   SCALE_CONFIG " res " " inp " " name
 
 
 
@@ -747,8 +747,8 @@
     /endif
 
 
-/write ";   SCALE " wn ", " name [if res32 ", res32" ""]
-/write ";"
+  /write ";   SCALE " wn ", " name [if res32 ", res32" ""]
+  /write ";"
 
   /block
     /set ok false            ;init to Wn parameter is not valid
@@ -2504,6 +2504,33 @@ typedef  signed  int machine_ints_t;
   /if wfile then             ;close output file if one was created
     /writepop
     /endif
+  /endsub
+
+/////////////////////
+//
+//   Subroutine WRITE_C_CONSTS_PREF_INT pref
+//
+//   Write all the integer preprocessor constants that start with the preface
+//   PREF in C syntax to the output file.  PREF is a string.
+//
+/subroutine write_c_consts_pref_int
+  /var local pref string = [arg 1] ;prefix matching constants must start with
+  /var local plen integer = [slen pref] ;length of the required prefix
+  /var local sym string      ;bare constant symbol name
+
+  /loop symbols sy const     ;loop over all preprocessor constants
+    /if [not [= [sym sy dtype] "INTEGER"]] then ;ignore if not integer
+      /repeat
+      /endif
+    /set sym [sym sy name]   ;get bare symbol name
+    /if [<= [slen sym] plen] then ;symbol name too short ?
+      /repeat
+      /endif
+    /if [not [= [substr 1 plen sym] pref]] then ;doesn't start with prefix ?
+      /repeat
+      /endif
+    /call write_c_const [chars sym] ;write this constant to output file
+    /endloop
   /endsub
 
 /////////////////////

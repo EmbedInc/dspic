@@ -20,6 +20,11 @@
 //   The code here is "stand-alone".  It does not have access to the definitions
 //   in the firmware project include file nor STD.INS.DSPIC.
 //
+//   The standard CMDRSP module (template QQQ_CMDRSP.DSPIC) includes the
+//   project-specific <fwname>_CMDRSP.INS.DSPIC file that defines the command
+//   response opcodes, then includes this file to process them and create the
+//   output files derived from the opcodes.
+//
 
 ////////////////////////////////////////
 //
