@@ -95,6 +95,13 @@
 ;
 ;       Set the current configuration bytes read index to the value in W0.
 ;
+;     CONFIG_ADR
+;
+;       Get the non-volatile memory address of the next config byte to read.
+;       This address is only valid when there is at least one config byte left
+;       to read.  The address is returned in W2:W1, which is compatible with the
+;       NVOL_xxx routines.
+;
 ;     CONFIG_LEFT
 ;
 ;       Sets W0 to the number of configuration bytes left to read, starting at

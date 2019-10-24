@@ -154,6 +154,8 @@ config_index (void);                   //get index of next config byte
 void config_index_set (                //set index of next config byte to read
   machine_intu_t);                     //new index
 
+int32u_t config_adr (void);            //non-volatile mem adr of next config byte
+
 machine_intu_t                         //N config bytes at current index to end
 config_left (void);                    //get number of config bytes left to read
 

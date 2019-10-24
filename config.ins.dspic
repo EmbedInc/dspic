@@ -404,7 +404,7 @@ cfgg_nfnd:
 ;
 ;     W0  -  Number of config data bytes.
 ;
-;     W2:W0  -  Non-volatile memory address of the first config data byte
+;     W2:W1  -  Non-volatile memory address of the first config data byte
 ;
 ;     W3  -
 ;
@@ -503,7 +503,7 @@ gb_leave:                    ;the return value is in W0
          glbsubd config_i16u, regf1
          mcall   config_i8u  ;get the high byte
          sl      w0, #8, w1  ;move it into position and save it in W1
-         gcall   config_i8u  ;get the low byte
+         mcall   config_i8u  ;get the low byte
          ior     w0, w1, w0  ;merge the two bytes into the 16 bit return value
          leaverest
 
@@ -591,6 +591,33 @@ skp_leave:
          glbsubd config_index
 
          mov     index, w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CONFIG_ADR
+;
+;   Get the non-volatile memory address of the next config byte.  The address is
+;   returned in W2:W1.  The result is only valid when there is at least one byte
+;   left to read.
+;
+         glbsub  config_adr
+
+         mov     adr+0, w1
+         mov     adr+2, w2
+
+         leaverest
+
+;*******************
+;
+;   C version of CONFIG_ADR.  The address is returned as the function value,
+;   which is passed in W1:W0.
+;
+         glbsubc config_adr
+
+         mov     adr+0, w0
+         mov     adr+2, w1
 
          leaverest
 
