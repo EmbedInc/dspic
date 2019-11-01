@@ -149,6 +149,10 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
          mov     #fwseq, w0
          gcall   [chars cmd]_put8 ;firmware sequence number
 
+/if [exist "fwinfo:macro"] then
+         fwinfo
+  /endif
+
 /if ustat then //additional firmware from USB device exists ?
          mov     usb_fwtype, w0
          cp0     w0

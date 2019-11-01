@@ -151,6 +151,24 @@
 ;       the buffer.  The buffer is reset to empty before each command is
 ;       processed.
 ;
+;
+;   Module configuration
+;
+;     NAME
+;
+;       Preprocessor string variable or constant containing the unique name to
+;       add to the CMD_xxx entry points called by this module.  When NAME
+;       exists and is not the empty string, the external subroutine names will
+;       be CMD_<name>_xxx instead of just CMD_xxx.  NAME must match the name
+;       used in the CMD module.
+;
+;     FWINFO
+;
+;       Preprocessor macro that supplies additional code to the SEND_FWINFO
+;       subroutine.  When this code is run, the response sending lock will
+;       already be held.  It must be held when the code completes.  W0 may be
+;       trashed.  W1-W15 must be preserved.
+;
 /include "qq2.ins.dspic"
 
 ;*******************************************************************************
