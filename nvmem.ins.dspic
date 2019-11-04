@@ -239,7 +239,7 @@ rdy_leave:
 ;   This routine does not return until the checksum is physically written to the
 ;   non-volatile memory.
 ;
-         glbsub  nvmem_cksum_set, regf0 | regf1 | regf2 | regf3 | regf4 | regf5 | regf6
+         glbsubd nvmem_cksum_set, regf0 | regf1 | regf2 | regf3 | regf4 | regf5 | regf6
 ;
 ;   Compute the checksum on all the payload bytes.  This is all the bytes except
 ;   the checksum itself.  The checksum will be left in W4:W3, and W2:W1 will
