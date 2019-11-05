@@ -36,7 +36,7 @@
 ;       Example call:
 ;
 ;         mov    #<stack size>, w13
-;         move   #<stack>, w14
+;         mov    #<stack>, w14
 ;         call   task_new
 ;         goto   <new task start point>
 ;         ...             ;existing task continues here
@@ -62,9 +62,28 @@
 ;
 ;     TASK_KILL
 ;
-;       Kill the task with the ID in W0.  Nothing is done is the ID matches no
+;       Kill the task with the ID in W0.  Nothing is done if the ID matches no
 ;       task.  If the current task is killed, this routine will not return.  The
 ;       processor is reset on attempt to kill the only task.
+;
+;     TASK_PRUNE
+;
+;       Delete all but the first W0 tasks in the list.  The processor is reset
+;       on attempt to delete all tasks (W0 = 0).  If the task calling this
+;       routine is not one of the first W0 tasks in the list, then not all
+;       intended tasks may be deleted.
+;
+;       The purpose of this routine is to restore to a set of "base" tasks, with
+;       all "new" tasks stopped.  To use this feature:
+;
+;         1  -  Create all the base tasks, and no others.
+;
+;         2  -  Call TASK_N_CURR to get the number of base tasks.
+;
+;         3  -  Create and possibly stop any number of new tasks.  However, the
+;               original base tasks must not be stopped.
+;
+;         4  -  Call TASK_PRUNE with the number of tasks found in step 2.
 ;
 ;     TASK_N_MAX
 ;

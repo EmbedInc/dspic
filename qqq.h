@@ -101,6 +101,9 @@ machine_intu_t                         //task ID, undefined for out of range slo
 task_nid (                             //get ID of task in a particular slot
   machine_intu_t);                     //0 to TASK_N_CURR-1 task slot number
 
+void task_prune (                      //kill all but the first N tasks
+  machine_intu_t);                     //number of tasks to leave, 0 resets processor
+
 void task_yield (void);                //let other tasks run for a while
 
 //******************************************************************************

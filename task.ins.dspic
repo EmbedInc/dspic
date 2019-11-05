@@ -55,7 +55,7 @@
 ;   The tasks table holds the information to restart tasks when they are
 ;   dormant.  The data structure is optimized for quickly changing from the
 ;   current task to the next task (TASK_YIELD).  It is acceptable if other
-;   operations, like starting and ending a task are less efficient.
+;   operations, like starting and ending a task, are less efficient.
 ;
 ;   The tasks table is statically allocated to a fixed maximum number of active
 ;   tasks (MAXTASKS).  The table starts at TASKS, with entries stored
@@ -119,7 +119,7 @@
 ;
 .section .ram_task, bss      ;variables in normal RAM
 
-allocg   currtask            ;0-N number of currently running task
+allocg   currtask            ;0-N ID of currently running task
 
 ;*******************
 ;
@@ -674,6 +674,35 @@ tex_nfound:                  ;the task was not found
 tex_nz:                      ;Z is set opposite of desired
          btg     Sr, #Z      ;flip Z
 tex_leave:                   ;common exit point, Z all set
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine TASK_PRUNE
+;
+;   Prune the tasks list to leave only the first W0 tasks in the list.  The
+;   processor is reset if W0 is 0.  Results are undefined if this routine is
+;   called from one of the tasks to be deleted.
+;
+         glbsubd task_prune, regf0 | regf1
+
+         cp0     w0
+         skip_nz             ;not trying to kill all tasks ?
+         return              ;trying to kill all tasks, reset the processor
+
+         mov     ntasks, w1  ;get number of tasks currently running
+         sub     w1, w0, w1  ;make number of tasks to kill
+         bra     le, prn_leave ;no tasks to kill ?
+
+prn_task:                    ;back here each new task to kill
+         mov     last_p, w0  ;get pointer to this task to kill
+         push    w1
+         mcall   tsk_delete  ;delete this task, trashes W0 W1
+         pop     w1
+         sub     #1, w1      ;count one less task left to kill
+         bra     nz, prn_task ;back to kill next task
+
+prn_leave:
          leaverest
 
 ;*******************************************************************************

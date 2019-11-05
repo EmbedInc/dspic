@@ -623,3 +623,27 @@ dbg4_send:                   ;send the response
 dbg4_leave:
          leaverest
   /endif
+
+;*******************************************************************************
+;
+;   Command STOP
+;
+;   Stop all but the first STOP_LEAVE tasks that were created.  Send the STOP
+;   response when done.
+;
+/if [Command cm_stop] then
+
+.section .ram_cmds[chars suff], bss
+allocg   stop_leave          ;number of tasks for STOP command to leave
+.section .code_cmds[chars suff], code
+
+         mov     stop_leave, w0 ;get number of tasks to leave
+         gcall   task_prune  ;stop all but the first STOP_LEAVE tasks
+
+         gcall   [chars cmd]_lock_out
+         mov     #[v rsp_stop], w0
+         gcall   [chars cmd]_put8 ;send the STOP response opcode
+         gcall   task_n_curr ;get number of tasks still running
+         gcall   [chars cmd]_put8 ;send NTASKS parameter
+         return
+  /endif
