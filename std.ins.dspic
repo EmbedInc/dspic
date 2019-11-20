@@ -949,6 +949,29 @@
   /stop
   /endsub
 
+////////////////////////////////////////
+//
+//   Macro PGMADR Wn, label
+//
+//   Load the registers Wn+1:Wn with the program memory address of the indicated
+//   label.  The upper unused bits are guaranteed to be 0.
+//
+/macro pgmadr
+  /var local wn integer      ;number of W register from Wn argument
+
+  /call get_wn [arg 1] wn    ;get Wn register number
+  /if [> wn 13] then         ;past last valid register number ?
+    /show "  Out of range register number in PGMADR macro."
+         .error  "Bad Wn"
+         .end
+    /stop
+    /endif
+
+         mov     #tbloffset([arg 2]), w[v wn] ;load address
+         mov     #tblpage([arg 2]), w[+ wn 1]
+         and     #0x00FF, w[+ wn 1] ;remove control bits, make pure address
+  /endmac
+
 ;********************
 ;
 ;   Macro FPLOAD Wn, fpval
@@ -3977,7 +4000,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
 //   The byte value will be the low 8 bits of the argument.  The argument must
 //   be resolvable to a integer value by the preprocessor.
 //
-//   Byte are written in least to most significant order in the program memory
+//   Bytes are written in least to most significant order in the program memory
 //   word.
 //
 //   Data will be buffered until a complete program memory word can be written,
