@@ -48,6 +48,11 @@
 ;       Gives all other tasks a chance to run.  Registers listed in TSKSAVE are
 ;       preserved.
 ;
+;       On a 33EP series dsPIC, the delay from the TASK_YIELD call in one task
+;       to the first instruction in the next task is 25 cycles, plus two cycles
+;       for every register saved.  When all register (W0-W14) are saved, a task
+;       swap takes 55 cycles.  That is 786 ns at 70 MHz instruction rate.
+;
 ;     TASK_YIELD_SAVE
 ;
 ;       Like TASK_YIELD, except that all registers are preserved.
@@ -95,8 +100,9 @@
 ;
 ;     TASK_NID
 ;
-;       Returns the ID for the 0-N task slot identified in W0, where N is the
-;       value returned by TASK_N minus 1.  The task ID is returned in W0.
+;       Returns the task ID for the 0-N task slot identified in W0, where N is
+;       the value returned by TASK_N_CURR minus 1.  The task ID is returned in
+;       W0.
 ;
 ;       For valid task slot numbers, the Z flag is cleared.  For out of range
 ;       task slot numbers, the Z flag is set and the W0 value is undefined.
@@ -105,6 +111,14 @@
 ;
 ;       Determine whether the task with ID in W0 exists.  Z is cleared if the
 ;       task exists and set otherwise.
+;
+;   Global state:
+;
+;     CURRTASK
+;
+;       Global 16 bit unsigned integer variable containing the ID of the
+;       currently-running task.  This variable must be considered read-only by
+;       application code.
 ;
 ;   The tasks are:
 ;

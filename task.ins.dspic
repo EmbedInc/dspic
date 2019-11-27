@@ -54,8 +54,8 @@
 ;
 ;   The tasks table holds the information to restart tasks when they are
 ;   dormant.  The data structure is optimized for quickly changing from the
-;   current task to the next task (TASK_YIELD).  It is acceptable if other
-;   operations, like starting and ending a task, are less efficient.
+;   current task to the next task (performed by TASK_YIELD).  It is acceptable
+;   if other operations, like starting and ending a task, are less efficient.
 ;
 ;   The tasks table is statically allocated to a fixed maximum number of active
 ;   tasks (MAXTASKS).  The table starts at TASKS, with entries stored
@@ -84,12 +84,12 @@
 ;       a new task to be assigned the same ID as a previously existing, but no
 ;       longer existing, task.  Once created, a task's ID does not change.
 ;
-;   To optimize task switching (TASK_YIELD), all used table entries are
-;   contiguous at the start of the table.  The local variable LAST_P points to
-;   the last-used table entry.  Therefore, all table entries from the start of
-;   the table thru the one pointed to by LAST_P contain data for active tasks.
-;   All the table entries after the one pointed to by LAST_P to the end of the
-;   table are unused.
+;   To optimize task switching, all used table entries are contiguous at the
+;   start of the table.  The local variable LAST_P points to the last-used table
+;   entry.  Therefore, all table entries from the start of the table thru the
+;   one pointed to by LAST_P contain data for active tasks.  All the table
+;   entries after the one pointed to by LAST_P to the end of the table are
+;   unused.
 ;
 /call struct_start
          field   tsk_stkpnt  ;stack pointer for this task
@@ -134,8 +134,8 @@ alloc    after_tasks, 0, 2   ;first address after tasks table
 ;
 .section .near_task, bss, near ;varibles in near RAM
 
-alloc    curr_p              ;adr of tasks table entry for current task
-alloc    last_p              ;pointer to last used tasks table entry
+alloc    curr_p              ;points to tasks table entry for current task
+alloc    last_p              ;points to last used tasks table entry
 alloc    nextid              ;ID to try to assign to a new task next
 alloc    ntasks              ;number of tasks currently defined
 
@@ -528,13 +528,8 @@ run_this:                    ;run task at CURR_P and W0
 ;     W1  -  Pointer to the last entry in the list.
 ;
 edel_nlast:
-/loop with ii n entsizew     ;once for each entry word to copy
-  /if [= ii 1]
-    /then
-         mov     [w1++], [w0++] ;copy last entry into vacated entry
-    /else
+/loop n entsizew             ;copy last entry into vacated entry
          mov     [w1++], [w0++]
-    /endif
   /endloop
          sub     #[* entsize 2], w1 ;update pointer to last entry in list
          mov     w1, last_p
