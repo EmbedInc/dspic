@@ -1,3 +1,4 @@
+ADDMOD qq2_ad.o
 ADDMOD qq2_clock.o
 ADDMOD qq2_cmd.o
 ADDMOD qq2_cmds.o
