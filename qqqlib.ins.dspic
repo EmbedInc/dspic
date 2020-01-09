@@ -17,7 +17,7 @@
 ;   This include file sets up the environment for the QQ2 firmware.
 ;
 /const   picname = "QQ4"     ;specific PIC model name
-/const   srcdir  = "qq1"     ;SOURCE directory containing this project
+/const   srcdir  = "qq1"     ;top level SOURCE directory containing this project
 /const   buildname = "qq2"   ;name of this project
 /const   fwtype  integer = 0 ;unique ID for this firmware
 /const   using_xc16 bool = false ;no XC16 source modules included in build
