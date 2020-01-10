@@ -20,14 +20,9 @@
 ;
 ;   Hardware peripheral usage:
 ;
-
 ;
-;   Debug switches.  All these should be set to FALSE for normal operation.
-;
-/const   debug_icd bool = false ;build for debugging with in-circuit debugger
-/const   debug_cmddel bool = false ;delay command to receive parameters in FIFO
-
 /include "qq2lib.ins.dspic"
+/include "qq2_cmdrsp.ins.dspic"
 
 ;*******************************************************************************
 ;
@@ -40,25 +35,7 @@
 .equiv   ipr_clock, 1        ;periodic clock timer interrupt priority
 .equiv   ipr_uart_recv, 2    ;UART receive interrupt priority
 .equiv   ipr_uart_xmit, 1    ;UART transmit interrupt priority
-;
-;   Define command stream opcodes.
-;
-/const   cmd_nop = 0         ;NOP
-/const   cmd_ping = 1        ;send PONG response
-/const   cmd_fwinfo = 2      ;send FWINFO response, gives FW type, ver and seq
-/const   cmd_nameset = 3     ;set user-settable device name, ignored
-/const   cmd_nameget = 4     ;get device name, fixed from DEVNAME constant
-
-/const   cmd_ustat = 255     ;Embed 10 USTAT command
-;
-;   Response stream opcodes.
-;
-/const   rsp_nop integer = 0 ;NOP
-/const   rsp_pong integer = 1 ;response to PING command
-/const   rsp_fwinfo integer = 2 ;firmware type, version, and sequence
-/const   rsp_name integer = 3 ;reports unit name string
-
-/call export_rsp             ;define response opcodes as ASM30 constants too
+.equiv   ipr_ad, 3           ;A/D conversion done interrupt priority
 ;
 ;   Software error IDs.
 ;
@@ -107,6 +84,14 @@
 ;
 ;   I/O pin declarations.
 ;
+
+
+/inana   volts   porta 0 an0 ;example A/D input
+
+
+/outbit  ledstat portb 0     ;drives the "Status" LED
+
+
 
 ;*******************************************************************************
 ;

@@ -3,7 +3,9 @@ ADDMOD qq2_clock.o
 ADDMOD qq2_cmd.o
 ADDMOD qq2_cmds.o
 ADDMOD qq2_init.o
+ADDMOD qq2_ledstat.o
 ADDMOD qq2_main.o
+ADDMOD qq2_pgbyte.o
 ADDMOD qq2_port.o
 ADDMOD qq2_strt.o
 ADDMOD qq2_task.o

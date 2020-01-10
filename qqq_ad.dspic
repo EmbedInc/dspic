@@ -290,8 +290,8 @@
   //
   //   Template configuration for one A/D input channel.
   //
-  /set ad_pname ""           ;analog input pin name
-  /set ad_vname ""           ;global result variable name
+  /set ad_pname "volts"      ;analog input pin name
+  /set ad_vname "mvolts"     ;global result variable name
   /set ad_units 0.001        ;result in units of mV
   /set ad_signed false       ;result is unsigned
   /set ad_r1 0

@@ -41,33 +41,60 @@
 ;
 ;   Static processor configuration settings.
 ;
-config   __FOSC, 0b1111111111110111
-                 ; --XXXX--XXXX----  unused
-                 ; 11--------------  disable clock switching
-                 ; ------11--------  select primary oscillator
-                 ; ------------0111  4-10MHz crystal, 16x PLL
+.section .configbits, code, address(0x557EC)
 
-;                ; ------------0110  4-10MHz crystal, 8x PLL
+         .pword  0xFFFFFF    ;reserved
+         .pword  0xFFFFFF    ;reserved
 
-config   __FWDT, 0b0111111111111111
-                 ; -XXXXXXXXX------  unused
-                 ; 0---------------  disable watchdog timer
-                 ; ----------XX----  watchdog timer prescaler A
-                 ; ------------XXXX  watchdog timer prescaler B
+         .pword  0b000000001111111111001111 ;FICD, 557F0
+                 ; 0000000011111111-------- unused, high 8 bits 0 makes NOP instruction
+                 ; ----------------1------- reserved, must be set to 1
+                 ; -----------------1------ unused
+                 ; ------------------0----- disable JTAG
+                 ; -------------------0---- reserved, must be set to 0
+                 ; --------------------1--- reserved, must be set to 1
+                 ; ---------------------1-- unused
+                 ; ----------------------11 ICD interface uses PGEC1/PGED1
 
-config   __FBORPOR, 0b1111111111001111
-                 ;    -XXXX----X--XX--  unused
-                 ;    1---------------  enable MCLR pin as MCLR
-                 ;    -----1----------  motor control PWM pins wake high Z
-                 ;    ------XX--------  motor control PWM pins wakeup polarity
-                 ;    --------1-------  enable brown out reset
-                 ;    ----------00----  select 4.5V low voltage threshold
-                 ;    --------------11  select maximum power on reset time (64mS)
+         .pword  0b000000001111111100110111 ;FPOR, 557F2
+                 ; 1111111111111111-------- unused, all 1s makes NOP instruction
+                 ; ----------------00------ WDT window is 75% of period
+                 ; ------------------1----- IIC2 uses SDA2/SCL2 pins
+                 ; -------------------1---- IIC1 users SDA1/SCL1 pins
+                 ; --------------------0--- disable brownout reset
+                 ; ---------------------111 unused
 
-config   __FGS,  0b1111111111111111
-                 ; XXXXXXXXXXXXXX--  unused
-                 ; --------------1-  disable program memory code protection
-                 ; ---------------1  disable program memory write protection
+         .pword  0b000000001111111101111111 ;FWDT, 557F4
+                 ; 1111111111111111-------- unused, all 1s makes NOP instruction
+                 ; ----------------0------- WDT not always enabled
+                 ; -----------------1------ WDT in non-window mode
+                 ; ------------------1----- enable PLL lock
+                 ; -------------------1---- WDT prescalser 128, not 32
+                 ; --------------------1111 WDT postscaler to max of 32768
+
+         .pword  0b000000001111111101011110 ;FOSC, 557F6
+                 ; 1111111111111111-------- unused, all 1s makes NOP instruction
+                 ; ----------------01------ clock switching enabled, failsafe clk disabled
+                 ; ------------------0----- allow multiple PPS changes
+                 ; -------------------11--- unused
+                 ; ---------------------1-- not used with external crystal oscillator
+                 ; ----------------------10 primary oscillator mode is HS
+
+         .pword  0b000000001111111100111010 ;FOSCSEL, 557F8
+                 ; 1111111111111111-------- unused, all 1s makes NOP instruction
+                 ; ----------------0------- start with selected osc mode, not FRC
+                 ; -----------------0------ don't require key sequence for PWM registers
+                 ; ------------------111--- unused
+                 ; ---------------------010 start with primary osc, not PLL
+
+         .pword  0b000000001111111111111111 ;FGS, 557FA
+                 ; 1111111111111111-------- unused, all 1s makes NOP instruction
+                 ; ----------------111111-- unused
+                 ; ----------------------1- disable user memory code protection
+                 ; -----------------------1 disable user memory write protection
+
+         .pword  0x00FFFF    ;reserved, 557FC
+         .pword  0x00FFFF    ;reserved, 557FE
 
 ;*******************************************************************************
 ;
@@ -223,15 +250,91 @@ config   __FGS,  0b1111111111111111
          gcall   dymem_init  ;init the heap
   /endif
 ;
+;   Set up the system clock as defined in the LIB file.  The processor is
+;   currently running directly from the external crystal.  The PLL will be
+;   switched on.
+;
+;   The following constants are set in the LIB file to define the clock
+;   chain:
+;
+;     CLKPRE  -  PLL block prescaler divider, 2-33
+;     CLKMUL  -  PLL block multiplier, 2-513
+;     CLKPOS  -  PLL block postscaler divider, 2,4,8
+;
+         ;
+         ;   Set the CPU clock chain configuration as described above.  This
+         ;   does not actually change the clock, but configures how the PLL
+         ;   block will work when it is enabled.
+         ;
+.set     ii,     #0b0000000000000000 ;init the fixed CLKDIV fields
+                 ;  0--------------- interrupts don't change doze mode
+                 ;  -000------------ clock divided by 1 from normal in doze mode
+                 ;  ----0----------- disable doze mode
+                 ;  -----000-------- divide FRC by 1
+                 ;  --------XX------ PLL output divide select filled in below
+                 ;  ----------X----- unused
+                 ;  -----------XXXXX PLL input divide select filled in below
+.set     ii,     ii | ([- [div clkpos 2] 1] << 6) ;merge in PLL postscaler
+.set     ii,     ii | [- clkpre 2] ;merge in PLL prescaler
+         mov     #ii, w0
+         mov     w0, Clkdiv  ;set clock divisor register
+
+         mov     #[- clkmul 2], w0 ;set PLL multiplier value
+         mov     w0, Pllfbd
+         ;
+         ;   Switch to using the primary oscillator with the PLL.  We are
+         ;   currently using the primary oscillator without the PLL block.  The
+         ;   designers of this clock chain hardware were paranoid about errant
+         ;   code unintentionally switching the clock, so certain incantations
+         ;   must be muttered to "unlock" the high and low bytes of OSCCON
+         ;   separately to allow the new information for switching the clock to
+         ;   be written.
+         ;
+         mov     #0b00000011, w0 ;get new value for OSCCON high byte
+                 ;  X------- unused
+                 ;  -XXX---- current oscillator selection (read only)
+                 ;  ----X--- unused
+                 ;  -----011 select primary oscillator with PLL
+         mov     #Osccon+1, w1 ;set pointer to high byte of OSCCON
+         mov     #0x78, w2   ;get the unlock values ready
+         mov     #0x9A, w3
+         mov.b   w2, [w1]    ;write the high byte unlock sequence
+         mov.b   w3, [w1]
+         mov.b   w0, [w1]    ;write new value to OSCCON high byte
+
+         mov     #0b00000001, w0 ;get new value for OSCCON low byte
+                 ;  0------- do not disable clock switching
+                 ;  -0------ allow peripheral pin select changes
+                 ;  --X----- read-only status bit
+                 ;  ---X---- unused
+                 ;  ----0--- clear any clock failure detected (not used)
+                 ;  -----X-- unused
+                 ;  ------0- disable secondary low power oscillator
+                 ;  -------1 start switchover from old to new clock source
+         mov     #Osccon, w1 ;set pointer to low byte of OSCCON
+         mov     #0x46, w2   ;get the unlock values ready
+         mov     #0x57, w3
+         mov.b   w2, [w1]    ;write the low byte unlock sequence
+         mov.b   w3, [w1]
+         mov.b   w0, [w1]    ;write new value to OSCCON low byte
+
+/if [or [not debugging] debug_icd] then
+wait_clkswitch:              ;wait for clock switch
+         btsc    Osccon, #Oswen ;oscillator switchover is complete ?
+         jump    wait_clkswitch ;no, go back and check again
+  /endif
+;
 ;   Initialize the separate modules.
 ;
          gcall   trap_init   ;init traps handler module
          gcall   port_init   ;init I/O ports
          gcall   task_init   ;init multi-tasking manager
+         gcall   ad_init     ;init A/D handler and start getting analog readings
+         gcall   clock_init  ;init clock tick hardware and ticks generator
+         gcall   ledstat_init ;init Status LED controller
          gcall   uart_init   ;init low level UART driver
          gcall   cmd_init    ;init host command stream processing module
          gcall   cmds_init   ;init command routines module
-         gcall   clock_init  ;init clock tick hardware and ticks generator
 
          gjump   init        ;continue with system-wide initialization
 

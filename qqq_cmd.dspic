@@ -255,7 +255,7 @@
 ;
 /const   name    = ""        ;unique name to add to CMD_xxx symbols
 /const   uart_name = name    ;unique name to add to UART_xxx symbols
-/const   bufsize integer = 0 ;size of commands scratch buffer, bytes
+/const   bufsize integer = 32 ;size of commands scratch buffer, bytes
 /const   sendnnop integer = 16 ;number of NOP responses to send at startup
 /const   drainwait real = 0.010 ;seconds no received byte for CMD stream drained
 /const   cmddone_set = ""    ;flag to set when done processing a command

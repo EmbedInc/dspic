@@ -18,18 +18,38 @@
 ;
 /const   picname = "QQ4"     ;specific PIC model name
 /const   srcdir  = "qq1"     ;top level SOURCE directory containing this project
-/const   buildname = "qq2"   ;name of this project
+/const   fwname  = "qq2"     ;name of this firmware
+/const   buildname = "qq5"   ;subdirectory within SRCDIR
 /const   fwtype  integer = 0 ;unique ID for this firmware
 /const   using_xc16 bool = false ;no XC16 source modules included in build
-/const   minstack0 integer = 256 ;min bytes required for task 0 stack
+/const   minstack0 integer = 256 ;min bytes for task 0 stack, defaults to use heap
+/const   dymem_heap bool = false ;indicate whether Embed heap in use
 
 /include "(cog)src/dspic/std_def.ins.dspic"
 /include "(cog)src/dspic/fwtype.ins.dspic"
 ;
-;   Set configuration for the standard routines and macros.
+;   Set the timing constants:
 ;
-/const   freq_osc real = [* 7.3728e6 16] ;CPU oscillator frequency, Hz
-/const   oscdig  integer = 5 ;significant digits to show oscillator values with
-/const   freq_inst real = [/ freq_osc 4] ;instruction cycle frequency, Hz
+;     FREQ_OSC  -  Oscillator frequency, after PLLs, dividers, etc.  Hz.
+;
+;     FREQ_INST  -  Instruction rate, Hz.
+;
+;     OSCDIG  -  Number of significant digits for showing oscillator frequency,
+;       instruction rate, etc.
+;
+/const   xtalhz  real = 8.0000e6 ;external crystal frequency, Hz
+/const   oscdig  integer = 4 ;significant digits to show oscillator values with
+/const   clkpre  integer = 2 ;PLL block prescaler divide value, 2-33
+/const   clkmul  integer = 70 ;PLL block multiplier value, 2-513
+/const   clkpos  integer = 2 ;PLL block postscaler divide value, 2,4,8
+/block
+  /var local ff real
+  /set ff xtalhz             ;start with crystal frequency
+  /set ff [/ ff clkpre]      ;apply PLL block prescaler
+  /set ff [* ff clkmul]      ;apply PLL block multiplier
+  /set ff [/ ff clkpos]      ;apply PLL block postscaler
+  /const freq_osc real = ff  ;oscillator frequency, Hz
+  /const freq_inst real = [/ freq_osc 2] ;instruction cycle frequency, Hz
+  /endblock
 
 /include "(cog)src/dspic/std.ins.dspic"
