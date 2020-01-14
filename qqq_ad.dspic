@@ -249,13 +249,13 @@
 ;
 ;     ADINTR_AFTER
 ;
-;      Runs at the end of the interrupt routine after all processing has been
-;      completed.
+;       Runs at the end of the interrupt routine after all processing has been
+;       completed.
 ;
-;      W0-W3 may be trashed.  All other registers must be preserved.
+;       W0-W3 may be trashed.  All other registers must be preserved.
 ;
-;      This macro may have some timing jitter relative to the start of the A/D
-;      interrupt.
+;       This macro may have some timing jitter relative to the start of the A/D
+;       interrupt.
 ;
 ;   It is recommended to use ADINTR_AFTER instead of ADINTR_BEFORE, unless the
 ;   timing jitter of ADINTR_AFTER can not be tolerated.
