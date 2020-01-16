@@ -215,7 +215,7 @@
 ;       SUBSYS is the ID of the subsystem sending the response.
 ;
 ;       STATUS indicates a particular status or event related to the subsystem.
-;       STATUS values with the low bit 0 (0 to 127) indicate normal conditions
+;       STATUS values with the high bit 0 (0 to 127) indicate normal conditions
 ;       and events, and do not indicate any failure or error.  STATUS values
 ;       with the high bit set (128 to 255) indicate some kind of failure during
 ;       initialization.

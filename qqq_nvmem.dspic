@@ -22,9 +22,9 @@
 ;     NVMEM_CHECK
 ;
 ;       Performs the checksum test on the non-volatile memory.  The last 4 bytes
-;       of the nv memory are reserved for the checksum.  The NVVALID flag is set
+;       of the NV memory are reserved for the checksum.  The NVVALID flag is set
 ;       if the checksum test passes, and cleared otherwise.  The NVERASED flag
-;       is set if all nv memory bits are set to 1 (the erased state), and
+;       is set if all NV memory bits are set to 1 (the erased state), and
 ;       cleared otherwise.
 ;
 ;     NVMEM_READY
@@ -34,8 +34,8 @@
 ;
 ;     NVMEM_CKSUM_SET
 ;
-;       Set the checksum according to the current nv memory contents.  The
-;       contents of the last 4 bytes of nv memory are irrelevant, and will be
+;       Set the checksum according to the current NV memory contents.  The
+;       contents of the last 4 bytes of NV memory are irrelevant, and will be
 ;       overwritten.  Calling NVMEM_CHECK immediately after this routine will
 ;       result in the NVVALID flag set, and the NVERASED flag cleared (assuming
 ;       no physical failures).
@@ -65,7 +65,8 @@
 ;
 ;     NVWRCKS
 ;
-;       The non-volatile memory has been written to sinc the last checksum test.
+;       The non-volatile memory has been written to since the last checksum
+;       test.
 ;
 ;   The following commands are implemented, depending on being enabled by their
 ;   CMD_xxx constants:
