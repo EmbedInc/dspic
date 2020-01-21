@@ -1426,19 +1426,28 @@ _\name:
   /var exist struct_align integer
   /var exist struct_offset integer
   /var exist struct_size integer
+  /var exist struct_defalign integer
   /set struct_align 0
   /set struct_offset 0
   /set struct_size 0
+  /set struct_defalign 2     ;default self-align size
   /endsub
 
 ;********************
 ;
-;   Macro FIELD name [, size [, align]]
+;   [name] Macro FIELD [size [, align]]
+;   Macro FIELD [name] [, size [, align]]
 ;
-;   Define one more field in a structure.  NAME will be defined as the
-;   offset from the start of the structure to the start of the new field.
-;   Subroutine STRUCT_START must be called once to initialize creating the
-;   structure, then this macro invoked to define each field.
+;   Define one more field in a structure.
+;
+;   NAME will be defined as the offset from the start of the structure to the
+;   start of the new field.  Subroutine STRUCT_START must be called once to
+;   initialize creating the structure, then this macro invoked to define each
+;   field.
+;
+;   NAME is normally provided as the label before the macro name.  However, for
+;   backward compatibility with old versions, NAME is the first argument when
+;   there is no label preceeding the macro name.
 ;
 ;   SIZE is the size of the field in bytes.  It defaults to 2, meaning
 ;   the default field is a 16 bit word.
@@ -1450,14 +1459,27 @@ _\name:
 ;   alignment is 1 for SIZE values of 1 or less.
 ;
 /macro field
-  /var local name string = [qstr [arg 1]]
+  /var local name string
   /var local size integer = 2
-  /if [exist 2 arg] then
-    /set size [arg 2]
+  /var local align integer
+  /var local narg integer    ;number of next argument
+
+  /if [exist -1 arg]
+    /then                    ;NAME supplied as label
+      /set name [qstr [arg -1]]
+      /set narg 1
+    /else                    ;NAME supplies as first argument
+      /set name [qstr [arg 1]]
+      /set narg 2
     /endif
-  /var local align integer = [if [<= size 1] 1 2]
-  /if [exist 3 arg] then
-    /set align [arg 3]
+
+  /if [exist narg arg] then
+    /set size [arg [1+ narg]]
+    /endif
+
+  /set align [if [< size struct_defalign] 1 struct_defalign]
+  /if [exist narg arg] then
+    /set align [arg [1+ narg]]
     /endif
 
   /set struct_align [max struct_align align] ;update alignment of whole structure
