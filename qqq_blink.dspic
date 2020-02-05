@@ -109,7 +109,7 @@ havepatt:                    ;W0 contains the 0-N number of the pattern to displ
 ;   Each pattern is defined with the PATTERN macro.  The parameter to this macro
 ;   is a series of stars (*) or dashes (-).  A star represents LED on, and a
 ;   dash LED off.  There must be exactly NSTBITS total characters in the
-;   pattern.  Patterns are displayed in left to righ order as defined by the
+;   pattern.  Patterns are displayed in left to right order as defined by the
 ;   PATTERN macro parameter.
 ;
 tbl_patt:
