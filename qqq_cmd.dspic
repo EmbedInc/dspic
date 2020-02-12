@@ -14,7 +14,7 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   Command stream processor.  The module contains the mechanics for processing
+;   Command stream processor.  This module contains the mechanics for processing
 ;   and responding to commands.  It also contains the commands dispatch table.
 ;   Most actual commands are in other modules.
 ;
@@ -22,8 +22,8 @@
 ;
 ;     CMD_INIT
 ;
-;       Performs module initialization.  This routine must be called before
-;       any other routine in this module.
+;       Performs one-time module initialization.  This routine must be called
+;       before any other routine in this module.
 ;
 ;     CMD_START
 ;
@@ -32,7 +32,7 @@
 ;
 ;     CMD_GET_CHECK
 ;
-;       Checks for command stream byte immediately available.  Z cleared if a
+;       Checks for command stream byte immediately available.  Z is cleared if a
 ;       byte is available, set if not.
 ;
 ;     CMD_GET8  -  Get 8 bit unsigned value into W0.
@@ -42,19 +42,32 @@
 ;     CMD_GET24S  -  Get 24 bit signed value into W1:W0.
 ;     CMD_GET32  -  Get 32 bit value into W1:W0.
 ;
-;       Routines to read data from the command stream.  These routines are used
-;       by routines that implement commands.
+;       Routines to read data from the command stream.  Intended for use by
+;       routines that implement commands.
 ;
 ;     CMD_LOCK_OUT
 ;
 ;       Acquire the exclusive lock on the response stream.  A task is only
 ;       allowed to write to the response stream when holding this lock.
 ;
+;     CMD_LOCK_OUT_N
+;
+;       Lock the response stream if at least N bytes can be written to it
+;       immediately.  N is passed in W0.   The Z flag is cleared if the output
+;       is locked, and N bytes can be written immediately.  The Z flag is set if
+;       N bytes can not be written immediately, in which case the response
+;       stream is not locked.
+;
 ;     CMD_UNLOCK_OUT
 ;
 ;       Release the lock on the response stream.  This undoes what CMD_LOCK_OUT
 ;       does.  The lock is automatically released when a command routine returns
 ;       or jumps to CMD_DONE.
+;
+;     CMD_PUTROOM
+;
+;       Returns the number of bytes in W0 that can be written to the output
+;       stream immediately without stalling.
 ;
 ;     CMD_PUT8  -  Write the 8 low bits of W0.
 ;     CMD_PUT16  -  Write the 16 bits of W0.
@@ -75,7 +88,7 @@
 ;       The address of CMD_DONE is written to the stack before a command routine
 ;       is run, such that a RETURN from the top level of the command routine
 ;       automatically jumps to CMD_DONE.  In other words, command routines can
-;       implemented as subroutines that return when done, as apposed to
+;       be implemented as subroutines that return when done, as apposed to
 ;       explicitly jumping to CMD_DONE.
 ;
 ;     CMD_PUTBUF
@@ -169,7 +182,7 @@
 ;
 ;       Seconds no byte is received to consider the command stream drained.
 ;       When the command stream processing task is started, it gets and discards
-;       any existing recieved bytes.  It keeps getting and discarding received
+;       any existing received bytes.  It keeps getting and discarding received
 ;       bytes until no byte is received for DRAINWAIT seconds.  When DRAINWAIT
 ;       is not defined, then the logic to drain the command stream on startup is
 ;       removed.
@@ -247,6 +260,13 @@
 ;       Send the byte in the low 8 bits of W0 to the response stream.  The
 ;       default is to call UART_PUT, as customized by UART_NAME.
 ;
+;     macro PUTROOM
+;
+;       Get the maximum guaranteed number of bytes that can be written
+;       immediately to the response stream without stalling in W0.  All other
+;       registers must be preserved.  The default is to call UART_OUTN, as
+;       customized by UART_NAME.
+;
 /include "qq2.ins.dspic"
 
 ;*******************************************************************************
@@ -309,6 +329,16 @@
 //   registers are preserved.
 //
 //macro putbyte
+//  endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro PUTROOM
+//
+//   Get the number of byte that can be written to the response stream
+//   immediately without stalling.  The number is returned in W0.
+//
+//macro pubroom
 //  endmac
 
 /include "(cog)src/dspic/cmd.ins.dspic"

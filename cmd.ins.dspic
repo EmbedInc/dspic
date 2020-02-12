@@ -168,6 +168,23 @@ alloc    stack_cmd, [v stacksz_cmd], 2 ;command processing task stack
 
 ;*******************************************************************************
 ;
+;   Subroutine CMD_PUTROOM
+;
+;   Get the number of bytes that can be written immediately to the output
+;   without stalling.  The value is returned in W0.
+;
+         glbsub  cmd_putroom
+
+/if [exist "putroom:macro"]
+  /then                      ;use custom macro
+         putroom
+         leaverest
+  /else                      ;no macro, default to asking UART
+         gjump   [chars uart]_outn ;get room in output FIFO, return to caller
+  /endif
+
+;*******************************************************************************
+;
 ;   Subroutine CMD_LOCK_OUT
 ;
 ;   Lock the output stream for this command processing task.  The output stream
@@ -200,6 +217,30 @@ alloc    stack_cmd, [v stacksz_cmd], 2 ;command processing task stack
   /else                      ;no macro
          gjump   [chars uart]_unlock ;release the lock, return to caller
   /endif
+
+;*******************************************************************************
+;
+;   Subroutine CMD_LOCK_OUT_N
+;
+;   Lock the output stream only if N bytes can be written to it immediately.  N
+;   is passed in W0.  The Z flag is cleared if the output is locked, and set if
+;   not.
+;
+         glbsub  cmd_lock_out_n, regf0 | regf1
+
+         mov     w0, w1      ;save min required output room in W1
+         mcall   cmd_lock_out ;get the lock on the output stream
+         mcall   cmd_putroom ;get number of byte that can be written immediately
+         cp      w0, w1      ;available to required
+         bra     ltu, lckn_no ;not enough room ?
+         bclr    Sr, #Z      ;indicate sufficient room output locked
+lckn_leave:                  ;common exit point, Z all set
+         leaverest
+
+lckn_no:                     ;there is insufficient room
+         mcall   cmd_unlock_out ;release the lock on the output stream
+         bset    Sr, #Z      ;indicate insufficient room, output not locked
+         jump    lckn_leave
 
 ;*******************************************************************************
 ;
