@@ -1,0 +1,24 @@
+*   MDEV configurable subsystem for testing Modbus I/O.  Packets are transferred
+*   between the Modbus and the configuration port.
+*
+*   Configuration data
+*
+*     onoff  -  byte
+*
+*       0  -  Disables the module.
+*
+*       1  -  Enables the module.
+*
+*       All remaining values are reserved for possible future use, and their
+*       results are undefined.
+*
+module modtest
+  desc
+    Tests Modbus I/O.
+  uses Modbus
+  uses ConfigSend shared
+  uses ConfigRecv shared
+  template qqq_modtest.dspic
+
+file qqq_modtest.dspic
+  requires modtest.ins.dspic

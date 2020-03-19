@@ -1,0 +1,36 @@
+*   Modbus packet sending and receiving interface.
+*
+*   Configuration data
+*
+*     FLAGS  -  Byte
+*
+*       Bit 0  -  Master mode, not slave.
+*
+*       Bit 1  -  Special character preceeds each packet.
+*
+*     ADR  -  Byte
+*
+*       Slave address.  Only relevant in slave mode.
+*
+*       0  -  Unassigned.
+*       1-247  -  Address.
+*
+*     SCHAR  -  Byte
+*
+*       Special character that preceeds each packet.  This is only relevant when
+*       FLAGS bit 1 is set.
+*
+module modbus
+  desc
+    Provides Modbus packet sending/receiving over serial link.
+  uses UartModbus
+  provides Modbus
+  template qqq_modbus.dspic
+  template qqq_modbus_ser_util.dspic
+  include modbus_setup.ins.dspic
+
+file qqq_modbus.dspic
+  requires modbus_ser.ins.dspic
+
+file qqq_modbus_ser_util.dspic
+  requires modbus_ser_util.ins.dspic
