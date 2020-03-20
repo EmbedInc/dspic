@@ -1,0 +1,24 @@
+*   MDEV configurable subsystem for testing a Modbus UART over the configuration
+*   port.
+*
+*   Configuration data
+*
+*     onoff  -  byte
+*
+*       0  -  Disables the module.
+*
+*       1  -  Enables the module.
+*
+*       All remaining values are reserved for possible future use, and their
+*       results are undefined.
+*
+module sertest
+  desc
+    Test Modbus UART via configuration port commands and responses.
+  uses UartModbus
+  uses ConfigSend shared
+  uses ConfigRecv shared
+  template qqq_sertest.dspic
+
+file qqq_sertest.dspic
+  requires sertest.ins.dspic

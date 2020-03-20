@@ -1,0 +1,33 @@
+*   Top Embed MDEV definition file for dsPIC firmware.  Any dsPIC MDEV firmware
+*   should point to this directory, which causes the file to be read.  This file
+*   may point to other directories, but that will be transparent to the
+*   firmware.
+*
+*   All Embed dsPIC MDEV interfaces are defined here, whether implemented by
+*   code in this directory or not.
+*
+interface ConfigRecv
+  desc
+    Command stream from configuration port.
+
+interface ConfigSend
+  desc
+    Response stream to configuration port.
+
+interface CanRecv
+  desc
+    Receives whole CAN frames.
+
+interface CanSend
+  desc
+    Sends whole CAN frames.
+
+interface UartModbus
+  desc
+    Serial port that contains all necessary features to support Modbus.
+    This includes detecting and guaranteeing the inter-packet time delays.
+
+interface Modbus
+  desc
+    Sends and receives whole Modbus packets over a UartModbus interface.
+    Can be configured as master or slave.
