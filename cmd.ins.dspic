@@ -529,14 +529,26 @@ pbn_done:                    ;done copying all the bytes
 ;
 cmd_task_start:              ;task starts here
 ;
+;   Include the app CMDINIT1 macro, if it exists.
+;
+/if [exist "cmdinit1:macro"] then
+         cmdinit1
+  /endif
+;
 ;   Drain and discard any received command stream bytes.  The command stream is
 ;   considered drained if no new byte is received for DRAINWAIT seconds.
 ;
 /if [exist "drainwait:vcon"] then
-         mov     tick1ms, w1 ;init clock tick up to date with
+  /const drwtk integer = [rnd [* drainwait 1000]] ;number of 1 ms clock ticks to wait
 
+  /if [<= drwtk 0]
+    /then
+cmd_drain_reset:
+    /else
+         mov     tick1ms, w1 ;init clock tick up to date with
 cmd_drain_reset:             ;back here to restart the drain time
          mov     #[rnd [* drainwait 1000]], w2 ;init or reset ms left to wait
+    /endif
 
 cmd_drain_check:             ;back here each new drain iteration
          gcall   task_yield_save ;give all other tasks a chance to run
@@ -548,8 +560,10 @@ cmd_drain_check:             ;back here each new drain iteration
          mcall   cmd_get8    ;read and discard the byte
          jump    cmd_drain_reset ;reset the wait time until drained
 cmd_drain_nb:                ;no byte is currently available
+
+  /if [> drwtk 0] then
          ;
-         ;   Check for new clock tick.
+         ;   Check for wait time elapsed.
          ;
 cmd_drain_clock:
          mov     tick1ms, w0 ;get current clock value
@@ -561,8 +575,14 @@ cmd_drain_clock:
          add     #1, w1      ;update clock value now current with
          sub     #1, w2      ;count one less tick left to wait
          bra     nz, cmd_drain_clock ;wait time not expired yet ?
+    /endif                   ;end of non-zero wait time
 
-cmd_drain_done:
+  /endif                     ;end of drain input bytes
+;
+;   Include the app CMDINIT2 macro, if it exists.
+;
+/if [exist "cmdinit2:macro"] then
+         cmdinit2
   /endif
 ;
 ;   Send a bunch of NOP responses so that the host will be in sync with our

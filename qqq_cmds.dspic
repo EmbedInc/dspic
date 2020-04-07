@@ -162,6 +162,13 @@
 ;       be CMD_<name>_xxx instead of just CMD_xxx.  NAME must match the name
 ;       used in the CMD module.
 ;
+;     INIT
+;
+;       Preprocessor macro that performs additional module-level initialization.
+;       When defined, this macro is invoked in CMDS_INIT after all the built-in
+;       initialization is performed.  W0 may be trashed.  The reamining
+;       registers must be preserved.
+;
 ;     FWINFO
 ;
 ;       Preprocessor macro that supplies additional code to the SEND_FWINFO
@@ -176,12 +183,9 @@
 ;   Configuration constants.
 ;
 /const   name    = ""        ;unique name to add to CMD_xxx symbols
-
-/include "(cog)src/dspic/cmds.ins.dspic"
 ;
 ;   Derived constants.
 ;
-
 
 ;*******************************************************************************
 ;
@@ -209,5 +213,7 @@
 ;/if [Command cm_xxx] then
 ;         return
 ;  /endif
+
+/include "(cog)src/dspic/cmds.ins.dspic"
 
 .end

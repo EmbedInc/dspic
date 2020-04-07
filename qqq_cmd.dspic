@@ -185,7 +185,8 @@
 ;       any existing received bytes.  It keeps getting and discarding received
 ;       bytes until no byte is received for DRAINWAIT seconds.  When DRAINWAIT
 ;       is not defined, then the logic to drain the command stream on startup is
-;       removed.
+;       removed.  When DRAINWAIT is 0, then only the immediately available bytes
+;       are drained without any waiting.
 ;
 ;     CMDDONE_SET, string
 ;
@@ -266,6 +267,18 @@
 ;       immediately to the response stream without stalling in W0.  All other
 ;       registers must be preserved.  The default is to call UART_OUTN, as
 ;       customized by UART_NAME.
+;
+;     macro CMDINIT1
+;
+;       Optional code to include at the start of the command processing task.
+;       This code is included before the task does anything else.
+;
+;     macro CMDINIT2
+;
+;       Optional initialization code to include in the command processing task.
+;       This code is included after the command stream is drained (as controlled
+;       with DRAINWAIT, below), and before NOPs are sent (as controlled by
+;       SENDDNOP, below).
 ;
 /include "qq2.ins.dspic"
 

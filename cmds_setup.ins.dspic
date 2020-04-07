@@ -1,0 +1,6 @@
+;   Define global symbols and possibly additional build-time setup required by
+;   the CMDS library file.  This file is intended to be included from the main
+;   include file of a project using the CMDS library module.
+;
+/flag    usb_host            ;host may be connected to USB
+/flag    usb_app             ;app may have logical connection over the USB
