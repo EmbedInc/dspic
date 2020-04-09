@@ -246,6 +246,13 @@
 ;       Get the next command stream byte into W0.  The default is to call
 ;       UART_GET, as customized by UART_NAME.
 ;
+;     macro HAVEBYTE
+;
+;       Invoked after each command stream byte is received.  The 0-255 byte
+;       value is in W0.  The value left in W0 will be the received byte from the
+;       rest of the system's point of view.  The remaining registers must be
+;       preserved.
+;
 ;     macro LOCK
 ;
 ;       Acquire the exclusive lock on the response stream.  The default is to

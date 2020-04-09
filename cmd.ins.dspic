@@ -272,12 +272,23 @@ lckn_no:                     ;there is insufficient room
          glbsub  [chars cmd]_get8
 
 /if [exist "getbyte:macro"]
-  /then                      ;use custom macro
-         getbyte
 
+  /then                      ;use custom GETBYTE macro
+         getbyte
+    /if [exist "havebyte:macro"] then
+         havebyte
+      /endif
          leaverest
-  /else                      ;no macro
+
+  /else                      ;default, no GETBYTE macro
+    /if [exist "havebyte:macro"]
+      /then
+         gcall   [chars uart]_get ;get the byte from the UART
+         havebyte
+         leaverest
+      /else
          gjump   [chars uart]_get ;get the byte from the UART, return to caller
+      /endif
   /endif
 
 ;*******************************************************************************
