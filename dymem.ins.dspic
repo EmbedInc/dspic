@@ -599,12 +599,15 @@ dall_leave:
 
 ;*******************************************************************************
 ;
+;   Command DYMEM
 ;   Subroutine DYMEM_SEND
 ;
 ;   Send a set of DYMEM responses indicating the current state of the dynamic
 ;   memory.
 ;
 /if [exist "rsp_dymem:const"] then
+  /if [Command cm_dymem] then
+    /endif
          glbsub  dymem_send, regf0 | regf1
 
          gcall   cmd_lock_out ;acquire exclusive lock on the response stream
@@ -680,15 +683,4 @@ snd_dtemp:                   ;done sending responses for temporary blocks
          unlock              ;release lock on the heap structures
          gcall   cmd_unlock_out ;release lock on the response stream
          leaverest
-  /endif
-
-;*******************************************************************************
-;
-;   Command DYMEM
-;
-;   This command causes a series of DYMEM responses to be sent, which indicate
-;   the current state of the heap.
-;
-/if [and [Command cm_dymem] [exist "rsp_dymem:const"]] then
-         jump    dymem_send  ;send the responses, return to command interpreter
   /endif
