@@ -102,6 +102,19 @@
 /if [not [exist "config_start:vcon"]] then
   /const config_start integer = 0
   /endif
+/if [not [exist "config_indirect:vcon"]] then
+  /const config_indirect integer = 0
+  /endif
+/if [not [exist "config_ind_hilo:vcon"]] then
+  /const config_ind_hilo bool = true
+  /endif
+
+/if [> config_indirect 4] then
+  /show "  CONFIG_INDIRECT of " config_indirect " is out of range."
+         .error  "CONFIG_INDIRECT"
+         .end
+  /stop
+  /endif
 
 /const   ovrwint real = 0.100 ;CFGOVR0 time window, seconds
 ;
@@ -112,9 +125,23 @@
   /var local r real
   /var local s string
 
-  /set s "Configuration data starts at "
-  /append s [int config_start "base 16 usin"] "h"
-  /append s " (" config_start ")"
+  /if [= config_indirect 0]
+    /then
+      /set s "Configuration data starts at "
+      /append s [int config_start "base 16 usin"] "h"
+      /append s " (" config_start ")"
+    /else
+      /set s "Config start adr at "
+      /append s [int config_start "base 16 usin"] "h"
+      /append s ", " config_indirect " bytes, "
+      /if config_ind_hilo
+        /then
+          /append s "high to low"
+        /else
+          /append s "low to high"
+        /endif
+      /append s " byte order"
+    /endif
   /show "  " s
 
   /endblock
@@ -263,7 +290,82 @@ cfgg_n0:                     ;done checking for subsystem 0 override
 ;
          load32  w1, [v config_start] ;init non-volatile memory address in W2:W1
 
-cfgg_id:                     ;back here each new ID in the list
+/if [> config_indirect 0] then ;indirect address exists ?
+;
+;   CONFIG_START is the indirect start address, not directly the address to
+;   start reading configuration data at.  W2:W1 have been set to CONFIG_START.
+;
+;   CONFIG_INDIRECT is the 1-4 number size in bytes of the indirect address,
+;   and CONFIG_IND_HILO indicates the byte order it is stored in.
+;
+  /if [= config_indirect 1] then ;1-byte indirect address ?
+         gcall   nvol_read   ;get the address into W0
+         mov     w0, w1      ;move it into W2:W1
+         mov     #0, w2
+    /endif
+
+  /if [= config_indirect 2] then ;2-byte indirect address ?
+         gcall   nvol_readw  ;get address into W0, lo-hi byte order
+    /if config_ind_hilo then
+         swap    w0          ;switch to hi-lo byte order
+      /endif
+         mov     w0, w1      ;move the address into W2:W1
+         mov     #0, w2
+    /endif
+
+  /if [= config_indirect 3] then ;3-byte indirect address ?
+    /if config_ind_hilo
+      /then                  ;3 bytes, hi-lo order
+         gcall   nvol_read   ;get high byte into W4
+         mov     w0, w4
+         gcall   nvol_readw  ;get low bytes into W0
+         swap    w0
+         mov     w0, w1      ;move the address into W2:W1
+         mov     w4, w2
+      /else                  ;3 bytes, lo-hi order
+         gcall   nvol_readw  ;get low bytes into W4
+         mov     w0, w4
+         gcall   nvol_read   ;get high byte into W0
+         mov     w4, w1      ;move the address into W2:W1
+         mov     w0, w2
+      /endif
+    /endif
+
+  /if [= config_indirect 4] then ;4-byte indirect address ?
+    /if config_ind_hilo
+      /then                  ;4 bytes, hi-lo order
+         gcall   nvol_readw  ;get high word into W4
+         swap    w0
+         mov     w0, w4
+         gcall   nvol_readw  ;get low word into W0
+         swap    w0
+         mov     w0, w1      ;move the address into W2:W1
+         mov     w4, w2
+      /else                  ;4 bytes, lo-hi order
+         gcall   nvol_readw  ;get low word into W4
+         mov     w0, w4
+         gcall   nvol_readw  ;get high word into W0
+         mov     w4, w1      ;move address into W2:W1
+         mov     w0, w2
+      /endif
+    /endif
+  /endif                     ;end of handling indirect address
+;
+;   Back here each new ID in the config data.  Register contents:
+;
+;     W0  -
+;
+;     W2:W2  -  Address of next NV byte to read.
+;
+;     W3  -  The configuration ID we are looking for.
+;
+;     W4  -
+;
+;     W5  -
+;
+;     W6  -
+;
+cfgg_id:                     ;back here for next ID
          gcall   nvol_read   ;get the ID for this record into W0
          cp      w0, #0xFF   ;compare to special end of list ID
          bra     z, cfgg_nfnd ;no data found for the target ID ?

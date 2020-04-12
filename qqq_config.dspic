@@ -254,6 +254,20 @@
 ;       The non-volatile memory address of where the configuration data starts.
 ;       The default is 0.
 ;
+;     CONFIG_INDIRECT, integer
+;
+;       The size of the indirect address at CONFIG_START, in bytes.  This is the
+;       address of the actual start of the config data.  The indirect address
+;       size can be 1-4 bytes.  The special value of 0 means that the config
+;       starts directly at CONFIG_START.  The default is 0 (no indirect
+;       address).
+;
+;     CONFIG_IND_HILO, bool
+;
+;       Byte order of the indirect address at CONFIG_START is from most to least
+;       significant (big endian) when TRUE, and least to most significant
+;       (little endian) when FALSE.  This value is irrelevant when there is no
+;       indirect address (CONFIG_INDIRECT = 0).  The default is TRUE.
 ;
 /include "qq2.ins.dspic"
 
@@ -262,7 +276,8 @@
 ;   Configuration constants.
 ;
 /const   config_start integer = 0 ;nvol address of first byte of config structure
+/const   config_indirect integer = 0 ;size of initial indirect adr, bytes
+/const   config_ind_hilo bool = true ;indirect adr stored high-low byte order
 
 /include "(cog)src/dspic/config.ins.dspic"
-
 .end
