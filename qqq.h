@@ -168,6 +168,12 @@ void config_unlock (void);             //release exclusive lock on CONFIG routin
 //
 //   Fixed and floating point manipulation routines.
 //
+typedef struct {                       //48 bit integer
+  int16u_t low;                        //least significant word
+  int16u_t mid;
+  int16u_t high;                       //most significant word
+  } int48_t;
+
 int32s_t                               //returned 32 bit signed fixed point number
 fp32_fixs (                            //FLOAT to fixed point, rounded and saturated
   float,                               //floating point input value
@@ -188,13 +194,23 @@ fp32_flt32u (                          //32 bit unsigned fixed point to floating
   int32u_t,                            //unsigned fixed point value
   machine_ints_t);                     //number of fraction bits, may be negative
 
+float                                  //resulting floating point value
+fp32_flt48u (                          //48 bit unsigned fixed point to floating point
+  int48_t,                             //48 bit fixed point value
+  machine_ints_t);                     //number of fraction bits, may be negative
+
+float                                  //resulting floating point value
+fp32_flt48s (                          //48 bit signed fixed point to floating point
+  int48_t,                             //48 bit fixed point value
+  machine_ints_t);                     //number of fraction bits, may be negative
+
 int32u_t                               //resulting 3.29 unsigned fixed point quotient
 fx3f29_divu (                          //3.29 unsigned fixed point divide
   int32u_t,                            //3.29 unsigned fixed point numerator
   int32u_t);                           //3.29 unsigned fixed point denominator
 
 int32u_t                               //resulting 3.29 unsigned fixed point product
-fx3f29_divu (                          //3.29 unsigned fixed point multiply
+fx3f29_mulu (                          //3.29 unsigned fixed point multiply
   int32u_t,                            //3.29 unsigned fixed point term
   int32u_t);                           //3.29 unsigned fixed point term
 

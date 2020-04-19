@@ -39,7 +39,7 @@
 ;
 ;     W1:W0  -  IEEE 32 bit floating point value.
 ;
-         glbsub  fp32_flt48s, regf2
+         glbsubd fp32_flt48s, regf2
 
          btsc    w2, #15     ;zero or positive ?
          jump    flt48s_neg  ;negative
