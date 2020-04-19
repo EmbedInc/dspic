@@ -195,12 +195,12 @@ fp32_flt32u (                          //32 bit unsigned fixed point to floating
   machine_ints_t);                     //number of fraction bits, may be negative
 
 float                                  //resulting floating point value
-fp32_flt48u (                          //48 bit unsigned fixed point to floating point
+fp32_flt48s (                          //48 bit signed fixed point to floating point
   int48_t,                             //48 bit fixed point value
   machine_ints_t);                     //number of fraction bits, may be negative
 
 float                                  //resulting floating point value
-fp32_flt48s (                          //48 bit signed fixed point to floating point
+fp32_flt48u (                          //48 bit unsigned fixed point to floating point
   int48_t,                             //48 bit fixed point value
   machine_ints_t);                     //number of fraction bits, may be negative
 
