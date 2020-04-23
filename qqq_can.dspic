@@ -14,8 +14,35 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   CAN bus interface routines.  The exported routines are briefly listed here.
-;   See the header comments of each routine for details.
+;   CAN bus interface routines.  This module can be a fixed CAN interface, or
+;   it can be a configurable MDEV.  If the preprocessor integer constant
+;   "cfg_can" exists, then this module is a MDEV.  The module initialization
+;   depends on the fixed/MDEV configuration.
+;
+;   In fixed CAN interface configuration:
+;
+;     CAN_INIT  -  One-time module initialization.  Must be first call after
+;       reset.
+;
+;     CAN_START  -  Sets up the CAN hardware ready for use, and also starts the
+;       CAN receiving thread.
+;
+;   In MDEV configuration:
+;
+;     CAN_CFG  -  Configures the module according to the static configuration
+;       data for the ID that CFG_CAN is set to.
+;
+;     This module takes one byte of configuration data with these values:
+;
+;       0  -  Module disabled.
+;
+;       1  -  Module enabled.
+;
+;       The remaining values are reserved for future use and disable the module
+;       for now.
+;
+;   The remaining exported routines are the same for the fixed and MDEV
+;   configurations:
 ;
 ;     CAN_INIT  -  One-time module initialization.  Must be first call after
 ;       reset.
@@ -172,6 +199,32 @@
 ;
 ;     CANTX_RPID  -  The ID value to specify the CAN TX function for a
 ;       remappable output pin.
+;
+;   The following commands are supported if their CMD_xxx constants exist:
+;
+;      CANSD nid dat ... dat
+;
+;        Sends a standard CAN data frame.  NID is a 16 bit integer with the CAN
+;        frame ID in NID<10:0> (the low 11 bits), and the number of data bytes
+;        in NID<14:11>.  The number of data bytes must be 0 to 8.  NID<15> (the
+;        high bit) is reserved and must be set to 0.  The CAN frame data bytes
+;        follow NID.  There must be exactly NID<14:11> data bytes.
+;
+;      CANSR id16
+;
+;        Sends standard remote request CAN frame.  ID16 contains the 11 bit ID
+;        in a 16 bit integer.
+;
+;      CANED id32 ndat dat ... dat
+;
+;        Sends a extended CAN data frame.  ID32 contains the 29 bit ID in a 32
+;        bit integer.  NDAT is the number of data bytes that follow, and must be
+;        0 to 8.  Exactly NDAT data bytes follow the NDAT byte.
+;
+;      CANER id32
+;
+;        Sends extended remote request CAN frame.  ID32 contains the 29 bit ID
+;        in a 32 bit integer.
 ;
 /include "qq2.ins.dspic"
 

@@ -70,6 +70,23 @@
          .end
   /stop
   /endif
+;
+;   Create the constant MDEV according to whether this module is a MDEV, as
+;   opposed to a fixed module.
+;
+/block
+  /var local b bool = false  ;init to fixed module, not MDEV
+  /block
+    /if [not [exist "cfg_can:const"]] then
+      /quit
+      /endif
+    /if [<> [sym "cfg_can:const" dtype] "INTEGER"] then
+      /quit
+      /endif
+    /set b true              ;is MDEV
+    /endblock
+  /const mdev bool = b       ;create final MDEV constant
+  /endblock
 
 .equiv   stacksz, 128        ;CAN receiving task stack size
 /const   fcanclk real = freq_inst ;clock to CAN module, bit rate generator input
@@ -147,22 +164,28 @@
   /set s [str s ", " dmasize " bytes"]
   /set s [str s ", aligned to " dmaalign]
   /show "  " s
-  /endblock
 
-/if [or [<> canin_callback ""] [<> canout_callback ""]] then
-  /var new s string
-  /if [<> canin_callback ""] then
-    /set s [str s "Received frame callback """ canin_callback '"']
-    /endif
-  /if [<> canout_callback ""] then
-    /if [<> s ""] then
-      /set s [str s ", "]
+  /if [or [<> canin_callback ""] [<> canout_callback ""]] then
+    /set s ""
+    /if [<> canin_callback ""] then
+      /append s "Received frame callback """ canin_callback '"'
       /endif
-    /set s [str s "Sent frame callback """ canout_callback '"']
+    /if [<> canout_callback ""] then
+      /if [<> s ""] then
+        /append s ", "
+        /endif
+      /append s "Sent frame callback """ canout_callback '"'
+      /endif
+    /show "  " s
     /endif
-  /show "  " s
-  /del s
-  /endif
+
+  /if mdev
+    /then
+      /show "  Configured as MDEV."
+    /else
+      /show "  Configured as fixed module, not MDEV."
+    /endif
+  /endblock
 
 ;*******************************************************************************
 ;
@@ -209,7 +232,7 @@ alloc    wr_dat7, 1
 
 .section .near_can, bss, near
 
-alloc    canflags, 2         ;local flag bits, use FLG_xxx bit numbers
+alloc    canflags            ;local flag bits, use FLG_xxx bit numbers
 
 .equiv   flg_ext, 0          ;frame being built is extended, not standard
 .equiv   flg_rtr, 1          ;frame being built is a remote request, not data
@@ -257,11 +280,17 @@ alloc    canbuf[v ii]w[v jj]
 ;
 ;   Initialize the hardware and software state managed by this module.
 ;
+/if mdev
+  /then
+         locsub  can_init, regf0
+  /else
          glbsub  can_init, regf0
+  /endif
 
          clr     canflags    ;init all local flags to 0
          clrflag canin       ;reset to no CAN input frame available
          clrflag cansend     ;no task has CAN sending facility acquired
+         clrflag canrun      ;init to CAN interface not up and running
 
          leaverest
 
@@ -323,7 +352,12 @@ done\@:
 ;   Set up the CAN hardware for operation and start the CAN frames receiving
 ;   thread.
 ;
+/if mdev
+  /then
+         locsub  can_start, regf0 | regf1 | regf13 | regf14
+  /else
          glbsub  can_start, regf0 | regf1 | regf13 | regf14
+  /endif
 ;
 ;   Set up the basic operation of the CAN peripheral.
 ;
@@ -568,6 +602,35 @@ done\@:
          goto    can_task    ;go to execution start of the new task
 
          leaverest
+
+;*******************************************************************************
+;
+;   Subroutine CAN_CFG
+;
+;   Configure this MDEV.
+;
+/if mdev then
+         glbsub  can_cfg, regf0
+         mcall   can_init    ;initialize the CAN state of off
+
+         gcall   config_lock ;get exclusive access to CONFIG_xxx routines
+
+         mov     #[v cfg_can], w0 ;request config data for this module
+         gcall   config_setup
+         bra     z, cfg_leave ;no config data ?
+
+         gcall   config_i8u  ;get config byte
+         btss    w0, #0      ;enabled ?
+         jump    cfg_leave   ;disabled
+;
+;   This module is enabled.
+;
+         mcall   can_start   ;start the CAN receiving task
+
+cfg_leave:
+         gcall   config_unlock ;release lock on CONFIG routines
+         leaverest
+  /endif
 
 ;*******************************************************************************
 ;
@@ -866,6 +929,7 @@ snd_dctrl:                   ;done setting the control and ID bits
 ;   CAN frames receiving task.
 ;
 can_task:                    ;task execution start point
+         setflag canrun      ;indicate CAN interface is up and running
 
 cant_loop:                   ;back here after done processing each new frame
 ;
@@ -1016,3 +1080,134 @@ cant_rbufrdy:                ;the software receive buffer is ready for new frame
   /endif
 
          jump    cant_loop   ;back to get next CAN frame
+
+;*******************************************************************************
+;
+;   Command CANSD nid dat ... dat
+;
+;   Send CAN standard data frame.  The frame ID is in NID<10:0> and the number
+;   of data bytes in NID<14:11>.
+;
+/if [Command cm_cansd] then
+;
+;   Read the whole command.
+;
+         gcall   cmd_get16   ;get NID into W0
+         lsr     w0, #11, w1 ;extract the number of data bytes into W1
+         and     #15, w1
+         mov     #0x7FF, w2  ;extract frame ID into W2
+         and     w0, w2, w2
+
+         mov     w1, w0      ;read the data bytes into the scratch buffer
+         gcall   cmd_putbufn
+
+         skip_flag canrun    ;CAN interface is up ?
+         return              ;no, don't try to send the CAN frame
+;
+;   Send the CAN frame.  Register contents:
+;
+;     W1  -  Number of data bytes.
+;
+;     W2  -  CAN frame ID.
+;
+         mov     #0b00, w0   ;indicate standard data frame
+         gcall   can_send_init ;set up for sending a CAN frame
+
+         mov     w2, w0      ;set the frame ID
+         gcall   can_send_id
+
+         mov     #cmdbuf, w2 ;init pointer to first data byte
+sends_byte:                  ;back here each new data byte
+         cp0     w1
+         bra     z, sends_dbytes ;done all data bytes ?
+         mov.b   [w2++], w0  ;get this data byte
+         gcall   can_send_dat ;write it to the CAN frame
+         sub     #1, w1      ;count one less byte left to do
+         jump    sends_byte  ;back to do next byte
+sends_dbytes:                ;done writing all data bytes
+
+         gjump   can_send    ;send frame, release lock, return from command
+  /endif
+
+;*******************************************************************************
+;
+;   Command CANSR id16
+;
+;   Send CAN standard remote request frame.
+;
+/if [Command cm_cansr] then
+         gcall   cmd_get16   ;get the frame ID into W1
+         mov     w0, w1
+         skip_flag canrun    ;CAN interface is up ?
+         return              ;no, don't try to send the CAN frame
+
+         mov     #0b10, w0   ;indicate standard remote request frame
+         gcall   can_send_init ;set up for sending a CAN frame
+
+         mov     w1, w0      ;set the frame ID
+         gcall   can_send_id
+
+         gjump   can_send    ;send frame, release lock, return from command
+  /endif
+
+;*******************************************************************************
+;
+;   Command CANED id32 ndat dat ... dat
+;
+;   Send CAN extended data frame.
+;
+/if [Command cm_caned] then
+         gcall   cmd_get32   ;get the frame ID into W1:W0
+         mov.d   w0, w2      ;save it in W3:W2
+         gcall   cmd_get8    ;get the number of data bytes
+         mov     w0, w4      ;save it in W4
+         gcall   cmd_putbufn ;read the data bytes into the scratch buffer
+
+         skip_flag canrun    ;CAN interface is up ?
+         return              ;no, don't try to send the CAN frame
+;
+;   Send the CAN frame.  Register contents:
+;
+;     W3:W2  -  CAN frame ID.
+;
+;     W4  -  Number of data bytes.
+;
+         mov     #0b01, w0   ;indicate extended data frame
+         gcall   can_send_init ;set up for sending a CAN frame
+
+         mov.d   w2, w0      ;set the frame ID
+         gcall   can_send_id
+
+         mov     #cmdbuf, w2 ;init pointer to first data byte
+sende_byte:                  ;back here each new data byte
+         cp0     w4
+         bra     z, sende_dbytes ;done all data bytes ?
+         mov.b   [w2++], w0  ;get this data byte
+         gcall   can_send_dat ;write it to the CAN frame
+         sub     #1, w4      ;count one less byte left to do
+         jump    sende_byte  ;back to do next byte
+sende_dbytes:                ;done writing all data bytes
+
+         gjump   can_send    ;send frame, release lock, return from command
+  /endif
+
+;*******************************************************************************
+;
+;   Command CANER id32
+;
+;   Send CAN extended remote request frame.
+;
+/if [Command cm_caner] then
+         gcall   cmd_get32   ;get the frame ID into W1:W0
+         mov     w0, w2      ;save it in W1:W2
+         skip_flag canrun    ;CAN interface is up ?
+         return              ;no, don't try to send the CAN frame
+
+         mov     #0b11, w0   ;indicate extended remote request frame
+         gcall   can_send_init ;set up for sending a CAN frame
+
+         mov     w2, w0      ;set the frame ID
+         gcall   can_send_id
+
+         gjump   can_send    ;send frame, release lock, return from command
+  /endif

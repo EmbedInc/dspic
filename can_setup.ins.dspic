@@ -6,3 +6,4 @@
 /flag    canin_ext           ;received CAN frame is extended, not standard
 /flag    canin_rtr           ;received CAN frame is remote request, not data
 /flag    cansend             ;CAN sending facility is acquired by a task
+/flag    canrun              ;CAN interface is up and running
