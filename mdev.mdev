@@ -14,6 +14,10 @@ interface ConfigSend
   desc
     Response stream to configuration port.
 
+interface CanHw
+  desc
+    Hardware that can send/receive CAN frames.
+
 interface CanRecv
   desc
     Receives whole CAN frames.
