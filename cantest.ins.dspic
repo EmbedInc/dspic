@@ -20,7 +20,11 @@
 ;   Configuration constants.
 ;
 /const   stacksz_cantest integer = 128 ;private task stack size, bytes
-/const   cantest_stat_nomem integer = 128 ;subsystem status, didn't get dyn mem
+;
+;   Subsystem configuration status IDs.
+;
+/const   cantest_stat_nomem integer = 128 ;didn't get dyn mem
+/const   cantest_stat_norsp integer = 129 ;CANFR response opcode not defined
 ;
 ;   Derived constants.
 ;
@@ -28,11 +32,19 @@
   /var local ii integer
   /var local r real
   /var local s string
-  /var local b bool
 
-  /set b [exist "cfg_cantest:const"] ;subsystem ID defined ?
-  /set b [and b [exist "rsp_canfr:const"]] ;CAN frame response opcode defined ?
-  /const subsys bool = b     ;create the subsystem
+  /const rspdef bool = [exist "rsp_canfr:const"] ;CANFR response opcode is defined
+
+  /if [not [exist "cfg_cantest:const"]] then
+    /show "  Error: CFG_CANTEST not defined."
+         .error  "cfg_cantest"
+         .end
+    /stop
+    /endif
+
+  /if [not rspdef] then
+    /show "  Warning: CANFR response opcode not defined."
+    /endif
   /endblock
 
 
@@ -44,9 +56,9 @@
 ;   Send the CANFR response for the current received CAN frame state.  The
 ;   CANIN_xxx state must be valid.
 ;
-/if subsys then
          locsub  send_canfr, regf0 | regf1 | regf2
 
+/if rspdef then
          gcall   cmd_lock_out ;acquire exclusive lock on the response stream
 
          mov     #[v rsp_canfr], w0
@@ -92,8 +104,9 @@ scn_dbyte:                   ;back here each new byte, Z set to bytes left
 scn_dbytes:                  ;done sending all the data bytes
 
          gcall   cmd_unlock_out ;release lock on config port response stream
-         leaverest
   /endif
+
+         leaverest
 
 ;*******************************************************************************
 ;
@@ -101,7 +114,6 @@ scn_dbytes:                  ;done sending all the data bytes
 ;
 ;   Configure this module according to the static configuration data.
 ;
-/if subsys then
          glbsub  cantest_cfg, regf0 | regf1 | regf13 | regf14
 
          gcall   config_lock ;get exclusive access to CONFIG_xxx routines
@@ -117,6 +129,13 @@ scn_dbytes:                  ;done sending all the data bytes
 ;
 ;   This module is enabled.
 ;
+/if [not rspdef]
+  /then                      ;the CANFR response opcode is not defined
+         mov     #[v cfg_cantest], w0 ;pass subsystem ID
+         mov     #[v cantest_stat_norsp], w1 ;pass status code
+         gcall   config_stat ;report the error
+
+  /else                      ;CANFR response opcode is defined
          mov     #[v stacksz_cantest], w0
          gcall   dymem_alloc_perm ;allocate stack for CANTEST task
          bra     nz, cfg_havemem ;got the requested memory ?
@@ -134,17 +153,16 @@ cfg_havemem:                 ;got the dynamic memory, W0 pointing to start
          call    task_new    ;create the new task
          goto    cantest_task_start ;starting point of the new task
          ;   Original task continues here.
+  /endif
 
 cfg_leave:
          gcall   config_unlock ;release lock on CONFIG routines
          leaverest
-  /endif
 
 ;*******************************************************************************
 ;
 ;   CANTEST task.
 ;
-/if subsys then
 cantest_task_start:          ;task execution start point
 
 tsk_loop:                    ;start of main operating loop
@@ -158,4 +176,3 @@ tsk_waitframe:               ;back here until a new CAN frame is received
          clrflag canin       ;release the received CAN frame
 
          jump    tsk_loop    ;back to get next CAN frame
-  /endif

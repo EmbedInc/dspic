@@ -872,6 +872,7 @@ config_stat glbentd
 ;
          locsub  send_cfgstat
 
+/if [exist "rsp_cfgstat:const"] then
          gcall   cmd_lock_out ;acquire lock on response stream to host
 
          push    w0          ;temp save subsystem ID
@@ -887,6 +888,8 @@ config_stat glbentd
          pop     w0          ;restore W0
 
          gcall   cmd_unlock_out ;release lock on response stream
+  /endif
+
          leaverest
 
 ;*******************************************************************************
