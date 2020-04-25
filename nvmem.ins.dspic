@@ -446,3 +446,26 @@ nvu_send:
          mov     w2, w1
          gjump   cmd_put32   ;send it, end the command
   /endif
+
+;*******************************************************************************
+;
+;   Command NVMEM_ERASE type version sequence
+;
+;   Erase the non-volatile memory to all 1 bits.  TYPE, VERSION, and SEQUENCE
+;   must match the particulars of this firmware.
+;
+/if [Command cm_nvmem_erase] then
+         gcall   cmd_get8    ;get TYPE
+         xor     #fwtype, w0
+         mov     w0, w1
+         gcall   cmd_get8    ;get VERSION
+         xor     #fwver, w0
+         ior     w1, w0, w1
+         gcall   cmd_get8    ;get SEQUENCE
+         xor     #fwseq, w0
+         ior     w1, w0, w1
+         skip_z              ;all parameters are correct
+         return              ;no, abort this command
+
+         jump    nvmem_erase ;erase the non-volatile memory, return from command
+  /endif
