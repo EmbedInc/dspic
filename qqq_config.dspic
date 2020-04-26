@@ -154,9 +154,21 @@
 ;       Send a CFGSTAT response for the current status of the main system
 ;       (subsystem  0).
 ;
-;     CONFIG_SYS
+;     CONFIG_MDEVS
 ;
-;       Perform basic MDEV main system (subsystem ID 0) configuration.
+;       Configure all the MDEVs in the system.  The SYS MDEV is configured
+;       first.  If it is not configured for normal operation, then the remaining
+;       MDEVs are not configured.
+;
+;       Individual subsystems may emit CFGSTAT responses while being configured.
+;       Any status code with the high bit set (128 - 255) causes the global
+;       CFGFAIL flag to be set, which indicates overall configuration failure,
+;       and that normal operation is not possible.
+;
+;       When configuration is complete, a CFGSTAT response is sent to the host
+;       reporting the overall system configuration result.  This response will
+;       be for the SYS subsystem (ID 0), with the status code being one of the
+;       SYS_STAT_xxx constant values.
 ;
 ;
 ;   Commands implemented in this module if the corresponding CMD_xxx constants
@@ -278,6 +290,10 @@
 /const   config_start integer = 0 ;nvol address of first byte of config structure
 /const   config_indirect integer = 0 ;size of initial indirect adr, bytes
 /const   config_ind_hilo bool = true ;indirect adr stored high-low byte order
+
+/macro config_mdevs_notsys   ;define macro for calling all the CFG routines except SYS
+  /include "qq2_init_mdev.ins.dspic"
+  /endmac
 
 /include "(cog)src/dspic/config.ins.dspic"
 .end

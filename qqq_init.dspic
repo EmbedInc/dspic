@@ -71,33 +71,11 @@
          gcall   nvmem_erase ;yes, erase it, set state accordingly
 done_nv:                     ;done with the non-volatile memory
 ;
-;   Peform base system startup.
+;   Start up the system.
 ;
          gcall   cmd_start   ;start host command processing
          gcall   cmd_wait_cmds ;wait for command processing up and running
-;
-;   Configure the system.
-;
-         gcall   config_sys  ;do basic system configuration
-         skip_flag cfgrun    ;system configured for normal operation
-         jump    done_cfg    ;no, don't configure other modules
-         ;
-         ;   Run the configuration routines of the various layered (not the bare
-         ;   system) modules.  This section is skipped if in test mode.
-         ;
-         ;   Each layered module configures itself to the static configuration
-         ;   data in non-volatile memory.  There may be multiple
-         ;   mutually-exclusive modules.  It is up to the configuration data to
-         ;   ensure that each module is configured in a way to not conflict with
-         ;   others.  Such conflicts are not handled nor even detected in the
-         ;   firmware.
-         ;
-/include "qq2_init_mdev.ins.dspic"
-
-done_cfg:                    ;done with all configurations
-         setflag cfgdone     ;indicate system-wide configuration complete
-         gcall   config_stat_sys0 ;notify host of configuration result
+         gcall   config_mdevs ;configure all the configurable modules
 
          gjump   main        ;run main event handling task
-
 .end

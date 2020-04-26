@@ -2,6 +2,11 @@
 ;   intended to be included from the main include file of a project using the
 ;   CONFIG library module.
 ;
+/const   sys_stat_normal integer = 0 ;normal operation
+/const   sys_stat_test integer = 1 ;test mode
+/const   sys_stat_ndone integer = 7 ;config not done yet, still in progress
+/const   sys_stat_fail integer = 255 ;failure during config, not in normal operation
+
 /const   cantest_stat_nomem integer = 128 ;CAN subsystem status for unable to get mem
 
 /flag    cfgovr0             ;CFGOVR0 command will be acted on
