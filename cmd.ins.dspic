@@ -153,6 +153,17 @@ allocg   cmdbuf[chars suff], [v bufsize] ;commands scratch buffer
 ;   Local state.
 ;
 alloc    stack_cmd, [v stacksz_cmd], 2 ;command processing task stack
+;
+;   Local state in near memory.
+;
+.section .near_[chars cmd], bss, near ;varibles in near RAM
+
+alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
+         ;
+         ;   Bits in FLAGS word.  Each symbol is the number of its flag bit.
+         ;
+.equiv   flg_started, 0      ;command processing task started
+.equiv   flg_cmd, 1          ;command processing task init done, processing commands
 
 
 .section .code_[chars cmd], code
@@ -163,6 +174,8 @@ alloc    stack_cmd, [v stacksz_cmd], 2 ;command processing task stack
 ;   Initialize the hardware and software state managed by this module.
 ;
          glbsub  [chars cmd]_init
+
+         clr     flags
 
          leaverest
 
@@ -533,17 +546,40 @@ pbn_done:                    ;done copying all the bytes
 
 ;*******************************************************************************
 ;
+;   Subroutine CMD_WAIT_CMDS
+;
+;   Wait for command processing to start.  Command processing starts after
+;   CMD_START is called and the task completes all its one-time startup
+;   operations.
+;
+         glbsub  cmd_wait_cmds
+
+wcmds_check:                  ;back here to check for cmd processing again
+         btss    flags, #flg_cmd ;command processing has started ?
+         jump    wcmds_wait  ;no, go wait a while
+         leaverest           ;yes, return to caller
+
+wcmds_wait:                  ;wait a little
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    wcmds_check ;back to check again
+
+;*******************************************************************************
+;
 ;   Routine CMD_TASK
 ;
 ;   This code is run in a separate task.  The task reads the command stream,
 ;   processes the commands, and possibly sends responses.
 ;
 cmd_task_start:              ;task starts here
+         bset    flags, #flg_started ;inidicate command processing task started
 ;
 ;   Include the app CMDINIT1 macro, if it exists.
 ;
-/if [exist "cmdinit1:macro"] then
+/if [exist "cmdinit1:macro"]
+  /then
          cmdinit1
+  /else
+    /write
   /endif
 ;
 ;   Drain and discard any received command stream bytes.  The command stream is
@@ -592,8 +628,11 @@ cmd_drain_clock:
 ;
 ;   Include the app CMDINIT2 macro, if it exists.
 ;
-/if [exist "cmdinit2:macro"] then
+/if [exist "cmdinit2:macro"]
+  /then
          cmdinit2
+  /else
+    /write
   /endif
 ;
 ;   Send a bunch of NOP responses so that the host will be in sync with our
@@ -611,15 +650,34 @@ loop_nop:
          gcall   [chars cmd]_unlock_out ;release lock on the response stream
   /endif
 ;
+;   Include the app CMDINIT3 macro, if it exists.
+;
+/if [exist "cmdinit3:macro"]
+  /then
+         cmdinit3
+  /else
+    /write
+  /endif
+;
 ;   Send the FWINFO response.
 ;
 /if [exist "rsp_fwinfo:vcon"] then
          gcall   send_fwinfo ;send initial response giving our firmware info
   /endif
 ;
+;   Include the app CMDINIT4 macro, if it exists.
+;
+/if [exist "cmdinit4:macro"]
+  /then
+         cmdinit4
+  /else
+    /write
+  /endif
+;
 ;   Go process commands.  Execution jumps to CMD_FIRST to allow for processing
 ;   that is done after each command, but not before the first command.
 ;
+         bset    flags, #flg_cmd ;indicate now processing commands
          jump    cmd_first
 ;
 ;   Return point after done executing a command.  Command routines can jump here

@@ -30,6 +30,12 @@
 ;       Starts command processing.  A separate task is created that reads and
 ;       processes the command stream in a infinite loop.
 ;
+;     CMD_WAIT_CMDS
+;
+;       Wait for command processing to start.  This means that the command
+;       processing task has been started, and that it has completed all its
+;       one-time startup operations.
+;
 ;     CMD_GET_CHECK
 ;
 ;       Checks for command stream byte immediately available.  Z is cleared if a
@@ -275,17 +281,28 @@
 ;       registers must be preserved.  The default is to call UART_OUTN, as
 ;       customized by UART_NAME.
 ;
-;     macro CMDINIT1
+;     Initialization macros
 ;
-;       Optional code to include at the start of the command processing task.
-;       This code is included before the task does anything else.
+;       The task initialization process can be customized by the use of the
+;       initialization macros.  The task process is:
 ;
-;     macro CMDINIT2
+;         Task start
 ;
-;       Optional initialization code to include in the command processing task.
-;       This code is included after the command stream is drained (as controlled
-;       with DRAINWAIT, below), and before NOPs are sent (as controlled by
-;       SENDDNOP, below).
+;         Macro CMDINIT1
+;
+;         Drain the command stream, as customized by DRAINWAIT.
+;
+;         Macro CMDINIT2
+;
+;         NOP responses sent, as customized by SENDNNOP.
+;
+;         Macro CMDINIT3
+;
+;         FWINFO response send, if RSP_FWINFO is defined.
+;
+;         Macro CMDINIT4
+;
+;         Command processing.
 ;
 /include "qq2.ins.dspic"
 
@@ -300,6 +317,35 @@
 /const   drainwait real = 0.010 ;seconds no received byte for CMD stream drained
 /const   cmddone_set = ""    ;flag to set when done processing a command
 /const   cmddone_clr = ""    ;flag to clear when done processing a command
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro PUTROOM
+//
+//   Get the number of byte that can be written to the response stream
+//   immediately without stalling.  The number is returned in W0.
+//
+//macro pubroom
+//  endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro LOCK
+//
+//   Acquire the exclusive lock on the response stream.  This macro waits
+//   indefinitely until the lock is available.  All registers are preserved.
+//
+//macro lock
+//  endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro UNLOCK
+//
+//   Release the response stream lock.  All registers are preserved.
+//
+//macro unlock
+//  endmac
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -324,21 +370,15 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//   Macro LOCK
+//   Macro HAVEBYTE
 //
-//   Acquire the exclusive lock on the response stream.  This macro waits
-//   indefinitely until the lock is available.  All registers are preserved.
+//   The next command stream byte has just been received into W0.  The value
+//   returned in W0 will be the received byte value from the rest of the sytem's
+//   point of view.  All other registers must be preserved.
 //
-//macro lock
-//  endmac
-
-////////////////////////////////////////////////////////////////////////////////
+//   The default is to not alter the received byte value.
 //
-//   Macro UNLOCK
-//
-//   Release the response stream lock.  All registers are preserved.
-//
-//macro unlock
+//macro havebyte
 //  endmac
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -353,14 +393,44 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//   Macro PUTROOM
+//   Macro CMDINIT1
 //
-//   Get the number of byte that can be written to the response stream
-//   immediately without stalling.  The number is returned in W0.
+//   Code run once at the start of the command processing task.
 //
-//macro pubroom
+//macro cmdinit1
 //  endmac
 
-/include "(cog)src/dspic/cmd.ins.dspic"
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro CMDINIT2
+//
+//   Code run once after the command input stream has been drained.
+//
+//macro cmdinit2
+//  endmac
 
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro CMDINIT3
+//
+//   Code run once after the NOP responses have been sent and before the FWINFO
+//   response (if exists) is sent.
+//
+//macro cmdinit3
+//  endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro CMDINIT4
+//
+//   Code run once after the FWINFO response (if exists) is sent.  Regular
+//   command processing starts immediately after this macro.
+//
+/macro cmdinit4
+  /if [exist "rsp_dymem:const"] then
+         gcall   dymem_send  ;send initial state of heap, before allocations
+    /endif
+  /endmac
+
+/include "(cog)src/dspic/cmd.ins.dspic"
 .end

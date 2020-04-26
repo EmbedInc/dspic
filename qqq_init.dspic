@@ -74,6 +74,7 @@ done_nv:                     ;done with the non-volatile memory
 ;   Peform base system startup.
 ;
          gcall   cmd_start   ;start host command processing
+         gcall   cmd_wait_cmds ;wait for command processing up and running
 ;
 ;   Configure the system.
 ;
