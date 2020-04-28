@@ -53,6 +53,25 @@
 /const   cmd_fwinfo = 2      ;send FWINFO response, gives FW type, ver and seq
 /const   cmd_nameset = 3     ;set user-settable device name, ignored
 /const   cmd_nameget = 4     ;get device name, fixed from DEVNAME constant
+/const   cmd_nvread = 5      ;read from non-volatile memory
+/const   cmd_nvwrite = 6     ;write to non-volatile memory
+/const   cmd_nvflush = 7     ;force all cached data to physical NV memory
+/const   cmd_nvsize = 8      ;get size of the non-volatile memory
+/const   cmd_nvmem_erase = 9 ;erase NV mem
+/const   cmd_nvmem_appsize = 10 ;get size of NV mem available to the app
+/const   cmd_nvmem_stat = 11 ;get NV mem checksum status
+/const   cmd_nvmem_check = 12 ;do NV mem checksum check
+/const   cmd_nvmem_ckset = 13 ;set NV mem checksum to current contents
+/const   cmd_nvmem_used = 14 ;get size of NV mem apparently used by app
+/const   cmd_reset = 15      ;reset processor, flush NV mem first
+/const   cmd_dymem = 16      ;get dynamic memory state
+/const   cmd_cfgovr0 = 17    ;override SYS config data
+/const   cmd_cfg = 18        ;get config data for one subsystem
+/const   cmd_cfgstat = 19    ;get overall configuration status
+/const   cmd_cansd = 20      ;send CAN standard data frame
+/const   cmd_cansr = 21      ;send CAN standard request frame
+/const   cmd_caned = 22      ;send CAN extended data frame
+/const   cmd_caner = 23      ;send CAN extended request frame
 
 /const   cmd_ustat = 255     ;Embed 10 USTAT command
 
@@ -67,5 +86,13 @@
 /const   rsp_pong integer = 1 ;response to PING command
 /const   rsp_fwinfo integer = 2 ;firmware type, version, and sequence
 /const   rsp_name integer = 3 ;reports unit name string
-
-/const   rsp_cfgovr0 integer = 254 ;subsystem 0 config override window open
+/const   rsp_nvol integer = 4 ;contents of NV mem chunk
+/const   rsp_nvsize integer = 5 ;size of NV mem
+/const   rsp_nvmem_appsize integer = 6 ;size of NV mem available to the application
+/const   rsp_nvmem_stat integer = 7 ;NV mem checksum status
+/const   rsp_nvmem_used integer = 8 ;amount of NV mem used by the application
+/const   rsp_dymem integer = 9 ;dynamic memory state
+/const   rsp_cfgovr0 integer = 10 ;subsystem 0 config override window open
+/const   rsp_cfg integer = 11 ;config data for one subsystem
+/const   rsp_cfgstat integer = 12 ;config status of one subsystem
+/const   rsp_canfr integer = 13 ;received CAN frame
