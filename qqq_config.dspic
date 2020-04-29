@@ -287,12 +287,11 @@
 ;
 ;   Configuration constants.
 ;
-/const   config_start integer = 0 ;nvol address of first byte of config structure
 /const   config_indirect integer = 0 ;size of initial indirect adr, bytes
 /const   config_ind_hilo bool = true ;indirect adr stored high-low byte order
 
 /macro config_mdevs_notsys   ;define macro for calling all the CFG routines except SYS
-  /include "qq2_init_mdev.ins.dspic"
+  /include "qq2_config_mdevs.ins.dspic"
   /endmac
 
 /include "(cog)src/dspic/config.ins.dspic"
