@@ -281,6 +281,17 @@
 ;       (little endian) when FALSE.  This value is irrelevant when there is no
 ;       indirect address (CONFIG_INDIRECT = 0).  The default is TRUE.
 ;
+;     Macro CONFIG_MDEVS_NOTSYS
+;
+;       The code in this macro is run after the SYS module is initialized, and
+;       iff the system is configured for normal operation.  The default version
+;       below includes the xxx_CONFIG_MDEVS.INS.DSPIC file, which is code that
+;       calls the configuration routines of all the MDEVs, in dependency order.
+;
+;       When configuration is complete, the macro falls thru to the local label
+;       "cmdevs_done".  The code there sets the global CFGDONE flag, and emits
+;       the CFGSTAT response for SYS (subsystem 0).
+;
 /include "qq2.ins.dspic"
 
 ;*******************************************************************************
