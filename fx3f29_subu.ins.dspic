@@ -1,0 +1,43 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fx3f29_subu_ins:const"]] then
+  /const fx3f29_subu_ins bool = true
+
+
+.section .code_fx3f29_subu, code
+;*******************************************************************************
+;
+;   Subroutine FX3F29_SUBU
+;
+;   Fixed point 3.29 format unsigned subtraction.
+;
+;   W1:W0 - W3:W2 --> W1:W0
+;
+         glbsubd fx3f29_subu
+
+         sub     w0, w2, w0  ;subtract the low words
+         subb    w1, w3, w1  ;subtract the high words
+         bra     nc, subu_unfl ;underflow ?
+
+subu_leave:
+         leaverest
+
+subu_unfl:                   ;underflow
+         mov     #0, w0      ;return minimum possible value
+         mov     #0, w1
+         jump    subu_leave
+  /endif                     ;end of file interlock

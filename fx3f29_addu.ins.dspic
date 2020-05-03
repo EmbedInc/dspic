@@ -1,0 +1,43 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fx3f29_addu_ins:const"]] then
+  /const fx3f29_addu_ins bool = true
+
+
+.section .code_fx3f29_addu, code
+;*******************************************************************************
+;
+;   Subroutine FX3F29_ADDU
+;
+;   Fixed point 3.29 format unsigned addition.
+;
+;   W1:W0 + W3:W2 --> W1:W0
+;
+         glbsubd fx3f29_addu
+
+         add     w0, w2, w0  ;add the low words
+         addc    w1, w3, w1  ;add the high words
+         bra     c, addu_ovfl ;overflow ?
+
+addu_leave:
+         leaverest
+
+addu_ovfl:                   ;overflow
+         mov     #0xFFFF, w0 ;return maximum unsigned value
+         mov     #0xFFFF, w1
+         jump    addu_leave
+  /endif                     ;end of file interlock

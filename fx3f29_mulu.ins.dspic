@@ -14,11 +14,11 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-/if [not [exist "fx3f29_mul_ins:const"]] then
-  /const fx3f29_mul_ins bool = true
+/if [not [exist "fx3f29_mulu_ins:const"]] then
+  /const fx3f29_mulu_ins bool = true
 
 
-.section .code_fx3f29_mul, code
+.section .code_fx3f29_mulu, code
 ;*******************************************************************************
 ;
 ;   Subroutine FX3F29_MULU
@@ -90,6 +90,7 @@
          btst.c  w8, #12     ;move the rounding bit into C
          addc    #0, w0      ;do the rounding
          addc    #0, w1
+         bra     c, mulu_ovfl ;rounding caused overflow ?
 
 mulu_leave:
          leaverest

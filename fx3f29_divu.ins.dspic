@@ -14,11 +14,11 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-/if [not [exist "fx3f29_div_ins:const"]] then
-  /const fx3f29_div_ins bool = true
+/if [not [exist "fx3f29_divu_ins:const"]] then
+  /const fx3f29_divu_ins bool = true
 
 
-.section .code_fx3f29_div, code
+.section .code_fx3f29_divu, code
 ;*******************************************************************************
 ;
 ;   Subroutine FX3F29_DIVU

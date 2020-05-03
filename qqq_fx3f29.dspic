@@ -14,10 +14,27 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   Fixed point 3.29 format math routines.
+;   Fixed point 3.29 format math routines.  The available routines are:
 ;
-;   These routines generally work on the two input values being W1:W0 and W3:W2,
-;   with the result written to W1:W0.
+;     FX3F29_ADDU  -  Unsigned add.
+;
+;       W1:W0 + W3:W2 --> W1:W0
+;
+;     FX3F29_SUBU  -  Unsigned subtract.
+;
+;       W1:W0 - W3:W2 --> W1:W0
+;
+;     FX3F29_MULU  -  Unsigned multiply.
+;
+;       W1:W0 * W3:W2 --> W1:W0
+;
+;     FX3F29_DIVU  -  Unsigned divide.
+;
+;       W1:W0 / W3:W2 --> W1:W0
+;
+;   There are no runtime error conditions.  Saturation, clipping to 0, etc, is
+;   performed to return the most reasonable possible value when the exact result
+;   can not be expressed in the 3.29 fixed point format.
 ;
 /include "qq2.ins.dspic"
 ;
@@ -28,8 +45,10 @@
 ;   for implicitly called routines to be included.  Each file contains a
 ;   interlock so that no harm is done by referencing a file more than once.
 ;
-/include "(cog)src/dspic/fx3f29_div.ins.dspic"
-/include "(cog)src/dspic/fx3f29_mul.ins.dspic"
+/include "(cog)src/dspic/fx3f29_addu.ins.dspic"
+/include "(cog)src/dspic/fx3f29_divu.ins.dspic"
+/include "(cog)src/dspic/fx3f29_mulu.ins.dspic"
+/include "(cog)src/dspic/fx3f29_subu.ins.dspic"
 ;
 ;   The firmware build script will need to grab all the files that are
 ;   ultimately used, including from any implicit dependencies.  The commands to
@@ -37,11 +56,9 @@
 ;   script.  No harm is done if unused files are grabbed.  These will not be
 ;   included in the build unless actually referenced.
 ;
-/if false then
+// call src_get_ins_dspic dspic fx3f29_addu
+// call src_get_ins_dspic dspic fx3f29_divu
+// call src_get_ins_dspic dspic fx3f29_mulu
+// call src_get_ins_dspic dspic fx3f29_subu
 
-call     src_get_ins_dspic dspic fx3f29_div
-call     src_get_ins_dspic dspic fx3f29_mul
-
-  /endif
-
-         .end
+.end
