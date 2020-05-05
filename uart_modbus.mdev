@@ -1,0 +1,47 @@
+*   MDEV configurable subsystem that provides a procedural interface to UART
+*   hardware that is capable of supporting Modbus.
+*
+*   Configuration data
+*
+*     PROT
+*
+*       Byte containing multiple fields.
+*
+*           7       6       5       4       3       2       1       0
+*       -----------------------------------------------------------------
+*       |       |       |                       |       |               |
+*       |       |       |        PARITY         | PULL  |      BUS      |
+*       |       |       |                       |       |               |
+*       -----------------------------------------------------------------
+*
+*       BUS
+*
+*         0  -  RS-232
+*         1  -  RS-485 2-wire
+*         2  -  RS-485 4-wire
+*
+*       PULL  -  Enable pullups and pulldowns on the RS-485 lines.
+*
+*       PARITY
+*
+*         0  -  None
+*         1  -  Even
+*         2  -  Odd
+*         3  -  Zero
+*         4  -  One (same as no parity, 2 stop bits)
+*
+*     BAUD
+*
+*       Desired baud rate, 24 bit unsigned integer.  The closest realizable baud
+*       rate to that specified by BAUD will be silently chosen.
+*
+module uart_modbus
+  desc
+    Driver of UART with sufficient features to support Modbus.
+  uses UartModbusHw
+  provides UartModbus
+  template qqq_uart_modbus.dspic
+  include uart_modbus_setup.ins.dspic
+
+file qqq_uart_modbus.dspic
+  requires uart_modbus.ins.dspic

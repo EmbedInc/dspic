@@ -48,12 +48,23 @@
 ;   string.  For example, the initialization routine is called UART_INIT when
 ;   NAME is empty, and UART_ABC_INIT when NAME is set to ABC.
 ;
+;   This module can be a MDEV or fixed.  When the CFG_UART_MODBUS constant
+;   exists and is integer, then this module is built as a MDEV.
+;
 ;   Subroutines:
 ;
-;     UART_INIT
+;     When fixed module:
 ;
-;       Initialize the hardware and state managed by this module.  Must be first
-;       access into the module.
+;       UART_INIT
+;
+;         Initialize the hardware and state managed by this module.  Must be
+;         first access into the module.
+;
+;     When MDEV:
+;
+;       UART_CFG
+;
+;         Configures this MDEV according to its static configuration data.
 ;
 ;     UART_LOCK
 ;     UART_UNLOCK
@@ -229,6 +240,12 @@
 ;
 ;   Configuration constants.
 ;
+/const   rpin_232 integer = 61 ;RPn pin number for RS-232 receive
+/const   rpin_2wire integer = 53 ;RPn pin number for R-485 2-wire receive
+/const   rpin_4wire integer = 52 ;RPn pin number for R-485 4-wire receive
+/const   pin_master = "master" ;pin to assert for master, off for slave
+/const   flag_run = "serrun" ;flag to set when up and running
+
 /const   name    string = "" ;unique name for exported symbols, may be empty
 /const   un      integer = 1 ;1-N number of UART handled by this module
 /const   baud    real = 19200 ;desired baud rate (19200 is Modbus default)
@@ -238,7 +255,7 @@
 
 /const   prio_reg_rx string = "Ipc2" ;register containing RX intr priority
 /const   prio_bit_rx integer = 12 ;low bit of priority field within register
-/const   rxpin   integer = 0 ;RPn pin number of receive line, 0 for not used
+/const   rxpin   integer = rpin_232 ;RPn pin number of receive line, 0 for not used
 /const   rxpinreg = "Rpinr18+0" ;reg to select RPn number for RX function
 
 /const   prio_reg_tx string = "Ipc3" ;register containing TX intr priority

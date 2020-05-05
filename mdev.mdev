@@ -26,6 +26,10 @@ interface CanSend
   desc
     Sends whole CAN frames.
 
+interface UartModbusHw
+  desc
+    UART hardware that has sufficient features to support Modbus.
+
 interface UartModbus
   desc
     Serial port that contains all necessary features to support Modbus.

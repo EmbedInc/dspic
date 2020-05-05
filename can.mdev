@@ -21,5 +21,5 @@ module can
   template qqq_can.dspic
   include can_setup.ins.dspic
 
-file qqq_cantest.dspic
+file qqq_can.dspic
   requires ecan_dma.ins.dspic

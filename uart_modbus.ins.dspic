@@ -43,12 +43,19 @@
 ;
 ;   Derived constants.
 ;
+/if [not [exist "name"]] then
+  /const name string = ""
+  /endif
 
 /if [= name ""]
   /then                      ;no unique name for the subroutines
     /const uname string = ""
   /else                      ;subroutine names will be customized
     /const uname string = [str "_" name]
+  /endif
+
+/if [not [exist "flag_run"]] then
+  /const flag_run string = ""
   /endif
 
 /if [not [exist "un"]] then
@@ -162,6 +169,24 @@
   /const callback_recv string = ""
   /endif
 
+;   Create the constant MDEV according to whether this module is a MDEV, as
+;   opposed to a fixed module.
+;
+/block
+  /var local b bool = false  ;init to fixed module, not MDEV
+  /var local sym string = "cfg_uart_modbus:const"
+  /block
+    /if [not [exist sym]] then
+      /quit
+      /endif
+    /if [<> [sym sym dtype] "INTEGER"] then
+      /quit
+      /endif
+    /set b true              ;is MDEV
+    /endblock
+  /const mdev bool = b       ;create final MDEV constant
+  /endblock
+
 /call baud_setup30 baud      ;compute the UART baud rate setup
 
 .equiv   Umode,  U[v un]mode ;make aliases for registers of the selected UART
@@ -240,14 +265,26 @@
 
 /block
   /var new s string
-  /set s [str "Using UART " un]
+
+  /set s ""
+  /append s "Using UART " un ", "
   /if [= name ""]
     /then
-      /set s [str s ", no unique name added to symbols"]
+      /append s "no unique name added to symbols"
     /else
-      /set s [str s ", name """ [ucase name] """ added to exported symbols"]
+      /append s "name """ [ucase name] """ added to exported symbols"
     /endif
-  /set s [str s ", Tick time " [eng utickt] "s"]
+  /append s ", Tick time " [eng utickt] "s"
+  /show "  " s
+
+  /set s ""
+  /append s "Configured as "
+  /if mdev
+    /then
+      /append s "MDEV"
+    /else
+      /append s "fixed module"
+    /endif
   /show "  " s
   /endblock
 
@@ -359,7 +396,13 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;
 ;   Initialize the hardware and software state managed by this module.
 ;
+/if mdev
+  /then
+         locsub  uart[chars uname]_init, regf0 | regf1
+  /else
          glbsub  uart[chars uname]_init, regf0 | regf1
+  /endif
+
 /block
   /var local r real          ;scratch floating point
   /var local ii integer      ;scratch integer
@@ -1403,3 +1446,147 @@ act_nrecv:
 act_nsend:
 
          leaverest
+
+/if mdev then
+  //
+  //   Macro IPNUM id rpnum
+  //
+  //   Set W0 to the remappable pin number rpnum if W0 matches ID on input.
+  //   RPNUM is the bare characters of a integer constant that contains the
+  //   remappable pin number.
+  //
+  //   This macro falls thru if the RPNUM constant doesn't exist, or if W0
+  //   doesn't match ID.  Otherwise, this macro jumps to CFG_BUS_SET with ID in
+  //   W0.
+  //
+  /macro ipnum
+    /var local id integer = [vnl [arg 1]]
+    /var local sym string = [str [qstr [arg 2]] ":const"]
+    /if [exist sym] then
+      /var local rpnum integer = [vnl [chars sym]]
+         cp      w0, #[v id]
+         bra     nz, [lab nmatch]
+         mov     #[v rpnum], w0
+         jump    cfg_bus_set
+[lab nmatch]:
+      /endif
+    /endmac
+
+;*******************************************************************************
+;
+;   Subroutine UART_CFG
+;
+;   Configure and initialize this MDEV.  The configuration data is:
+;
+;   PROT BAUD
+;
+;   PROT is a byte with the following fields:
+;
+;         7       6       5       4       3       2       1       0
+;     -----------------------------------------------------------------
+;     |       |       |                       |       |               |
+;     |       |       |        PARITY         | PULL  |      BUS      |
+;     |       |       |                       |       |               |
+;     -----------------------------------------------------------------
+;
+;     BUS
+;
+;       0  -  RS-232
+;       1  -  RS-485 2-wire
+;       2  -  RS-485 4-wire
+;
+;     PULL  -  Enable pullups and pulldowns on the RS-485 lines.
+;
+;     PARITY
+;
+;       0  -  None
+;       1  -  Even
+;       2  -  Odd
+;       3  -  Zero
+;       4  -  One (same as no parity, 2 stop bits)
+;
+;   BAUD is the unsigned 24 bit integer baud rate.  The closest realizable baud
+;   rate to that specified by BAUD will be silently chosen.  Baud rates up to
+;   115.2 k can be achieved with low baud rate error.
+;
+         glbsub  uart_modbus_cfg, regf0 | regf1 | regf3 | regf4
+
+         gcall   config_lock ;get exclusive access to CONFIG_xxx routines
+
+         mov     #[v cfg_uart_modbus], w0 ;request config data for this module
+         gcall   config_setup
+         cp      w0, #4      ;check for min expected number of config bytes
+         bra     ltu, cfg_leave ;less than min required config bytes ?
+
+         mcall   uart[chars uname]_init ;initialize the hardware
+
+         gcall   config_i8u  ;get PROT byte and save it in W3
+         mov     w0, w3
+;
+;   Select the bus.
+;
+         and     w3, #0x03, w0 ;extract BUS field into W0
+         ipnum   0, rpin_232
+         ipnum   1, rpin_2wire
+         ipnum   2, rpin_4wire
+         jump    cfg_bus_done ;unrecognized code, ignore
+
+cfg_bus_set:                 ;set RX input to pin number in W0
+         mov     #[chars rxpinreg], w4 ;point W4 to where to write input pin number
+         mov.b   w0, [w4]    ;set pin to use for UART RX function
+
+cfg_bus_done:
+;
+;   Enable or disable the pullups.
+;
+         btss    w3, #2
+         set_[chars pin_master]_off
+         btsc    w3, #2
+         set_[chars pin_master]_off
+;
+;   Set the parity.
+;
+         lsr     w3, #3, w4  ;extract PARITY field into W4
+         and     #0x7, w4
+         bra     z, cfg_par_none
+         sub     #1, w4
+         bra     z, cfg_par_even
+         sub     #1, w4
+         bra     z, cfg_par_odd
+         sub     #2, w4
+         bra     z, cfg_par_one
+         jump    cfg_par_done
+
+cfg_par_none:                ;no parity bit
+         mcall   uart[chars uname]_parity_none
+         jump    cfg_par_done
+
+cfg_par_even:                ;even parity
+         mcall   uart[chars uname]_parity_even
+         jump    cfg_par_done
+
+cfg_par_odd:                 ;odd parity
+         mcall   uart[chars uname]_parity_odd
+         jump    cfg_par_done
+
+cfg_par_one:                 ;parity bit 1, same as no parity with two stop bits
+         mcall   uart[chars uname]_parity_one
+
+cfg_par_done:
+;
+;   Set the baud rate.
+;
+         gcall   config_i24u ;get the baud rate into W1:W0
+         mcall   uart[chars uname]_baud_set ;set the new baud rate
+;
+;   Let other parts of the system know the UART is configured and that it can be
+;   interacted with.
+;
+      /if [<> flag_run ""] then
+         setflag [chars flag_run] ;indicate serial interface up and running
+        /endif
+
+cfg_leave:
+         gcall   config_unlock ;release lock on CONFIG routines
+         leaverest
+      /endif                 ;end of this module is MDEV
