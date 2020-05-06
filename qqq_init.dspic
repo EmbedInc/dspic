@@ -63,14 +63,6 @@
          mov     #500, w0    ;wait a little while for things to stabalize
          gcall   waitms
 ;
-;   Check the non-volatile memory.
-;
-         gcall   nvmem_check ;check the non-volatile memory checksum
-         skip_nflag nvvalid  ;the memory is corrupt ?
-         jump    done_nv     ;no
-         gcall   nvmem_erase ;yes, erase it, set state accordingly
-done_nv:                     ;done with the non-volatile memory
-;
 ;   Start up the system.
 ;
          gcall   cmd_start   ;start host command processing

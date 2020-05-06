@@ -215,18 +215,31 @@ ckp_byte:                    ;back here each new byte to add to the checksum
 ;   can read configuration data from the non-volatile memory.  If cleared,
 ;   default data should be written to the non-volatile memory.
 ;
-         glbsub  nvmem_ready
+         glbsub  nvmem_ready, regf0 | regf1 | regf2
 
          mcall   nvmem_check ;check the data and checksum, set flags accordingly
-         skip_nflag nvvalid  ;the data is corrupt ?
-         jump    rdy_leave   ;the data is intact, nothing more to do
+
+/if [exist "nvmem_rdy_app:macro"] then
 ;
-;   The non-volatile memory is corrupt.
+;   Perform app-specific memory check.
 ;
-         mcall   nvmem_erase ;erase the whole memory, if not already erased
+         nvmem_rdy_app       ;run app-supplied memory check code
+;
+;   Done with app-specific memory check.
+;
+  /endif
+
+rdy_done:                    ;done performing all checks
+         skip_flag nvvalid   ;the memory contents is valid ?
+         jump    rdy_bad     ;no, it is bad
 
 rdy_leave:
          leaverest
+
+rdy_bad:                     ;memory contents is bad
+         clrflag nvvalid     ;indicate memory not valid
+         mcall   nvmem_erase ;make sure all the memory is erased
+         jump    rdy_leave
 
 ;*******************************************************************************
 ;

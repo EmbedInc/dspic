@@ -329,12 +329,15 @@ wait_clkswitch:              ;wait for clock switch
          gcall   trap_init   ;init traps handler module
          gcall   port_init   ;init I/O ports
          gcall   task_init   ;init multi-tasking manager
-         gcall   ad_init     ;init A/D handler and start getting analog readings
          gcall   clock_init  ;init clock tick hardware and ticks generator
-         gcall   ledstat_init ;init Status LED controller
+         gcall   spi_init    ;init SPI bus interface
+         gcall   nvol_init   ;init non-volatile memory access
+         gcall   nvmem_ready ;check NV mem, erase if corrupt, set flags
+         gcall   ad_init     ;init A/D handler and start getting analog readings
          gcall   uart_init   ;init low level UART driver
          gcall   cmd_init    ;init host command stream processing module
          gcall   cmds_init   ;init command routines module
+         gcall   ledstat_init ;init Status LED controller
 
          gjump   init        ;continue with system-wide initialization
 

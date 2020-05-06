@@ -32,6 +32,10 @@
 ;       Get the non-volatile memory ready for use.  The flags are set according
 ;       to the memory contents.  If the memory is corrupt, then it is erased.
 ;
+;       The NVMEM_RDY_APP macro can be supplied to perform additional checks
+;       specific to the application.  See the template NVMEM_RDY_APP macro
+;       header, below, for details.
+;
 ;     NVMEM_CKSUM_SET
 ;
 ;       Set the checksum according to the current NV memory contents.  The
@@ -124,5 +128,31 @@
 ;       value are considered used.
 ;
 /include "qq2.ins.dspic"
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro NVMEM_RDY_APP
+//
+//   Perform app-specific non-volatile memory check.  The whole memory has
+//   already been read, the checksum checked, and the flags set accordingly.
+//
+//   This macro can perform several actions:
+//
+//     Fall thru or jump to RDY_DONE
+//
+//       Done with any additional memory checking, with flag NVVALID set
+//       accordingly.  When NVVALID is cleared, the memory will be erased.
+//
+//     Jump to RDY_BAD
+//
+//       Indicates that the non-volatile memory contents is invalid.  The flag
+//       NVVALID will be cleared and the memory erased.
+//
+//   Registers W0, W1, and W2 can be trashed.  The remaining registers must be
+//   preserved.
+//
+//macro nvmem_rdy_app
+  //endmac
+
 /include "(cog)src/dspic/nvmem.ins.dspic"
 .end
