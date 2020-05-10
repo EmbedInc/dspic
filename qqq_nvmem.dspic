@@ -57,6 +57,17 @@
 ;       according to the NVERASED flag.  Other state kept by the NVMEM module is
 ;       updated accordingly.
 ;
+;     NVMEM_SAVE
+;
+;       Saves the live values of all non-volatile state to physical non-volatile
+;       memory.  The checksum is updated to the new non-volatile memory
+;       contents.  This routine does not return until all writes to the
+;       non-volatile memory have completed.
+;
+;       The NVMEM_SAVE routine in this file performs the basic mechanics, but
+;       relies on the application-dependent NVMEM_SAVE macro (see below), to do
+;       the actual writes of live state to the non-volatile memory.
+;
 ;   Global flags
 ;
 ;     NVVALID
@@ -101,6 +112,12 @@
 ;       currently appear to be used by the application.  Bytes are considered
 ;       used from address 0 up to and including the last byte that is not set to
 ;       the erased value.
+;
+;     NVMEM_SAVE
+;
+;       Copy the live non-volatile state to the non-volatile memory, update the
+;       checksum accordingly, and wait until all data has been physically
+;       written to the non-volatile memory.
 ;
 ;   The following responses are emitted by the commands above:
 ;
@@ -151,8 +168,23 @@
 //   Registers W0, W1, and W2 can be trashed.  The remaining registers must be
 //   preserved.
 //
-//macro nvmem_rdy_app
-  //endmac
+/macro nvmem_rdy_app
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro NVMEM_SAVE
+//
+//   Write all the live values of non-volatile state to the non-volatile memory.
+//   This macro, if defined, is run from subroutine NVMEM_SAVE.  The updating of
+//   the checksum and guaranteeing of physical writes to non-volatile memory is
+//   handle by the NVMEM_SAVE subroutine outside this macro.
+//
+//   Registers W0, W1, and W2 can be trashed.  The remaining registers must be
+//   preserved.
+//
+/macro nvmem_save
+  /endmac
 
 /include "(cog)src/dspic/nvmem.ins.dspic"
 .end

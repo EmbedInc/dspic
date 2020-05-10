@@ -3908,7 +3908,8 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
 //
 //   Macro LOAD32 Wn, val
 //
-//   Load the value VAL into Wn+1:Wn.
+//   Load the value VAL into Wn+1:Wn.  Loading into W15 (the stack pointer) is a
+//   error.
 //
 /macro load32
   /var local val integer = [arg 2]
@@ -3939,10 +3940,47 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /write s
   /endmac
 
+////////////////////////////////////////
+//
+//   Function FX3F29U val
+//
+//   Converts the value VAL to its unisgned fixed point 3.29 format
+//   representation.  The function value is a 32 bit hexadecimal integer
+//   expressed in Embed format (16#xxx).
+//
+/function fx3f29u
+/var local val real = [vnl [arg 1]] //input argument
+/var local ii integer //integer value of resulting fixed point
+
+/set val [max 0.0 val] //clip to min possible value
+/if [< val 7.99999]
+  /then
+    /set val [* val 8388608]
+    /set ii [rnd val]
+    /set ii [shiftl ii 6]
+    /funcval "16#" [int ii "fw 8 lz base 16 usin"]
+  /else
+    /funcval "16#FFFFFFFF"
+  /endif
+/endfunc
+
 ;*******************************************************************************
 ;
-;   Facilities for writing various types of data to program memory.
+;   Low level preprocessor macros and routines for writing to program memory.
 ;
+
+////////////////////////////////////////
+//
+//   Subroutine PBYTE_START
+//
+//   This routine should be called before writing a new structure to program
+//   Memory.  It resets the internal address offset so that the next byte is
+//   considered to be written at offset 0 from the start of the structure.
+//
+/subroutine pbyte_start
+  /var exist pbyte_offset integer //make sure byte offset exists
+  /set pbyte_offset 0 //initialize or reset the offset to 0
+  /endsub
 
 ////////////////////////////////////////
 //
@@ -4097,6 +4135,138 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
     /endblock
   /endsub
 
+;*******************************************************************************
+;
+;   Facilities for writing bytes to program memory.  Labels, if specified, will
+;   be the byte offset from the first byte written by PBYTE.  Program memory is
+;   essentially treated as byte-addressed.
+;
+;   These routines can be useful for creating efficiently-packed constant data
+;   in program memory, or for creating a image of data stored elsewhere, like
+;   the initial data for a non-volatile memory.
+;
+;   The low level byte-writing macro is PBYTE, defined above.  The macros here
+;   are all named PB_xxx, and are layered on PBYTE.
+;
+;   The current byte offset is kept in PBYTE_OFFSET.  This is automatically
+;   initialized to 0 on the first invocation of PBYTE.  It is then incremented
+;   by PBYTE each byte.  It can be explicitly set to any value at any time,
+;   and subsequent labels will have different values accordingly.
+;
+;   All these macros may be optionally preceeded by a label.  If the label ends
+;   with a colon, then it will be a local symbol with the colon stripped off.
+;   If the label does not end in a colon, then the label will be used as
+;   provided, and will be made global.  In all cases, the label value is the
+;   byte offset of the first byte being defined.
+;
+;   When done writing constants to program memory with these macros, subroutine
+;   PBYTE_FINISH should be called to write any remaining partial program memory
+;   word.  The unused bytes are set to the erased value of FFh.
+;
+
+////////////////////////////////////////
+//
+//   Macro [label] PB_WORD16 val [, fracbits]
+//
+//   Writes a 16 bit word in low to high byte order.  VAL is the word value.
+//   FRACBITS is the number of fraction bits in the fixed-point value.  The
+//   default is 0, meaning the word is a normal integer.
+//
+//   Another way to look at this is that VAL is shifted left FRACBITS bits,
+//   then rounded to the nearest integer.  The low 16 bits of the result are
+//   written to program memory.
+//
+//   Here are some examples and their resulting 16 bit words:
+//
+//     pb_word16 27         -->     001Bh
+//     pb_word16 103.7, 4   -->     067Bh
+//     pb_word16 12.0       -->     000Ch
+//     pb_word16 5, 8       -->     0500h
+//
+/macro pb_word16
+  /var local ii integer
+  /if [exist 2 arg] then
+    /set ii [arg 2]
+    /endif
+  /set ii [rnd [* [arg 1] [exp 2 ii]]] ;make word value
+
+[arg -1] pbyte   [and ii 16#FF]
+         pbyte   [and [shiftr ii 8] 16#FF]
+  /endmac
+
+////////////////////////////////////////
+//
+//   Macro [label] PB_WORD24 val [, fracbits]
+//
+//   Like PB_WORD16, except that it writes 24 bits (3 bytes).
+//
+/macro pb_word24
+  /var local ii integer
+  /if [exist 2 arg] then
+    /set ii [arg 2]
+    /endif
+  /set ii [rnd [* [arg 1] [exp 2 ii]]] ;make word value
+
+[arg -1] pbyte   [and ii 16#FF]
+         pbyte   [and [shiftr ii 8] 16#FF]
+         pbyte   [and [shiftr ii 16] 16#FF]
+  /endmac
+
+////////////////////////////////////////
+//
+//   Macro [label] PB_WORD32 val [, fracbits]
+//
+//   Like PB_WORD16, except that it writes 32 bits (4 bytes).
+//
+/macro pb_word32
+  /var local ii integer
+  /if [exist 2 arg] then
+    /set ii [arg 2]
+    /endif
+  /set ii [rnd [* [arg 1] [exp 2 ii]]] ;make word value
+
+[arg -1] pbyte   [and ii 16#FF]
+         pbyte   [and [shiftr ii 8] 16#FF]
+         pbyte   [and [shiftr ii 16] 16#FF]
+         pbyte   [and [shiftr ii 24] 16#FF]
+  /endmac
+
+////////////////////////////////////////
+//
+//   Macro [label] PB_FP32F val
+//
+//   Writes a value in Embed dsPIC 32 bit fast floating point format to the next
+//   4 bytes of program memory.
+//
+/macro pb_fp32f
+  /var local ii integer = [fp32f_int [arg 1]]
+
+[arg -1] pbyte   [and ii 16#FF]
+         pbyte   [and [shiftr ii 8] 16#FF]
+         pbyte   [and [shiftr ii 16] 16#FF]
+         pbyte   [and [shiftr ii 24] 16#FF]
+  /endmac
+
+////////////////////////////////////////
+//
+//   Macro FP48P fpval
+//
+//   Write 6 consecutive bytes to program memory.  These will be the 48 bit
+//   floating point representation of FPVAL in least to most significant byte
+//   order.  The FPVAL parameter must be interpretable as a floating point value
+//   by the preprocessor.
+//
+/macro fp48p
+  /var local fpval real = [arg 1]
+  /call fp48_make [v fpval]  ;set FP48_EXP and FP48_MANT
+         pbyte   [v fp48_mant]
+         pbyte   [shiftr fp48_mant 8]
+         pbyte   [shiftr fp48_mant 16]
+         pbyte   [shiftr fp48_mant 24]
+         pbyte   [v fp48_exp]
+         pbyte   [shiftr fp48_exp 8]
+  /endmac
+
 ////////////////////////////////////////
 //
 //   Macro [label] RAWSTRING "..."
@@ -4220,136 +4390,4 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
     /repeat
     /endblock
   /call pbyte_finish         ;write any partial program memory word
-  /endmac
-
-////////////////////////////////////////
-//
-//   Macro FP48P fpval
-//
-//   Write 6 consecutive bytes to program memory.  These will be the 48 bit
-//   floating point representation of FPVAL in least to most significant byte
-//   order.  The FPVAL parameter must be interpretable as a floating point value
-//   by the preprocessor.
-//
-/macro fp48p
-  /var local fpval real = [arg 1]
-  /call fp48_make [v fpval]  ;set FP48_EXP and FP48_MANT
-         pbyte   [v fp48_mant]
-         pbyte   [shiftr fp48_mant 8]
-         pbyte   [shiftr fp48_mant 16]
-         pbyte   [shiftr fp48_mant 24]
-         pbyte   [v fp48_exp]
-         pbyte   [shiftr fp48_exp 8]
-  /endmac
-
-;*******************************************************************************
-;
-;   Facilities for writing bytes to program memory.  Labels, if specified, will
-;   be the byte offset from the first byte written by PBYTE.  Program memory is
-;   essentially treated as byte-addressed.
-;
-;   These routines can be useful for creating efficiently-packed constant data
-;   in program memory, or for creating a image of data stored elsewhere, like
-;   the initial data for a non-volatile memory.
-;
-;   The low level byte-writing macro is PBYTE, defined above.  The macros here
-;   are all named PB_xxx, and are layered on PBYTE.
-;
-;   The current byte offset is kept in PBYTE_OFFSET.  This is automatically
-;   initialized to 0 on the first invocation of PBYTE.  It is then incremented
-;   by PBYTE each byte.  It can be explicitly set to any value at any time,
-;   and subsequent labels will have different values accordingly.
-;
-;   All these macros may be optionally preceeded by a label.  If the label end
-;   with a colon, then it will be a local symbol with the colon stripped off.
-;   If the label does not end in a colon, then the label will be used as
-;   provided, and will be made global.  In all cases, the label value is the
-;   byte offset of the first byte being defined.
-;
-;   When done writing constants to program memory with these macros, subroutine
-;   PBYTE_FINISH should be called to write any remaining partial program memory
-;   word.  The unused bytes are set to the erased value of FFh.
-;
-
-////////////////////////////////////////
-//
-//   Macro [label] PB_WORD16 val [, fracbits]
-//
-//   Writes a 16 bit word in low to high byte order.  VAL is the word value.
-//   FRACBITS is the number of fraction bits in the fixed-point value.  The
-//   default is 0, meaning the word is a normal integer.
-//
-//   Another way to look at this is that VAL is shifted left FRACBITS bits,
-//   then rounded to the nearest integer.  The low 16 bits of the result are
-//   written to program memory.
-//
-//   Here are some examples and their resulting 16 bit words:
-//
-//     pb_word16 27         -->     001Bh
-//     pb_word16 103.7, 4   -->     067Bh
-//     pb_word16 12.0       -->     000Ch
-//     pb_word16 5, 8       -->     0500h
-//
-/macro pb_word16
-  /var local ii integer
-  /if [exist 2 arg] then
-    /set ii [arg 2]
-    /endif
-  /set ii [rnd [* [arg 1] [exp 2 ii]]] ;make word value
-
-[arg -1] pbyte   [and ii 16#FF]
-         pbyte   [and [shiftr ii 8] 16#FF]
-  /endmac
-
-////////////////////////////////////////
-//
-//   Macro [label] PB_WORD24 val [, fracbits]
-//
-//   Like PB_WORD16, except that it writes 24 bits (3 bytes).
-//
-/macro pb_word24
-  /var local ii integer
-  /if [exist 2 arg] then
-    /set ii [arg 2]
-    /endif
-  /set ii [rnd [* [arg 1] [exp 2 ii]]] ;make word value
-
-[arg -1] pbyte   [and ii 16#FF]
-         pbyte   [and [shiftr ii 8] 16#FF]
-         pbyte   [and [shiftr ii 16] 16#FF]
-  /endmac
-
-////////////////////////////////////////
-//
-//   Macro [label] PB_WORD32 val [, fracbits]
-//
-//   Like PB_WORD16, except that it writes 32 bits (4 bytes).
-//
-/macro pb_word32
-  /var local ii integer
-  /if [exist 2 arg] then
-    /set ii [arg 2]
-    /endif
-  /set ii [rnd [* [arg 1] [exp 2 ii]]] ;make word value
-
-[arg -1] pbyte   [and ii 16#FF]
-         pbyte   [and [shiftr ii 8] 16#FF]
-         pbyte   [and [shiftr ii 16] 16#FF]
-         pbyte   [and [shiftr ii 24] 16#FF]
-  /endmac
-
-////////////////////////////////////////
-//
-//   Macro [label] PB_FP32F val
-//
-//   Writes a value in Embed dsPIC 32 bit fast floating point format to the next
-//   4 bytes of program memory.
-//
-/macro pb_fp32f
-  /var local ii integer = [fp32f_int [arg 1]]
-
-[arg -1] pbyte   [and ii 16#FF]
-         pbyte   [and [shiftr ii 8] 16#FF]
-         pbyte   [and [shiftr ii 16] 16#FF]
-         pbyte   [and [shiftr ii 24] 16#FF]
   /endmac

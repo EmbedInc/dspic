@@ -554,7 +554,7 @@ pbn_done:                    ;done copying all the bytes
 ;
          glbsub  cmd_wait_cmds
 
-wcmds_check:                  ;back here to check for cmd processing again
+wcmds_check:                 ;back here to check for cmd processing again
          btss    flags, #flg_cmd ;command processing has started ?
          jump    wcmds_wait  ;no, go wait a while
          leaverest           ;yes, return to caller

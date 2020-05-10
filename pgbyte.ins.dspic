@@ -12,6 +12,7 @@
 ;   Read the program memory byte pointed to by W13:W12 into W0, and update
 ;   W13:W12 to point to the next byte.
 ;
+         glblab  pgbyte_i8u
          glbsub  pgbyte_read
 
          btsc    w12, #0     ;even address ?
@@ -132,4 +133,58 @@ add_dinc:                    ;done incrementing over any remaining bytes
          mov     #0x80FF, w0 ;mask of valid bits in high word
          and     w13, w0, w13 ;apply the mask
 
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutines PGBYTE_InU and PGBYTE_InS
+;
+;   Get integer values N bits wide.  The U suffix indicates unsigned, and S
+;   signed.  Multi-byte data is assumed to be stored in least to most
+;   significant byte order.
+;
+;   The address of the first byte to read is in W13:W12, which is updated.
+;
+         glbsubd pgbyte_i8s
+         mcall   pgbyte_i8u
+         se      w0, w0
+         leaverest
+
+         glbentd pgbyte_i16s
+         glbsubd pgbyte_i16u, regf1
+         mcall   pgbyte_i8u  ;get the low byte
+         mov     w0, w1      ;temp save it in W1
+         mcall   pgbyte_i8u  ;get the high byte
+         sl      w0, #8, w0  ;move it into place
+         ior     w0, w1, w0  ;merge in the low byte
+         leaverest
+
+         glbsubd pgbyte_i24u
+         mcall   pgbyte_i8u  ;get byte 0
+         mov     w0, w1      ;temp save it in W1
+         mcall   pgbyte_i8u  ;get byte 1
+         sl      w0, #8, w0  ;move it into position
+         ior     w0, w1, w1  ;assemble low word in W1
+         mcall   pgbyte_i8u  ;get byte 2
+         exch    w0, w1      ;move final word into W1:W0
+         leaverest
+
+         glbsubd pgbyte_i24s
+         mcall   pgbyte_i24u ;get unsigned value into W1:W0
+         se      w1, w1      ;sign extend into high 8 bits
+         leaverest
+
+         glbentd pgbyte_i32s
+         glbsubd pgbyte_i32u, regf2
+         mcall   pgbyte_i8u  ;get byte 0
+         mov     w0, w1      ;temp save it in W1
+         mcall   pgbyte_i8u  ;get byte 1
+         sl      w0, #8, w0  ;move it into position
+         ior     w0, w1, w1  ;assemble low word in W1
+         mcall   pgbyte_i8u  ;get byte 2
+         mov     w0, w2      ;temp save it in W2
+         mcall   pgbyte_i8u  ;get byte 3
+         sl      w0, #8, w0  ;move it into position
+         ior     w0, w2, w0  ;assemble high word in W0
+         exch    w0, w1      ;get final word into W1:W0
          leaverest

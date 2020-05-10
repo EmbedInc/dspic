@@ -323,6 +323,26 @@ er_is:                       ;skip to here if memory already erased
 
 ;*******************************************************************************
 ;
+;   Subroutine NVMEM_SAVE
+;
+;   Save the live values of all non-volatile state to physical non-volatile
+;   memory.  The checksum is updated to the new non-volatile memory contents.
+;   This routine does not return until all writes to the non-volatile memory
+;   have completed.
+;
+/if [Command cm_nvmem_save] then
+  /endif
+         glbsub  nvmem_save, regf0 | regf1 | regf2
+
+/if [exist "nvmem_save:macro"] then
+         nvmem_save          ;app-specific save live state to NV mem
+  /endif
+
+         mcall   nvmem_cksum_set
+         leaverest
+
+;*******************************************************************************
+;
 ;   Command NVMEM_APPSIZE
 ;
 ;   Send the NVMEM_APPSIZE response, which indicates the size of the

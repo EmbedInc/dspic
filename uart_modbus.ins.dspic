@@ -1582,11 +1582,11 @@ cfg_par_done:
 ;   Let other parts of the system know the UART is configured and that it can be
 ;   interacted with.
 ;
-      /if [<> flag_run ""] then
+  /if [<> flag_run ""] then
          setflag [chars flag_run] ;indicate serial interface up and running
-        /endif
+    /endif
 
 cfg_leave:
          gcall   config_unlock ;release lock on CONFIG routines
          leaverest
-      /endif                 ;end of this module is MDEV
+  /endif                     ;end of this module is MDEV

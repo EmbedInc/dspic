@@ -32,14 +32,32 @@
 ;   additional flags, although only the high bit of these is currently defined.
 ;
 ;   Most of these routines expect the program memory byte address as described
-;   above to be in W13:W12.
+;   above to be in W13:W12.  Read routines increment the address as bytes are
+;   read.  Successive calls to read routines will therefore read successive
+;   bytes of program memory.
 ;
 ;   The exported routines are:
 ;
+;     PGBYTE_I8U
+;     PGBYTE_I8S
+;     PGBYTE_I16U
+;     PGBYTE_I16S
+;     PGBYTE_I24U
+;     PGBYTE_I24S
+;     PGBYTE_I32U
+;     PGBYTE_I32S
+;
+;       Get integer value.  The number after the "_I" in the subroutine name is
+;       the number of bits read from program memory.  The trailing U or S means
+;       signed or unsigned.  Multi-byte values are assumed to be stored in least
+;       to most significant byte order in the program memory.  1-16 bit data is
+;       returned in W0.  17-32 bit data is returned in W1:W0.
+;
 ;     PGBYTE_READ
 ;
-;       Reads the program memory byte at the address in W13:W12 into W0.
-;       W13:W12 is advanced to the next byte.
+;       This is a synomym for PGBYTE_I8U, and is provided for backward
+;       compatibility with old code.  This routine should not be called from new
+;       code.
 ;
 ;     PGBYTE_ADR_INC
 ;

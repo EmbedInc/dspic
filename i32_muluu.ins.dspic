@@ -1,0 +1,66 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "i32_muluu_ins:const"]] then
+  /const i32_muluu_ins bool = true
+
+
+.section .code_i32_muluu, code
+;*******************************************************************************
+;
+;   Subroutine I32_MULUU
+;
+;   32 bit integer multiply, unsigned by unsigned.
+;
+;   W1:W0 * W3:W2 --> W3:W2:W1:W0
+;
+         glbsub  i32_muluu, regf4 | regf5 | regf6 | regf7 | regf8
+;
+;   This machine can only natively do a 16 bit x 16 bit into 32 bit multiply.
+;   The 32 bit x 32 bit into 64 bit multiply must therefore be computed in four
+;   parts:
+;
+;     W1*W3 (h)   W1*W3 (l)
+;                 W0*W3 (h)   W0*W3 (l)
+;                 W1*W2 (h)   W1*W2 (l)
+;                             W0*W2 (h)   W0*W2 (l)
+;     -----       -----       -----       -----
+;        W7          W6          W8          W0   temporary
+;        W3          W2          W1          W0   final
+;
+;   The first product is written directly to W7:W6, and the last directly to
+;   W1:W0.  The remaining products are produced into W5:W4, from where they are
+;   added into their destinations.
+;
+         mul.uu  w1, w3, w6  ;W1 * W3
+
+         mul.uu  w0, w3, w4  ;W0 * W3
+         mov     w4, w8
+         add     w6, w5, w6
+         addc    w7, #0, w3
+
+         mul.uu  w1, w2, w4  ;W1 * W2
+         add     w8, w4, w8
+         addc    w6, w5, w6
+         addc    #0, w3
+
+         mul.uu  w0, w2, w0  ;W0 * W2
+         add     w1, w8, w1
+         addc    w6, #0, w2
+         addc    #0, w3
+
+         leaverest
+  /endif                     ;end of file interlock
