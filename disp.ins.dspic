@@ -25,6 +25,7 @@
 /const   evsimult real = 40e-3 ;events are simultaneous if within this time, seconds
 /const   lrsec   real = 3.0  ;seconds both left and right pressed for special LR event
 /const   sendnnop integer = 8 ;number of NOP responses to send at startup
+/const   waitwrt real = 0.100 ;max seconds to wait on write flow control
 .equiv   stacksz, 128        ;processing task stack size, bytes
 ;
 ;   Derived constants.
@@ -219,7 +220,7 @@ wtout_ret:
 
          bclr    flags, #flg_ev ;clear the event condition
          bset    flags, #flg_evdgo ;cause event to be set on DGO response
-         mov     #25, w0     ;max ms to wait
+         mov     #[rnd [* waitwrt 1000]], w0 ;max ms to wait
          mcall   wait_tout   ;wait for DGO response or timeout
          bra     nz, dwat_leave ;received DGO as expected ?
 
