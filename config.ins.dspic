@@ -125,6 +125,8 @@
   /var local r real
   /var local s string
 
+  /const mdevbuild bool = [exist "config_mdevs_notsys:macro"]
+
   /if [= config_indirect 0]
     /then
       /set s "Configuration data starts at "
@@ -924,14 +926,23 @@ s0_stat:                     ;status code is in W1
 
 ;*******************************************************************************
 ;
-;   Local subroutine CONFIG_SYS
+;   Subroutine CONFIG_SYS
 ;
 ;   Perform the basic main system (subsystem 0) configuration that is common to
 ;   MDEVs.  For systems that have more complicated main system configurations,
 ;   this routine is intended to be called from the main system configuration
 ;   routine.
 ;
+;   When MDEBUILD is in use, then the application calls CONFIG_MDEVS instead of
+;   this routine separately.  In that case, this routine is private to this
+;   module, called from CONFIG_MDEVS.
+;
+/if mdevbuild
+  /then
          locsub  config_sys, regf0
+  /else
+         glbsub  config_sys, regf0
+  /endif
 
          mcall   config_ovr0_window ;give host a chance to override main sys config
 
@@ -972,13 +983,14 @@ cfgsys_done:
 ;   for the SYS subsystem (ID 0), with the status code being one of the
 ;   SYS_STAT_xxx constant values.
 ;
+/if mdevbuild then
          glbsub  config_mdevs
 ;
 ;   Configure the SYS subsystem.  If sys is configured for anything other than
 ;   normal operation, the remaining subsystems will not be configured.  This
 ;   leaves them "off".
 ;
-         gcall   config_sys  ;init config flags, configure basic system
+         mcall   config_sys  ;init config flags, configure basic system
          skip_flag cfgrun    ;system configured for normal operation ?
          jump    cmdevs_done ;no, don't configure other modules
 ;
@@ -992,6 +1004,7 @@ cmdevs_done:                 ;done calling all configuration routines
          setflag cfgdone     ;indicate system-wide configuration complete
          gcall   config_stat_sys0 ;notify host of configuration result
          leaverest
+  /endif
 
 ;*******************************************************************************
 ;
