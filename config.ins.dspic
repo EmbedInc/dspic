@@ -269,6 +269,24 @@ ulk_leave:
 
          ze      w0, w3      ;save target ID in W3
 ;
+;   Send the CFGING response, if this is enabled.
+;
+/if [exist "rsp_cfging:vcon"] then
+         skip_nflag cfgdone  ;still in initial configuring of subsystems ?
+         jump    cfgg_dcfging ;no, don't send response
+
+         gcall   cmd_lock_out ;acquire lock on the response stream
+
+         mov     #[v rsp_cfging], w0 ;send the response opcode
+         gcall   cmd_put8
+
+         mov     w3, w0      ;send the subsystem ID
+         gcall   cmd_put8
+
+         gcall   cmd_unlock_out ;release lock on response stream
+cfgg_dcfging:
+  /endif                     ;end of CFGING response enabled
+;
 ;   Handle special case of subsystem 0, and the data for subsystem 0 being
 ;   overridden.  The Z bit is set according to the subsystem ID.
 ;

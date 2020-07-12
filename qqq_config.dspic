@@ -258,6 +258,11 @@
 ;       The CFGSTAT command causes the status for the main system (SUBSYS 0) to
 ;       be sent.
 ;
+;     CFGING: subsys
+;
+;       Indicates that the subsystem is configuring itself.  This response is
+;       emitted when CONFIG_SETUP is called.
+;
 ;
 ;   Pre-processor configuration parameters:
 ;
