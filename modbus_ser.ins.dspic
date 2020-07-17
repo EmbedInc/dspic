@@ -330,7 +330,7 @@ getst_nclear:                ;done clearing the counters, if at all
 ;   Configure and initialize this module.
 ;
 /if subsys then
-         glbsub  modbus_cfg, regf0 | regf1
+         glbsub  modbus[chars uname]_cfg, regf0 | regf1
 
          gcall   config_lock ;get exclusive access to CONFIG_xxx routines
 
