@@ -2466,6 +2466,7 @@ typedef  signed  long int32s_t;
 typedef  unsigned int machine_intu_t;
 typedef  signed  int machine_ints_t;
 typedef  unsigned int machine_bool_t;
+typedef  unsigned short machine_intptr_t;
 
   /if wfile then             ;close output file if one was created
     /writepop

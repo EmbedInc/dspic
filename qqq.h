@@ -35,6 +35,7 @@
 //     int32s_t  -  Signed 32 bit integer
 //     machine_intu_t  -  Unsigned native machine word integer
 //     machine_ints_t  -  Signed native machine word integer
+//     machine_intptr_t  -  Unsigned integer that can hold a pointer
 //
 //   Pre-defined constants:
 //
