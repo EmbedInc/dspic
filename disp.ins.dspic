@@ -72,6 +72,9 @@ allocg   disp_fwseq          ;display firmware sequence number
 alloc    ncols               ;number of text columns the display supports
 alloc    nlines              ;number of text lines the display supports
 alloc    cont                ;last known contrast setting
+alloc    gchr_col            ;GETCHAR response column number
+alloc    gchr_lin            ;GETCHAR response line number
+alloc    gchr_char           ;GETCHAR response character
 
 alloc    stack_dresp, stacksz, 2 ;display response processing task stack
 
@@ -92,6 +95,8 @@ alloc    flags               ;individual flag bits, use FLG_xxx bit numbers
 .equiv   flg_stop, 3         ;don't send display-writing commands
 .equiv   flg_evdgo, 4        ;set EV on DGO response received
 .equiv   flg_dresp, 5        ;responses processing is running and ready
+.equiv   flg_evgchr, 6       ;set EV on GETCHAR response received
+.equiv   flg_lock, 7         ;display-writing mutex acquired
 
 
 .section .code_disp, code
@@ -114,7 +119,7 @@ alloc    flags               ;individual flag bits, use FLG_xxx bit numbers
          mov     w0, disp_fwver
          mov     w0, disp_fwseq
 
-;   (Local state is initialized before use in DISP_START.)
+;   (Additional local state is initialized before use in DISP_START.)
 
          leaverest
 
@@ -205,6 +210,46 @@ wtout_leave:
          bclr    Sr, #Z      ;indicate returning due to event occurred
 wtout_ret:
          leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine LOCK
+;
+;   Acquire the exlusive right to send to the display.  This routine waits as
+;   necessary for the lock to become available before acquiring it.
+;
+         locsub  lock
+
+lck_check:                   ;back here to check the lock again
+         btss    flags, #flg_lock ;currently locked ?
+         jump    lck_get     ;no, go lock it for our use
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    lck_check   ;back to check the lock again
+
+lck_get:                     ;the lock is available, go get it
+         bset    flags, #flg_lock ;acquire the lock
+         leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro LOCK
+//
+//   Acquire the lock on sending to the display.  This first waits, if needed,
+//   for the lock to be available.
+//
+/macro lock
+         mcall   lock
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro UNLOCK
+//
+//   Release the lock on sending to the display.
+//
+/macro unlock
+         bclr    flags, #flg_lock
+  /endmac
 
 ;*******************************************************************************
 ;
@@ -340,10 +385,12 @@ dwat_leave:
 
          waitcmd backl_leave ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     #3, w0      ;BACKLIGHT opcode
          gcall   dcmd_put8
          mov     w1, w0      ;brightness
          gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
 
 backl_leave:
          leaverest
@@ -359,15 +406,17 @@ backl_leave:
          mov     w0, w1      ;save desired setting in W1
          not_cmd 4, contset_skip ;CONT command not implemented ?
          waitcmd contset_skip ;wait for the display to be ready for another command
+
+         lock                ;acquire lock on sending to the display
          mov     #4, w0      ;send CONT command
          gcall   dcmd_put8
          mov     w1, w0      ;send new desired setting
          gcall   dcmd_put8
          mcall   disp_sync   ;wait for reply
+         unlock              ;release lock on sending to the display
+
 contset_skip:
-
          mov     cont, w0    ;return the local copy of the contrast setting
-
          leaverest
 
 ;*******************************************************************************
@@ -380,13 +429,15 @@ contset_skip:
 
          not_cmd 20, contg_skip ;CONTGET command not implemented ?
          waitcmd contg_skip  ;wait for the display to be ready for another command
+
+         lock                ;acquire lock on sending to the display
          mov     #20, w0     ;send CONTGET command
          gcall   dcmd_put8
          mcall   disp_sync   ;wait for reply
+         unlock              ;release lock on sending to the display
+
 contg_skip:
-
          mov     cont, w0    ;return the local copy of the contrast setting
-
          leaverest
 
 ;*******************************************************************************
@@ -400,13 +451,15 @@ contg_skip:
 
          not_cmd 18, contu_skip ;CONTUP command not implemented ?
          waitcmd contu_skip  ;wait for the display to be ready for another command
+
+         lock                ;acquire lock on sending to the display
          mov     #18, w0     ;send CONTUP command
          gcall   dcmd_put8
          mcall   disp_sync   ;wait for reply
+         unlock              ;release lock on sending to the display
+
 contu_skip:
-
          mov     cont, w0    ;return the local copy of the contrast setting
-
          leaverest
 
 ;*******************************************************************************
@@ -420,13 +473,15 @@ contu_skip:
 
          not_cmd 19, contd_skip ;CONTDOWN command not implemented ?
          waitcmd contd_skip  ;wait for the display to be ready for another command
+
+         lock                ;acquire lock on sending to the display
          mov     #19, w0     ;send CONTDOWN command
          gcall   dcmd_put8
          mcall   disp_sync   ;wait for reply
+         unlock              ;release lock on sending to the display
+
 contd_skip:
-
          mov     cont, w0    ;return the local copy of the contrast setting
-
          leaverest
 
 ;*******************************************************************************
@@ -442,8 +497,11 @@ contd_skip:
          not_cmd 22, contoff_leave ;CONTOFF command not implemented ?
          waitcmd contoff_leave ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     #22, w0     ;send CONTOFF command
          gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
+
 contoff_leave:
          leaverest
 
@@ -460,8 +518,11 @@ contoff_leave:
          not_cmd 23, conton_leave ;CONTON command not implemented ?
          waitcmd conton_leave ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     #23, w0     ;send CONTON command
          gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
+
 conton_leave:
          leaverest
 
@@ -475,10 +536,13 @@ conton_leave:
 
          not_cmd 21, dsave_leave ;SAVE command not implemented ?
          waitcmd dsave_leave ;wait for the display to be ready for another command
+
+         lock                ;acquire lock on sending to the display
          mov     #21, w0     ;send SAVE command
          gcall   dcmd_put8
          mov     #5, w0      ;give display processor time to send DSTOP
          gcall   waitms
+         unlock              ;release lock on sending to the display
 
 dsave_leave:
          leaverest
@@ -494,12 +558,13 @@ dsave_leave:
          glbsubd disp_clear, regf0
 
          not_cmd 9, dclr_leave ;CLEAR command not implemented ?
-
          waitcmd dclr_leave  ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     #9, w0      ;send CLEAR command
          gcall   dcmd_put8
          mcall   disp_sync   ;wait for display to process the command
+         unlock              ;release lock on sending to the display
 
 dclr_leave:
          leaverest
@@ -514,15 +579,15 @@ dclr_leave:
          glbsubd disp_clearto, regf0 | regf1
 
          not_cmd 15, clrto_leave ;CLEARTO command not implemented ?
-
-         mov     w0, w1      ;save target column number in W1
-
          waitcmd clrto_leave ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
+         mov     w0, w1      ;save target column number in W1
          mov     #15, w0     ;CLRTO command opcode
          gcall   dcmd_put8
          mov     w1, w0      ;0-N column number
          gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
 
 clrto_leave:
          leaverest
@@ -541,9 +606,9 @@ clrto_leave:
          glbsubd disp_pos, regf0 | regf2
 
          not_cmd 10, pos_leave ;POS command not implemented ?
-
          waitcmd pos_leave   ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     w0, w2      ;save column number in W2
          mov     #10, w0     ;POS opcode
          gcall   dcmd_put8
@@ -551,6 +616,7 @@ clrto_leave:
          gcall   dcmd_put8
          mov     w1, w0      ;line
          gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
 
 pos_leave:
          leaverest
@@ -588,17 +654,55 @@ pos_leave:
          glbsubd disp_char, regf0 | regf1
 
          not_cmd 11, dchar_leave ;CHAR command not implemented ?
-
-         mov     w0, w1      ;save the character in the low byte of W1
-
          waitcmd dchar_leave ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
+         mov     w0, w1      ;save the character in the low byte of W1
          mov     #11, w0     ;CHAR opcode
          gcall   dcmd_put8
          mov     w1, w0      ;char
          gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
 
 dchar_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_GETCHAR
+;
+;   Get the currently displayed character at the column in W1 and line in W2.
+;   The character is returned in W0.  Space is returned for all characters past
+;   the visible display.
+;
+         glbsub  disp_getchar
+
+         not_cmd 24, gchar_default ;GETCHAR command not implemented ?
+         waitcmd gchar_default ;wait for display to be ready for another command
+
+         lock                ;acquire lock on sending to the display
+         bclr    flags, #flg_ev ;clear event
+         bset    flags, #flg_evgchr ;indicate to set event on GETCHAR response
+         mov     #24, w0
+         gcall   dcmd_put8   ;GETCHAR command opcode
+         mov     w1, w0
+         gcall   dcmd_put8   ;column number
+         mov     w2, w0
+         gcall   dcmd_put8   ;line number
+         mov     #50, w0     ;max ms to wait
+         mcall   wait_tout   ;wait for the command to be processed
+         unlock              ;release lock on sending to the display
+
+         mov     gchr_char, w0 ;get the character
+         bra     nz, gchar_leave ;got the GETCHAR response ?
+
+         bclr    flags, #flg_evgchr ;clear GETCHAR pending flag
+         clrflag disp        ;indicate error communicating with the display
+
+gchar_default:               ;return the default value
+         mov     #' ', w0    ;return blank
+
+gchar_leave:                 ;common exit point, W0 all set
          leaverest
 
 ;*******************************************************************************
@@ -612,14 +716,11 @@ dchar_leave:
 ;
          glbsubd disp_crlf, regf0
 
-         waitcmd crlf_leave  ;wait for the display to be ready for another command
-
          mov     #[v char_cr_k], w0 ;send CR
          mcall   disp_char
          mov     #[v char_lf_k], w0 ;send LF
          mcall   disp_char
 
-crlf_leave:
          leaverest
 
 ;*******************************************************************************
@@ -634,15 +735,15 @@ crlf_leave:
          glbsubd disp_digit, regf0 | regf1
 
          not_cmd 14, ddig_leave ;DIGIT command not implemented ?
-
-         mov     w0, w1      ;save the digit value in the low byte of W1
-
          waitcmd ddig_leave  ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
+         mov     w0, w1      ;save the digit value in the low byte of W1
          mov     #14, w0     ;DIGIT opcode
          gcall   dcmd_put8
          mov     w1, w0      ;digval
          gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
 
 ddig_leave:
          leaverest
@@ -658,9 +759,9 @@ ddig_leave:
          glbsubd disp_int
 
          not_cmd 13, dint_leave ;INT command not implemented ?
-
          waitcmd dint_leave  ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          push    w0          ;temp save integer value on the stack
          mov     #13, w0
          gcall   dcmd_put8   ;INT command opcode
@@ -668,6 +769,7 @@ ddig_leave:
          gcall   dcmd_put8   ;FW parameter
          pop     w0
          gcall   dcmd_put16  ;INT parameter
+         unlock              ;release lock on sending to the display
 
 dint_leave:
          leaverest
@@ -701,12 +803,14 @@ dint_leave:
 
          waitcmd i16u_leave  ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     #13, w0     ;INT opcode
          gcall   dcmd_put8
          mov     w1, w0      ;FW parameter
          gcall   dcmd_put8
          mov     w2, w0      ;INT16 parameter
          gcall   dcmd_put16
+         unlock              ;release lock on sending to the display
 
 i16u_leave:
          leaverest
@@ -739,12 +843,14 @@ i16u_leave:
 
          waitcmd i16s_leave  ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     #13, w0     ;INT opcode
          gcall   dcmd_put8
          mov     w1, w0      ;FW parameter
          gcall   dcmd_put8
          mov     w2, w0      ;INT16 parameter
          gcall   dcmd_put16
+         unlock              ;release lock on sending to the display
 
 i16s_leave:
          leaverest
@@ -778,12 +884,14 @@ i16s_leave:
 
          waitcmd i16h_leave  ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     #13, w0     ;INT opcode
          gcall   dcmd_put8
          mov     w1, w0      ;FW parameter
          gcall   dcmd_put8
          mov     w2, w0      ;INT16 parameter
          gcall   dcmd_put16
+         unlock              ;release lock on sending to the display
 
 i16h_leave:
          leaverest
@@ -855,12 +963,14 @@ i32h_leave:                  ;common exit point
 
          waitcmd i16o_leave  ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     #13, w0     ;INT opcode
          gcall   dcmd_put8
          mov     w1, w0      ;FW parameter
          gcall   dcmd_put8
          mov     w2, w0      ;INT16 parameter
          gcall   dcmd_put16
+         unlock              ;release lock on sending to the display
 
 i16o_leave:
          leaverest
@@ -893,12 +1003,14 @@ i16o_leave:
 
          waitcmd i16b_leave  ;wait for the display to be ready for another command
 
+         lock                ;acquire lock on sending to the display
          mov     #13, w0     ;INT opcode
          gcall   dcmd_put8
          mov     w1, w0      ;FW parameter
          gcall   dcmd_put8
          mov     w2, w0      ;INT16 parameter
          gcall   dcmd_put16
+         unlock              ;release lock on sending to the display
 
 i16b_leave:
          leaverest
@@ -931,11 +1043,10 @@ i16b_leave:
          glbsub  disp_int32fx
 
          not_cmd 17, return  ;FIXPNT command not implemented ?
+         waitcmd i32fx_leave ;wait for display ready for another command
 
-         mcall   wait_write  ;wait for display ready for another command
-         skip_flag disp      ;display is up and working ?
-         return              ;no, abort
 
+         lock                ;acquire lock on sending to the display
          push    w0          ;temp save low byte of 32 bit value
 
          mov     #17, w0     ;FIXPNT opcode
@@ -957,7 +1068,11 @@ i16b_leave:
          gcall   dcmd_put8   ;send DIGF byte
 
          pop     w0          ;restore full 32 bit value into W1:W0
-         gjump   dcmd_put32  ;send INT32 parameter, return to caller
+         mcall   dcmd_put32  ;send INT32 parameter
+         unlock              ;release lock on sending to the display
+
+i32fx_leave:
+         leaverest
 
 /if using_xc16 then
 ;
@@ -1803,6 +1918,204 @@ cmds_byte:                   ;back here each new byte
          mov     w0, cont    ;save it
          return
 
+;*******************************************************************************
+;
+;   Response GETCHAR column line char
+;
+         locent  drsp_getchar
+
+         mcall   dresp_get8  ;COLUMN
+         mov     w0, gchr_col
+         mcall   dresp_get8  ;LINE
+         mov     w0, gchr_lin
+         mcall   dresp_get8  ;CHAR
+         mov     w0, gchr_char
+
+         btss    flags, #flg_evgchr ;waiting for this response ?
+         return              ;no, nothing more to do
+         bset    flags, #flg_ev ;indicate the event occurred
+         bclr    flags, #flg_evgchr ;reset to not waiting for this event anymore
+         setflag disp        ;indicate the display seems to be up and functioning
+
+         return
+
+//******************************************************************************
+//******************************************************************************
+//
+//   Host commands.  Each command is only included when the associated CMD_name
+//   constant exists, with NAME being the command name.
+//
+
+;***************************************
+;
+;   Command BACKLIGHT brightness
+;
+/if [Command cm_backlight] then
+         gcall   cmd_get8    ;get new brightness value into W1
+         mov     w0, w1
+
+         not_cmd 3, return   ;BACKLIGHT command not implemented ?
+         waitcmd return      ;wait for the display to be ready for another command
+
+         lock                ;acquire lock on sending to the display
+         mov     #3, w0      ;BACKLIGHT opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;brightness
+         gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
+
+         return
+  /endif
+
+;***************************************
+;
+;   Command POS col line
+;
+;   Set new current display position.  COL and LINE are 0-N.
+;
+/if [Command cm_pos] then
+         gcall   cmd_get8    ;get COL into W2
+         mov     w0, w2
+         gcall   cmd_get8    ;get LINE into W1
+         mov     w0, w1
+         mov     w2, w0      ;get COL into W0
+
+         jump    disp_pos    ;set the new position
+  /endif
+
+;***************************************
+;
+;   Command CHAR char
+;
+;   Write the character CHAR to the display at the current position.  The
+;   current position may be altered as a result.
+;
+/if [Command cm_char] then
+         gcall   cmd_get8    ;get the character code into W0
+
+         jump    disp_char   ;write it to the display
+  /endif
+
+;***************************************
+;
+;   Command INT fw int16
+;
+;   Write the 16 bit integer value INT16 to the display according to formatting
+;   described in FW.
+;
+/if [Command cm_int] then
+         gcall   cmd_get8    ;get FW into W1
+         mov     w0, w1
+         gcall   cmd_get16   ;get INT16 into W0
+
+         jump    disp_int    ;write the integer to the display
+  /endif
+
+;***************************************
+;
+;   Command DIGIT digval
+;
+;   Write a single digit to the display.  DIGVAL is 0-35 for "0"-"9" and
+;   "A"-"Z".
+
+/if [Command cm_digit] then
+         gcall   cmd_get8    ;get DIGVAL into W0
+
+         jump    disp_digit  ;write the digit to the display
+  /endif
+
+;***************************************
+;
+;   Command CLRTO column
+;
+;   Clears from the current position right to the indicated column.  The current
+;   position will be one right of COLUMN.
+;
+/if [Command cm_clrto] then
+         gcall   cmd_get8    ;get COLUMN into W0
+
+         jump    disp_clearto ;perform the operation, return to command processor
+  /endif
+
+;***************************************
+;
+;   Command FIXPNT fw digf int32
+;
+;   Write the fixed point 32 bit integer value INT32 according to formatting
+;   rules in FW and DIGF.
+;
+/if [Command cm_fixpnt] then
+         gcall   cmd_get8    ;get FW into W2
+         mov     w0, w2
+         gcall   cmd_get8    ;get DIGF into W4
+         mov     w0, w4
+         gcall   cmd_get32   ;get INT32 into W1:W0
+
+         and     w4, #0xF, w3 ;init W3 with DIGF field
+
+         btsc    w2, #6
+         bset    w3, #8      ;signed
+
+         btsc    w2, #7
+         bset    w3, #11     ;leading zeros, not blanks
+
+         btsc    w4, #7
+         bset    w3, #9      ;always write decimal point
+
+         btss    w4, #6
+         bset    w3, #10     ;don't write 0 if only digit left of point
+
+         and     #0x1F, w2   ;mask in only field width in W2
+
+         jump    disp_int32fx ;write the fixed point integer value
+  /endif
+
+;***************************************
+;
+;   Command EVENT id
+;
+/if [Command cm_event] then
+         gcall   cmd_get8    ;get the event ID into w0
+
+         jump    event_set   ;create the event, return to caller
+  /endif
+
+;***************************************
+;
+;   Command GETCHAR column line
+;
+;   Get the displayed character at the indicated character position.  A GETCHAR
+;   response is sent:
+;
+;     GETCHAR column line char
+;
+/if [Command cm_getchar] then
+  /if [not [exist "rsp_getchar:const"]] then
+    /show "  GETCHAR command enabled, but not response."
+         .error  "GETCHAR"
+    /stop
+    /endif
+
+         gcall   cmd_get8    ;get column number into W1
+         mov     w0, w1
+         gcall   cmd_get8    ;get line number into W2
+         mov     w0, w2
+
+         mcall   disp_getchar ;get the character into W0
+         mov     w0, w3      ;temp save it in W3
+
+         gcall   cmd_lock_out ;acquire lock on host response stream
+         mov     #[v rsp_getchar], w0 ;response opcode
+         gcall   cmd_put8
+         mov     w1, w0      ;column number
+         gcall   cmd_put8
+         mov     w2, w0      ;line number
+         gcall   cmd_put8
+         mov     w3, w0      ;the character
+         gcall   cmd_put8
+         return
+  /endif
+
 //******************************************************************************
 //******************************************************************************
 //
@@ -1863,8 +2176,7 @@ dresp_tbl:
          .pword  drsp_dgo    ;8 - OK to send display-writing commands again
          .pword  drsp_thresh ;9 - capacitive sense threshold levels
          .pword  drsp_cont   ;10 - display contrast setting
-         .pword  dresp_done  ;10
-         .pword  dresp_done  ;11
+         .pword  drsp_getchar ;11 - response to GETCHAR, char at specific position
          .pword  dresp_done  ;12
          .pword  dresp_done  ;13
          .pword  dresp_done  ;14
