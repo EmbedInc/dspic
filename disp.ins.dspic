@@ -623,6 +623,28 @@ pos_leave:
 
 ;*******************************************************************************
 ;
+;   Subroutine DISP_SCROLL
+;
+;   Scroll the display up as necessary so that the line currently being written
+;   to is visible.
+;
+/if [Command cm_scroll] then
+  /endif
+         glbsub  disp_scroll, regf0
+
+         not_cmd 25, scroll_leave ;SCROLL command not implemented ?
+         waitcmd pos_leave   ;wait for the display to be ready for another command
+
+         lock                ;acuire lock on sending to the display
+         mov     #25, w0     ;SCROLL opcode
+         gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
+
+scroll_leave:
+         leaverest
+
+;*******************************************************************************
+;
 ;   Subroutine DISP_CHAR
 ;
 ;   Write the character in the low byte of W0 to the display at the current
@@ -2113,6 +2135,41 @@ cmds_byte:                   ;back here each new byte
          gcall   cmd_put8
          mov     w3, w0      ;the character
          gcall   cmd_put8
+         return
+  /endif
+
+;***************************************
+;
+;   Command DISPPOS column line
+;
+;   Set the writing postion to the indicated value.
+;
+/if [Command cm_disppos] then
+         gcall   cmd_get8    ;get column and temp save it in W2
+         mov     w0, w2
+         gcall   cmd_get8    ;get the line number into W1
+         mov     w0, w1
+         mov     w2, w0      ;get the column number into W0
+
+         jump    disp_pos    ;set the position, return to caller
+  /endif
+
+;***************************************
+;
+;   Command DISPSTR n char ... char
+;
+;   Write the string.  The string length is N+1 characters.
+;
+/if [Command cm_dispstr] then
+         gcall   cmd_get8    ;get the string length into W1
+         add     w0, #1, w1
+
+dstr_char:                   ;back here each new character
+         gcall   cmd_get8    ;get this character into W0
+         mcall   disp_char   ;write it to the display
+         sub     #1, w1      ;count one less character left to do
+         bra     nz, dstr_char ;back for next character
+
          return
   /endif
 
