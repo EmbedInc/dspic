@@ -914,6 +914,20 @@ config_stat glbentd
 
 ;*******************************************************************************
 ;
+;   C subroutine CONFIG_FAILED ()
+;
+;   Returns TRUE if the configuration has failed, FALSE otherwise.
+;
+         glbsubc config_failed
+
+         mov     #0, w0      ;init to no failure
+         skip_nflag cfgfail  ;really was no failure ?
+         mov     #1, w0      ;indicate configuration failed
+
+         leaverest
+
+;*******************************************************************************
+;
 ;   Subroutine CONFIG_STAT_SYS0
 ;
 ;   Send a CFGSTAT response for the current status of the main system (subsystem

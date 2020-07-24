@@ -126,6 +126,9 @@ void dymem_dealloc (                   //deallocate temporarily allocated memory
 //
 //   Subsystem configuration.
 //
+machine_intu_t                         //TRUE/FALSE
+config_failed (void);                  //find whether overall configuration failed
+
 void config_lock (void);               //get exclusive access to CONFIG routines
 
 void config_stat (                     //send response for event or status of a subsystem
