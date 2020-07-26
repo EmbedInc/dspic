@@ -727,6 +727,18 @@ gchar_default:               ;return the default value
 gchar_leave:                 ;common exit point, W0 all set
          leaverest
 
+;*******************
+;
+;   C subroutine DISP_GETCHAR
+;
+         glbsubc disp_getchar
+
+         mov     w1, w2      ;line number into W2
+         mov     w0, w1      ;column number into W1
+         mcall   disp_getchar ;get the character into W0
+
+         leaverest
+
 ;*******************************************************************************
 ;
 ;   Subroutine DISP_CRLF
@@ -742,6 +754,23 @@ gchar_leave:                 ;common exit point, W0 all set
          mcall   disp_char
          mov     #[v char_lf_k], w0 ;send LF
          mcall   disp_char
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_NEWLINE
+;
+;   Go to the start of the next line, and scroll the display as necessary so
+;   that this new line is visible.
+;
+         glbsubd disp_newline, regf0
+
+         mov     #[v char_cr_k], w0 ;send CR
+         mcall   disp_char
+         mov     #[v char_lf_k], w0 ;send LF
+         mcall   disp_char
+         mcall   disp_scroll
 
          leaverest
 

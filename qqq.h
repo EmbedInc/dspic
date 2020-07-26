@@ -569,13 +569,22 @@ void disp_pos (                        //set character position
   machine_intu_t,                      //0-N column number, left to right
   machine_intu_t);                     //0-N line number, top to bottom
 
+void disp_scroll (void);               //scroll, if needed, to make curr line visible
+
 void disp_char (                       //write character, advance char pos 1 right
   machine_intu_t);                     //character code in low 8 bits
+
+machine_intu_t                         //returned 0-255 character code
+disp_getchar (                         //get displayed character, blank past display
+  machine_intu_t,                      //0-N column number
+  machine_intu_t);                     //0-N line number
 
 void disp_string (                     //write string to display
   const char *);                       //null-terminated string to write
 
 void disp_crlf (void);                 //go to start of next line down
+
+void disp_newline (void);              //to start of next line, scroll to make visible
 
 void disp_digit (                      //write 0-9,A-Z digit
   machine_intu_t);                     //0-35 digit value
