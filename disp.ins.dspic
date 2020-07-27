@@ -623,6 +623,52 @@ pos_leave:
 
 ;*******************************************************************************
 ;
+;   Subroutine DISP_COLUMN
+;
+;   Set the column character position without altering the line position.  The
+;   new column number is in the low bits of W0.
+;
+         glbsubd disp_column, regf0 | regf1
+
+         not_cmd 26, col_leave ;COLUMN command not implemented ?
+         waitcmd col_leave   ;wait for the display to be ready for another command
+
+         lock                ;acquire lock on sending to the display
+         mov     w0, w1      ;save column number in W1
+         mov     #26, w0     ;COLUMN opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;column
+         gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
+
+col_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DISP_LINE
+;
+;   Set the line character position without altering the column position.  The
+;   new line number is in the low bits of W0.
+;
+         glbsubd disp_line, regf0 | regf1
+
+         not_cmd 27, line_leave ;LINE command not implemented ?
+         waitcmd line_leave  ;wait for the display to be ready for another command
+
+         lock                ;acquire lock on sending to the display
+         mov     w0, w1      ;save line number in W1
+         mov     #27, w0     ;LINE opcode
+         gcall   dcmd_put8
+         mov     w1, w0      ;line
+         gcall   dcmd_put8
+         unlock              ;release lock on sending to the display
+
+line_leave:
+         leaverest
+
+;*******************************************************************************
+;
 ;   Subroutine DISP_SCROLL
 ;
 ;   Scroll the display up as necessary so that the line currently being written
@@ -630,7 +676,7 @@ pos_leave:
 ;
 /if [Command cm_scroll] then
   /endif
-         glbsub  disp_scroll, regf0
+         glbsubd disp_scroll, regf0
 
          not_cmd 25, scroll_leave ;SCROLL command not implemented ?
          waitcmd pos_leave   ;wait for the display to be ready for another command

@@ -569,6 +569,12 @@ void disp_pos (                        //set character position
   machine_intu_t,                      //0-N column number, left to right
   machine_intu_t);                     //0-N line number, top to bottom
 
+void disp_column (                     //set column without altering line
+  machine_intu_t);                     //0-N column number
+
+void disp_line (                       //set line without altering column
+  machine_intu_t);                     //0-N line number
+
 void disp_scroll (void);               //scroll, if needed, to make curr line visible
 
 void disp_char (                       //write character, advance char pos 1 right

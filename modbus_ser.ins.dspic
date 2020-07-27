@@ -332,7 +332,7 @@ getst_nclear:                ;done clearing the counters, if at all
 /if subsys then
   /if [<> uname ""] then
          glbent  modbus_cfg  ;hack until MDEVBUILD handles custom names
-  /endif
+    /endif
          glbsub  modbus[chars uname]_cfg, regf0 | regf1
 
          gcall   config_lock ;get exclusive access to CONFIG_xxx routines
