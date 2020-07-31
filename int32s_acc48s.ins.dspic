@@ -33,7 +33,7 @@
 
          add     w0, [w2], [w2++]
          addc    w1, [w2], [w2++]
-         mov     #0, w3
+         asr     w1, #15, w3
          addc    w3, [w2], [w2++]
 
          leaverest
