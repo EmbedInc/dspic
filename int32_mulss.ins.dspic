@@ -1,0 +1,82 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "int32_mulss_ins:const"]] then
+  /const int32_mulss_ins bool = true
+
+  /include "(cog)src/dspic/int32_muluu.ins.dspic"
+
+
+.section .code_int32_mulss, code
+;*******************************************************************************
+;
+;   Subroutine INT32_MULSS
+;
+;   32 bit integer multiply, signed by signed.
+;
+;   W1:W0 * W3:W2 --> W3:W2:W1:W0
+;
+         glbsub  int32_mulss, regf4
+
+         xor     w1, w3, w4  ;make final sign in high bit of W4
+
+         btss    w1, #15     ;W1:W0 is negative ?
+         jump    abs1        ;no, skip this section
+         neg     w0, w0
+         com     w1, w1
+         addc    w1, #0, w1
+abs1:                        ;done setting W1:W0 to its absolute value
+
+         btss    w3, #15     ;W3:W2 is negative ?
+         jump    abs2        ;no, skip this section
+         neg     w2, w2
+         com     w3, w3
+         addc    w3, #0, w3
+abs2:                        ;done setting W1:W0 to its absolute value
+
+         mcall   int32_muluu ;do the unsigned multiply, result in W3:W2:W1:W0
+
+         btss    w4, #15     ;need to negate result ?
+         jump    dneg        ;no, skip this section
+         neg     w0, w0
+         com     w1, w1
+         addc    w1, #0, w1
+         com     w2, w2
+         addc    w2, #0, w2
+         com     w3, w3
+         addc    w3, #0, w3
+dneg:                        ;done negating result
+
+         leaverest
+
+;*******************************************************************************
+;
+;   C subroutine INT32_MULSS (I1, I2, &PROD)
+;
+;   C interface to the 32 x 32 --> 64 bit subroutine.  I1 and I2 are two
+;   unsigned 32 bit values to multiply, and the product is returned in PROD
+;
+         glbsubc int32_mulss
+
+         mov     w2, w4      ;save pointer to the result in W4
+         mcall   int32_mulss ;do the multiply, result in W3:W2:W1:W0
+         mov     w0, [w4++]
+         mov     w1, [w4++]
+         mov     w2, [w4++]
+         mov     w3, [w4]
+
+         leaverest
+  /endif                     ;end of file interlock

@@ -170,13 +170,65 @@ void config_unlock (void);             //release exclusive lock on CONFIG routin
 
 //******************************************************************************
 //
-//   Fixed and floating point manipulation routines.
+//   Math routines.
 //
-typedef struct {                       //48 bit integer
-  int16u_t low;                        //least significant word
-  int16u_t mid;
-  int16u_t high;                       //most significant word
-  } int48_t;
+typedef struct {                       //48 bit unsigned integer
+  union {
+    int16u_t w[3];                     //array of 16 bit words
+    struct {
+      int16u_t w0;                     //explicit W0-Wn names for each word
+      int16u_t w1;
+      union {
+        int16u_t w2;
+        int16u_t high;                 //special alias for the high word
+        };
+      };
+    };
+  } int48u_t;
+
+typedef struct {                       //48 bit signed integer
+  union {
+    int16u_t w[3];                     //array of 16 bit words
+    struct {
+      int16u_t w0;                     //explicit W0-Wn names for each word
+      int16u_t w1;
+      union {
+        int16s_t w2;
+        int16s_t high;                 //special alias for the high word
+        };
+      };
+    };
+  } int48s_t;
+
+typedef struct {                       //64 bit unsigned integer
+  union {
+    int16u_t w[4];                     //array of 16 bit words
+    struct {
+      int16u_t w0;                     //explicit W0-Wn names for each word
+      int16u_t w1;
+      int16u_t w2;
+      union {
+        int16u_t w3;
+        int16u_t high;                 //special alias for the high word
+        };
+      };
+    };
+  } int64u_t;
+
+typedef struct {                       //64 bit signed integer
+  union {
+    int16u_t w[4];                     //array of 16 bit words
+    struct {
+      int16u_t w0;                     //explicit W0-Wn names for each word
+      int16u_t w1;
+      int16u_t w2;
+      union {
+        int16s_t w3;
+        int16s_t high;                 //special alias for the high word
+        };
+      };
+    };
+  } int64s_t;
 
 int32s_t                               //returned 32 bit signed fixed point number
 fp32_fixs (                            //FLOAT to fixed point, rounded and saturated
@@ -200,12 +252,12 @@ fp32_flt32u (                          //32 bit unsigned fixed point to floating
 
 float                                  //resulting floating point value
 fp32_flt48s (                          //48 bit signed fixed point to floating point
-  int48_t,                             //48 bit fixed point value
+  int48s_t,                            //48 bit signed fixed point value
   machine_ints_t);                     //number of fraction bits, may be negative
 
 float                                  //resulting floating point value
 fp32_flt48u (                          //48 bit unsigned fixed point to floating point
-  int48_t,                             //48 bit fixed point value
+  int48u_t,                            //48 bit unsigned fixed point value
   machine_ints_t);                     //number of fraction bits, may be negative
 
 int32u_t                               //resulting 3.29 unsigned fixed point quotient
@@ -217,6 +269,30 @@ int32u_t                               //resulting 3.29 unsigned fixed point pro
 fx3f29_mulu (                          //3.29 unsigned fixed point multiply
   int32u_t,                            //3.29 unsigned fixed point term
   int32u_t);                           //3.29 unsigned fixed point term
+
+int32u_t                               //result
+int16_muluu (                          //16 x 16 --> 32 bit multiply, all unsigned
+  int16u_t, int16u_t);                 //the two operands
+
+int32s_t                               //result
+int16_mulss (                          //16 x 16 --> 32 bit multiply, all signed
+  int16s_t, int16s_t);                 //the two operands
+
+void int32_muluu (                     //32 x 32 --> 64 bit multiply, all unsigned
+  int32u_t, int32u_t,                  //the two operands
+  int64u_t *);                         //returned result
+
+void int32_mulss (                     //32 x 32 --> 64 bit multiply, all signed
+  int32s_t, int32s_t,                  //the two operands
+  int64s_t *);                         //returned result
+
+void int32u_acc48u (                   //add 32 bit integer into 48 bit accumulator, unsigned
+  int32u_t,                            //value to add
+  int48u_t *);                         //accumulator to add it into
+
+void int32s_acc48s (                   //add 32 bit integer into 48 bit accumulator, signed
+  int32s_t,                            //value to add
+  int48s_t *);                         //accumulator to add it into
 
 //******************************************************************************
 //

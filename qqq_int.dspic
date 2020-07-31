@@ -14,15 +14,23 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   32 bit integer math routines.  The available routines are:
+;   Integer math routines.  The available routines are:
 ;
-;     I32_MULUU  -  Unsigned by unsigned multiply.
+;     INT16_MULUU  -  16 x 16 --> 32 bit multiply, all unsigned
+;     INT16_MULSS  -  16 x 16 --> 32 bit multiply, all signed
+;
+;       These routines are only for use with C, since single instructions can do
+;       this in assembler.
+;
+;     INT32_MULUU  -  32 x 32 --> 64 bit multiply, all unsigned
+;     INT32_MULSS  -  32 x 32 --> 64 bit multiply, all signed
 ;
 ;       W1:W0 x W3:W2 --> W3:W2:W1:W0
 ;
-;   There are no runtime error conditions.  Saturation, clipping to 0, etc, is
-;   performed to return the most reasonable possible value when the exact result
-;   can not be expressed in the output format.
+;     INT32U_ACC48U  -  32 bit addition into 48 bit accumulator, unsigned
+;     INT32S_ACC48S  -  32 bit addition into 48 bit accumulator, signed
+;
+;       These routines are C-only.
 ;
 /include "qq2.ins.dspic"
 ;
@@ -33,12 +41,23 @@
 ;   for implicitly called routines to be included.  Each file contains a
 ;   interlock so that no harm is done by referencing a file more than once.
 ;
-/include "(cog)src/dspic/i32_muluu.ins.dspic"
+/include "(cog)src/dspic/int16_muluu.ins.dspic"
+/include "(cog)src/dspic/int16_mulss.ins.dspic"
+/include "(cog)src/dspic/int32_muluu.ins.dspic"
+/include "(cog)src/dspic/int32_mulss.ins.dspic"
+/include "(cog)src/dspic/int32u_acc48u.ins.dspic"
+/include "(cog)src/dspic/int32s_acc48s.ins.dspic"
 ;
 ;   The firmware build script will need to grab all the files that are
 ;   ultimately used, including from any implicit dependencies.  The commands to
 ;   get the complete set of files is given here for easy copying into the build
-;   script.  No harm is done if unused files are grabbed.  These will not be
-;   included in the build unless actually referenced.
+;   script.  No harm is done if unused files are grabbed, other than a little
+;   longer build time.  Routines will not be included in the build unless
+;   actually referenced.
 ;
-// call src_get_ins_dspic dspic i32_muluu
+// call src_get_ins_dspic dspic int16_muluu
+// call src_get_ins_dspic dspic int16_mulss
+// call src_get_ins_dspic dspic int32_muluu
+// call src_get_ins_dspic dspic int32_mulss
+// call src_get_ins_dspic dspic int32u_acc48u
+// call src_get_ins_dspic dspic int32s_acc48s

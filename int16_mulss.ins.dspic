@@ -1,0 +1,36 @@
+;   ***************************************************************
+;   * Copyright (C) 2020, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "int16_mulss_ins:const"]] then
+  /const int16_mulss_ins bool = true
+
+
+.section .code_int16_mulss, code
+;*******************************************************************************
+;
+;   C function INT16_MULSS (I1, I2)
+;
+;   Multiply of two signed 16 bit values.  The function value is the signed 32
+;   bit result.
+;
+;   W0 * W1 --> W1:W0
+;
+         glbsubc int16_mulss
+
+         mul.ss  w0, w1, w0  ;W0 * W1 --> W1:W0
+
+         leaverest
+  /endif

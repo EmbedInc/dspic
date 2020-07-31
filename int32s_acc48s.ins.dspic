@@ -1,0 +1,40 @@
+;   ***************************************************************
+;   * Copyright (C) 2020, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "int32s_acc48s_ins:const"]] then
+  /const int32s_acc48s_ins bool = true
+
+
+.section .code_int32s_acc48s, code
+;*******************************************************************************
+;
+;   C subroutine INT32S_ACC48S (I32, &ACC48)
+;
+;   Add the 32 bit signed integer I32 into the 48 bit signed accumulator ACC48.
+;
+;   W1:W0  -  I32
+;
+;   W2  -  Pointer to ACC48
+;
+         glbsubc int32s_acc48s
+
+         add     w0, [w2], [w2++]
+         addc    w1, [w2], [w2++]
+         mov     #0, w3
+         addc    w3, [w2], [w2++]
+
+         leaverest
+  /endif

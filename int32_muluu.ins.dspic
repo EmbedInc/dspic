@@ -14,20 +14,20 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-/if [not [exist "i32_muluu_ins:const"]] then
-  /const i32_muluu_ins bool = true
+/if [not [exist "int32_muluu_ins:const"]] then
+  /const int32_muluu_ins bool = true
 
 
-.section .code_i32_muluu, code
+.section .code_int32_muluu, code
 ;*******************************************************************************
 ;
-;   Subroutine I32_MULUU
+;   Subroutine INT32_MULUU
 ;
 ;   32 bit integer multiply, unsigned by unsigned.
 ;
 ;   W1:W0 * W3:W2 --> W3:W2:W1:W0
 ;
-         glbsub  i32_muluu, regf4 | regf5 | regf6 | regf7 | regf8
+         glbsub  int32_muluu, regf4 | regf5 | regf6 | regf7 | regf8
 ;
 ;   This machine can only natively do a 16 bit x 16 bit into 32 bit multiply.
 ;   The 32 bit x 32 bit into 64 bit multiply must therefore be computed in four
@@ -61,6 +61,24 @@
          add     w1, w8, w1
          addc    w6, #0, w2
          addc    #0, w3
+
+         leaverest
+
+;*******************************************************************************
+;
+;   C subroutine INT32_MULUU (I1, I2, &PROD)
+;
+;   C interface to the 32 x 32 --> 64 bit subroutine.  I1 and I2 are two
+;   unsigned 32 bit values to multiply, and the product is returned in PROD
+;
+         glbsubc int32_muluu
+
+         mov     w2, w4      ;save pointer to the result in W4
+         mcall   int32_muluu ;do the multiply, result in W3:W2:W1:W0
+         mov     w0, [w4++]
+         mov     w1, [w4++]
+         mov     w2, [w4++]
+         mov     w3, [w4]
 
          leaverest
   /endif                     ;end of file interlock
