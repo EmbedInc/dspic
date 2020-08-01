@@ -555,6 +555,8 @@ dsave_leave:
 ;   This routine doesn't return until the display has performed the action.
 ;   Other tasks are allowed to run meanwhile.
 ;
+/if [Command cm_dispclear] then
+  /endif
          glbsubd disp_clear, regf0
 
          not_cmd 9, dclr_leave ;CLEAR command not implemented ?
@@ -2066,28 +2068,12 @@ cmds_byte:                   ;back here each new byte
 
 ;***************************************
 ;
-;   Command POS col line
-;
-;   Set new current display position.  COL and LINE are 0-N.
-;
-/if [Command cm_pos] then
-         gcall   cmd_get8    ;get COL into W2
-         mov     w0, w2
-         gcall   cmd_get8    ;get LINE into W1
-         mov     w0, w1
-         mov     w2, w0      ;get COL into W0
-
-         jump    disp_pos    ;set the new position
-  /endif
-
-;***************************************
-;
 ;   Command CHAR char
 ;
 ;   Write the character CHAR to the display at the current position.  The
 ;   current position may be altered as a result.
 ;
-/if [Command cm_char] then
+/if [Command cm_dispchar] then
          gcall   cmd_get8    ;get the character code into W0
 
          jump    disp_char   ;write it to the display
