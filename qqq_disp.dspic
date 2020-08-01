@@ -28,11 +28,14 @@
 ;
 ;     DISP_BACKLIGHT  -  W0 = 0 backlight off, else on.
 ;
+;     DISP_CONT_SET  -  Sets contrast from 0-255 in W0.  Returns actual contrast
+;       in W0.
+;
 ;     DISP_CONT  -  Returns current display contrast setting in W0.
 ;
-;     DISP_CONTUP  -  Increments display contrast setting, returns result.
+;     DISP_CONTUP  -  Increments display contrast setting, result in W0.
 ;
-;     DISP_CONTDOWN  -  Decrements display contrast setting, returns result.
+;     DISP_CONTDOWN  -  Decrements display contrast setting, result in W0.
 ;
 ;     DISP_CONT_OFF  -  Lowest possible contrast, doesn't change setting.
 ;
@@ -47,10 +50,22 @@
 ;     DISP_POS  -  Set character position to column W0 and line W1.  Top left is
 ;       0,0.
 ;
+;     DISP_COLUMN  -  Set column from W0 without altering line.
+;
+;     DISP_LINE  -  Set line from W0 without altering column.
+;
+;     DISP_SCROLL  -  Scroll the display contents up so that the current line is
+;       visible.
+;
 ;     DISP_CHAR  -  Write character in low byte of W0.
+;
+;     DISP_GETCHAR  -  Get character as column W1 and line W2 into W0.
 ;
 ;     DISP_CRLF  -  Send carriage return and line feed.  Goes to start of next
 ;       line down.
+;
+;     DISP_NEWLINE  -  Goes to start of next line down, then scrolls the display
+;       as necessary so that the new current line is visible.
 ;
 ;     DISP_DIGIT  -  Write digit for 0-35 value in W0.
 ;
@@ -82,6 +97,7 @@
 ;
 ;     EVENTS_CLEAR  -  Clear all pending events.
 ;
+;     EVENT_SET  -  Create event.  ID in W0, use constants EVENT_xxx.
 ;
 ;   Subroutines intended for calling by C.
 ;
