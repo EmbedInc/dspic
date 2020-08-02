@@ -20,6 +20,7 @@
 /const   event_onoff_press integer = 11 ;on/off button pressed
 /const   event_onoff_release integer = 12 ;on/off button released
 /const   event_leftright integer = 13 ;left/right buttons held together
+/const   event_app integer = 14 ;app-caused event
 ;
 ;   Special characters understood by the user interface display.
 ;
@@ -63,6 +64,9 @@
 /flag    brel_down           ;DOWN button released event
 /flag    brel_mid            ;middle button released event
 /flag    brel_onoff          ;on/off button released event
+
+/flag    event_leftright     ;left/right buttons event
+/flag    event_app           ;event reserved for app
 
 ////////////////////////////////////////////////////////////////////////////////
 //

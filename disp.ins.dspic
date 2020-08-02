@@ -1291,6 +1291,8 @@ cstr_dbytes:                 ;done with the string of bytes
          clrflag brel_down
          clrflag brel_mid
          clrflag brel_onoff
+         clrflag event_leftright
+         clrflag event_app
 
          leaverest
 
@@ -1332,6 +1334,25 @@ cstr_dbytes:                 ;done with the string of bytes
          jump    evw_have
 [lab nrelease]:
   /endmac
+
+/////////////
+//
+//   Macro CHECK_EVENT_FLAG name
+//
+//   Check a single flag indicating that an event is pending.  NAME is the name
+//   of the flag, which must also match the name of the event ID constant.  If
+//   the flag is not set, then execution falls thru.  If the flag is set, then
+//   it is cleared, W0 set to the event ID, and execution goes to EVW_HAVE.
+//
+/macro check_event_flag
+  /write
+         skip_flag event_[arg 1] ;the event is pending ?
+         jump    [lab nevent] ;no, nothing more to do
+         clrflag event_[arg 1] ;clear the event condition
+         mov     #[v event_[arg 1]], w0 ;get the event ID
+         jump    evw_have
+[lab nevent]:
+  /endmac
 //
 /////////////
 
@@ -1348,6 +1369,8 @@ evw_check:                   ;back here to check all events again
          check_event down
          check_event mid
          check_event onoff
+         check_event_flag leftright
+         check_event_flag app
 ;
 ;   No event detected.  Update the time state and handle timeout.
 ;
@@ -1551,9 +1574,9 @@ lr_leave:
 ;   defined in DISP_SETUP.INS.DSPIC.  Nothing is done when W0 is not a valid
 ;   event ID.
 ;
-         glbsub  event_set, regf0
+         glbsubd event_set, regf0
 
-         cp      w0, #12     ;compare to largest valid value
+         cp      w0, #14     ;compare to largest valid value
          bra     gtu, evset_leave ;out of range, ignore ?
          sub     #1, w0      ;make 0 for the first 1-12 value
          sl      w0, #1, w0  ;leave 2 instruction words per event ID
@@ -1587,6 +1610,12 @@ lr_leave:
          setflag bpress_onoff ;11
          jump    evset_leave
          setflag brel_onoff  ;12
+         jump    evset_leave
+
+         setflag event_leftright ;13
+         jump    evset_leave
+
+         setflag event_app   ;14
          jump    evset_leave
 
 evset_leave:
@@ -2257,6 +2286,7 @@ dstr_char:                   ;back here each new character
   /call write_c_const event_onoff_press
   /call write_c_const event_onoff_release
   /call write_c_const event_leftright
+  /call write_c_const event_app
 
   /call write_c_const char_bell_k
   /call write_c_const char_back_k

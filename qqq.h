@@ -580,6 +580,7 @@ int32u_t nvmem_last (void);            //get adr of last application-usable byte
 //     event_onoff_press_k  -  on/off button pressed
 //     event_onoff_release_k  -  on/off button released
 //     event_leftright_k  -  Left and right buttons held for a while
+//     event_app_k  -  application-caused event
 //
 //   EVENT_WAIT timeout:
 //
@@ -603,6 +604,9 @@ int32u_t nvmem_last (void);            //get adr of last application-usable byte
 extern machine_intu_t disp_fwtype;     //display firmware type ID, 0 = unknown
 extern machine_intu_t disp_fwver;      //display firmware version number, 1-N
 extern machine_intu_t disp_fwseq;      //display firmware sequence number, 1-N
+
+void event_set (                       //explicitly set a event condition
+  machine_intu_t);                     //EVENT_xxx_K event ID
 
 machine_intu_t                         //EVENT_xxx_K event ID
 event_wait (                           //wait for next event or timeout
