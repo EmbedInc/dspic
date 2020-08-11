@@ -54,6 +54,24 @@
     /const uname string = [str "_" name]
   /endif
 
+;   Create the constant MDEV according to whether this module is a MDEV, as
+;   opposed to a fixed module.
+;
+/block
+  /var local b bool = false  ;init to fixed module, not MDEV
+  /var local sym string = "cfg_uart_modbus:const"
+  /block
+    /if [not [exist sym]] then
+      /quit
+      /endif
+    /if [<> [sym sym dtype] "INTEGER"] then
+      /quit
+      /endif
+    /set b true              ;is MDEV
+    /endblock
+  /const mdev bool = b       ;create final MDEV constant
+  /endblock
+
 /if [not [exist "flag_run"]] then
   /const flag_run string = ""
   /endif
@@ -126,7 +144,11 @@
   /endif
 
 /if [not [exist "runtime_baud"]] then
-  /const runtime_baud bool = false
+  /const runtime_baud bool = mdev
+  /endif
+/if [and mdev [not runtime_baud]] then
+  /del vcon runtime_baud
+  /const runtime_baud bool true
   /endif
 
 /var new s string
@@ -162,30 +184,16 @@
   /endblock
 
 /if [not [exist "runtime_parity"]] then
-  /const runtime_parity bool = false
+  /const runtime_parity bool = mdev
+  /endif
+/if [and mdev [not runtime_parity]] then
+  /del vcon runtime_parity
+  /const runtime_parity bool true
   /endif
 
 /if [not [exist "callback_recv"]] then
   /const callback_recv string = ""
   /endif
-
-;   Create the constant MDEV according to whether this module is a MDEV, as
-;   opposed to a fixed module.
-;
-/block
-  /var local b bool = false  ;init to fixed module, not MDEV
-  /var local sym string = "cfg_uart_modbus:const"
-  /block
-    /if [not [exist sym]] then
-      /quit
-      /endif
-    /if [<> [sym sym dtype] "INTEGER"] then
-      /quit
-      /endif
-    /set b true              ;is MDEV
-    /endblock
-  /const mdev bool = b       ;create final MDEV constant
-  /endblock
 
 /call baud_setup30 baud      ;compute the UART baud rate setup
 
@@ -319,6 +327,13 @@ alloc    uartw1
 alloc    uartw2
 alloc    uartw3
 
+alloc	ubaud, 4	;original user-specified baud rate
+
+/if mdev then
+alloc	cfgadr, 4	;NV mem address of our config data
+alloc	bussel		;0-2 bus select
+  /endif
+
 /if runtime_parity then
 alloc    parityid            ;ID for parity setting, one of UART_PARITY_xxx constants
   /endif
@@ -367,7 +382,7 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 .equiv   flg_pbrk_sent, 8    ;already sent notice of this packet start break
 .equiv   flg_received, 9     ;char received since last checked
 .equiv   flg_sent, 10        ;char sent since last checked
-
+.equiv	flg_master, 11	;configured as bus master (pullup/down enabled}
 
 .section .code_uart[chars uname], code
 
@@ -419,6 +434,10 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 
          fifow_init fifoi    ;initialize the UART input FIFO
          fifow_init fifoo    ;initialize the UART output FIFO
+
+	load32	w0, [v baud]	;save baud rate specified by the user
+	mov	w0, ubaud+0
+	mov	w1, ubaud+2
 
          clr     flags       ;init all flags to off
   /if [= parity "EVEN"] then
@@ -1113,9 +1132,11 @@ act_leave:                   ;common exit point, Z flag already set
 /if runtime_baud then
   /var new ii integer
 
-         glbsub  uart[chars uname]_baud_set, regf0 | regf1 | regf2 | regf3 | regf4 | regf5
+         glbsubd uart[chars uname]_baud_set, regf0 | regf1 | regf2 | regf3 | regf4 | regf5
 
          mcall   uart[chars uname]_off ;turn the UART off
+	mov	w0, ubaud+0	;save the user's original baud rate
+	mov	w1, ubaud+2
 ;
 ;   The baud rate register value is:
 ;
@@ -1299,7 +1320,7 @@ utk_dtxwat:                  ;done updating transmit wait time state
 ;   Configure to 8 data bits, even parity, 1 stop bit.
 ;
 /if runtime_parity then
-         glbsub  uart[chars uname]_parity_even, regf0
+         glbsubd uart[chars uname]_parity_even, regf0
 
          mcall   uart[chars uname]_off ;make sure hardware is off during config change
 
@@ -1322,7 +1343,7 @@ utk_dtxwat:                  ;done updating transmit wait time state
 ;   Configure to 8 data bits, odd parity, 1 stop bit.
 ;
 /if runtime_parity then
-         glbsub  uart[chars uname]_parity_odd, regf0
+         glbsubd uart[chars uname]_parity_odd, regf0
 
          mcall   uart[chars uname]_off ;make sure hardware is off during config change
 
@@ -1346,7 +1367,7 @@ utk_dtxwat:                  ;done updating transmit wait time state
 ;   bit data, no parity, 2 stop bits.
 ;
 /if runtime_parity then
-         glbsub  uart[chars uname]_parity_one, regf0
+         glbsubd uart[chars uname]_parity_one, regf0
 
          mcall   uart[chars uname]_off ;make sure hardware is off during config change
 
@@ -1369,7 +1390,7 @@ utk_dtxwat:                  ;done updating transmit wait time state
 ;   Configure to 8 data bits, no parity, 1 stop bit.
 ;
 /if runtime_parity then
-         glbsub  uart[chars uname]_parity_none, regf0
+         glbsubd uart[chars uname]_parity_none, regf0
 
          mcall   uart[chars uname]_off ;make sure hardware is off during config change
 
@@ -1393,7 +1414,7 @@ utk_dtxwat:                  ;done updating transmit wait time state
 ;   one of the constants UART_PARITY_xxx defined in UART_SETUP.INS.DSPIC.
 ;
 /if runtime_parity then
-         glbsub  uart[chars uname]_parity
+         glbsubd  uart[chars uname]_parity
 
          mov     parityid, w0
 
@@ -1407,7 +1428,7 @@ utk_dtxwat:                  ;done updating transmit wait time state
 ;   Wait until the transmitter has been idle for long enough so that a new
 ;   Modbus packet can be sent.
 ;
-         glbsub  uart[chars uname]_wait_send, regf0
+         glbsubd  uart[chars uname]_wait_send, regf0
 
 wats_wait:                   ;back here if gap time not elapsed yet
          mov     ticktxwat, w0 ;get ticks left to wait
@@ -1509,7 +1530,7 @@ act_nsend:
 ;   rate to that specified by BAUD will be silently chosen.  Baud rates up to
 ;   115.2 k can be achieved with low baud rate error.
 ;
-         glbsub  uart_modbus_cfg, regf0 | regf1 | regf3 | regf4
+         glbsub  uart_modbus_cfg, regf0 | regf1 | regf2 | regf3 | regf4
 
          gcall   config_lock ;get exclusive access to CONFIG_xxx routines
 
@@ -1517,6 +1538,10 @@ act_nsend:
          gcall   config_setup
          cp      w0, #4      ;check for min expected number of config bytes
          bra     ltu, cfg_leave ;less than min required config bytes ?
+
+	gcall	config_adr	;get the address of our config data
+	mov	w1, cfgadr+0	;save it
+	mov	w2, cfgadr+2
 
          mcall   uart[chars uname]_init ;initialize the hardware
 
@@ -1526,6 +1551,7 @@ act_nsend:
 ;   Select the bus.
 ;
          and     w3, #0x03, w0 ;extract BUS field into W0
+	mov	w0, bussel	;save the bus selection ID
          ipnum   0, rpin_232
          ipnum   1, rpin_2wire
          ipnum   2, rpin_4wire
