@@ -305,24 +305,70 @@ void int32s_acc48s (                   //add 32 bit integer into 48 bit accumula
 //   another "_" following.  For example, if the unique name is XYZZ, then
 //   routine UART_LOCK would really be named UART_XYZZ_LOCK.
 //
-#define uart_ev_err_k 0x8000           //hard error: overrun, framing, etc
-#define uart_ev_perr_k 0x4000          //parity error, data in low byte
-#define uart_ev_pack_k 0x2000          //start of packet break, no character
+
+//   Flag bits in high byte of word received from UART_GET.
+//
+#define uart_ev_err_k (0x8000)         //hard error: overrun, framing, etc
+#define uart_ev_perr_k (0x4000)        //parity error, data in low byte
+#define uart_ev_pack_k (0x2000)        //start of packet break, no character
+
+//   IDs for the different possible bus configurations.
+//
+#define uart_bus_232 (0)               //RS-232
+#define uart_bus_485_2 (1)             //RS-485, 2 wire
+#define uart_bus_485_4 (2)             //RS-485, 4 wire
+
+//   IDs for the different possible parity configurations.
+//
+#define uart_parity_none (0)           //8-N-1
+#define uart_parity_even (1)           //8-E-1
+#define uart_parity_odd (2)            //8-O-1
+#define uart_parity_one (3)            //8-1-1, same as 8-N-2
+
+int32u_t                               //actual baud rate, may differe from setting
+uart_baud (void);
+
+void uart_baud_set (                   //set the baud rate
+  int32u_t);                           //new baud rate, Hz
+
+int32u_t                               //last baud rate setting, real baud rate may differ
+uart_baud_setting (void);
+
+machine_intu_t                         //current bus config ID, UART_BUS_xxx
+uart_bus (void);
+
+void uart_bus_set (                    //set bus configuration
+  machine_intu_t);                     //configuration ID, use UART_BUS_xxx
 
 machine_intu_t                         //data in low byte + UART_EV_xxx_K flags
 uart_get (void);                       //get next event
+
+machine_intu_t                         //true/false
+uart_get_ready (void);                 //TRUE when a character is available to get
 
 machine_intu_t                         //TRUE or FALSE
 uart_get_ready (void);                 //find if event is immediately available
 
 void uart_lock (void);                 //acquire exclusive lock for sending
 
+machine_intu_t                         //TRUE for master, FALSE for slave
+uart_master (void);                    //get current master/slave configuration
+
+void uart_master_set (                 //set master/slave mode (pullup/down on for master}
+  machine_intu_t);                     //0 for slave, otherwise master
+
+machine_intu_t                         //current parity config ID, UART_PARITY_xxx
+uart_parity (void);
+
+void uart_parity_set (                 //set the parity configuration
+  machine_intu_t);                     //parity config ID, use UART_PARITY_xxx
+
 void uart_put (                        //send character
   machine_intu_t);                     //char in low byte, upper byte ignored
 
 void uart_unlock (void);               //release sending lock
 
-void uart_wait_send (void);            //guarantee packet break before next PUT
+void uart_wait_send (void);            //guarantee Modbus packet break before next PUT
 
 //******************************************************************************
 //

@@ -72,6 +72,10 @@
   /const mdev bool = b       ;create final MDEV constant
   /endblock
 
+/if [not [exist "pin_master"]] then
+  /const pin_master string = ""
+  /endif
+
 /if [not [exist "flag_run"]] then
   /const flag_run string = ""
   /endif
@@ -182,14 +186,6 @@
          .end
   /stop
   /endblock
-
-/if [not [exist "runtime_parity"]] then
-  /const runtime_parity bool = mdev
-  /endif
-/if [and mdev [not runtime_parity]] then
-  /del vcon runtime_parity
-  /const runtime_parity bool true
-  /endif
 
 /if [not [exist "callback_recv"]] then
   /const callback_recv string = ""
@@ -311,10 +307,6 @@
 
 allocg   task_uart[chars uname] ;ID of task that has UART locked, MSB 1 means none
 
-/if runtime_baud then
-allocg   uart[chars uname]_baud, 4 ;actual baud rate
-  /endif
-
 ;*******************
 ;
 ;   Local state.
@@ -327,15 +319,13 @@ alloc    uartw1
 alloc    uartw2
 alloc    uartw3
 
-alloc	ubaud, 4	;original user-specified baud rate
+alloc    ubaud,  4           ;original user-specified baud rate
+alloc    abaud,  4           ;actual baud rate
+alloc    bussel              ;UART_BUS_xxx bus selection
+alloc    parityid            ;ID for parity setting, one of UART_PARITY_xxx constants
 
 /if mdev then
-alloc	cfgadr, 4	;NV mem address of our config data
-alloc	bussel		;0-2 bus select
-  /endif
-
-/if runtime_parity then
-alloc    parityid            ;ID for parity setting, one of UART_PARITY_xxx constants
+alloc    cfgadr, 4           ;NV mem address of our config data
   /endif
 
 .if (ipr_uart_recv - ipr_uart_xmit)
@@ -382,7 +372,7 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 .equiv   flg_pbrk_sent, 8    ;already sent notice of this packet start break
 .equiv   flg_received, 9     ;char received since last checked
 .equiv   flg_sent, 10        ;char sent since last checked
-.equiv	flg_master, 11	;configured as bus master (pullup/down enabled}
+.equiv   flg_master, 11      ;configured as bus master (pullup/down enabled}
 
 .section .code_uart[chars uname], code
 
@@ -435,39 +425,41 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
          fifow_init fifoi    ;initialize the UART input FIFO
          fifow_init fifoo    ;initialize the UART output FIFO
 
-	load32	w0, [v baud]	;save baud rate specified by the user
-	mov	w0, ubaud+0
-	mov	w1, ubaud+2
+         load32  w0, [rnd baud] ;save baud rate specified by the user
+         mov     w0, ubaud+0
+         mov     w1, ubaud+2
+         load32  w0, [rnd uart_baud] ;save actual resulting baud rate
+         mov     w0, abaud+0
+         mov     w1, abaud+2
 
          clr     flags       ;init all flags to off
-  /if [= parity "EVEN"] then
-    /set ii uart_parity_even
+
+  /pick first with [ucase parity]
+  /casematch "EVEN"
+  /set ii uart_parity_even
          bset    flags, #flg_parity_hw
-    /endif
-  /if [= parity "ODD"] then
-    /set ii uart_parity_odd
+  /casematch "ODD"
+  /set ii uart_parity_odd
          bset    flags, #flg_parity_hw
-    /endif
-  /if [= parity "ZERO"] then
-    /set ii uart_parity_zero
+  /casematch "ZERO"
+  /set ii uart_parity_zero
          bset    flags, #flg_parity_fixed
          bset    flags, #flg_9bit
-    /endif
-  /if [= parity "ONE"] then
-    /set ii uart_parity_one
+  /casematch "ONE"
+  /set ii uart_parity_one
          bset    flags, #flg_parity_fixed
          bset    flags, #flg_parity_one
          bset    flags, #flg_9bit
-    /endif
-  /if [= parity "NONE"] then
-    /set ii uart_parity_none
+  /casematch "NONE"
+  /set ii uart_parity_none
          bset    flags, #flg_parity_none
-    /endif
-
-  /if runtime_parity then
-         mov     #[v ii], w0 ;init ID for current parity
+  /caseelse
+  /show "  Invalid PARITY setting of """ [pick] """"
+         .error  "Parity"
+  /stop
+  /endpick
+         mov     #[v ii], w0 ;save ID for current parity configuration
          mov     w0, parityid
-    /endif
 
   /const tpc real = [/ 11 [* baud utickt]] ;ticks per character time
 
@@ -552,14 +544,6 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 
          mov     #[v uart_brg], w0 ;set the baud rate
          mov     w0, Ubrg
-
-  /if runtime_baud then
-    /set ii [rnd uart_baud]
-         mov     #[and ii 16#FFFF], w0
-         mov     w0, uart[chars uname]_baud+0
-         mov     #[shiftr ii 16], w0
-         mov     w0, uart[chars uname]_baud+2
-    /endif
 ;
 ;   Map the RX pin.
 ;
@@ -1124,133 +1108,6 @@ act_leave:                   ;common exit point, Z flag already set
 
 ;*******************************************************************************
 ;
-;   Subroutine UART_BAUD_SET
-;
-;   Set the baud rate from the value in W1:W0.  The closest attainable baud rate
-;   will be set and this value saved in the global variable UART_BAUD.
-;
-/if runtime_baud then
-  /var new ii integer
-
-         glbsubd uart[chars uname]_baud_set, regf0 | regf1 | regf2 | regf3 | regf4 | regf5
-
-         mcall   uart[chars uname]_off ;turn the UART off
-	mov	w0, ubaud+0	;save the user's original baud rate
-	mov	w1, ubaud+2
-;
-;   The baud rate register value is:
-;
-;            freq_inst
-;     Ubrg = --------- - 1
-;            16 * BAUD
-;
-         mov     #-4, w2     ;pass number of fraction bits
-         gcall   fp32f_fltu  ;convert BAUD*16 to floating point in W1:W0
-         mov.d   w0, w2      ;save BAUD*16 in W3:W2
-
-         fpload  w0, [v freq_inst] ;get FREQ_INST into W1:W0
-         gcall   fp32f_div   ;do the divide
-
-         fpload  w2, -.5     ;subtract 1, but add 1/2 for rounding
-         gcall   fp32f_add
-
-         mov     #0, w2      ;pass number of fraction bits
-         gcall   fp32f_fixu  ;convert FP in W1:W0 to integer
-         cp0     w1
-         skip_z              ;no overflow ?
-         mov     #0xFFFF, w0 ;overflow, use maximum possible value
-         mov     w0, Ubrg    ;set the new baud rate
-;
-;   Compute the actual new baud rate and save it in the global variable
-;   UART_BAUD.  The baud rate is:
-;
-;             freq_inst
-;     BAUD = ------------
-;            16(Ubrg + 1)
-;
-;   The baud rate in FP format is also saved in W5:W4.
-;
-         mov     Ubrg, w0    ;get baud rate register value into W1:W0
-         mov     #0, w1
-         add     #1, w0      ;add 1
-         addc    #0, w1
-
-         mov     #-4, w2     ;pass number of fraction bits in W1:W0
-         gcall   fp32f_fltu  ;make floating point 16(Ubrg - 1)
-         mov.d   w0, w2      ;save it in W3:W2
-
-         fpload  w0, [v freq_inst] ;get the numerator into W1:W0
-         gcall   fp32f_div   ;compute FP baud rate in W1:W0
-         mov.d   w0, w4      ;save FP baud rate in W5:W4
-         fpload  w2, .5      ;add 1/2 for rounding
-         gcall   fp32f_add
-
-         mov     #0, w2      ;pass number of fraction bits to make
-         gcall   fp32f_fixu  ;make integer baud rate in W1:W0
-         mov     w0, uart[chars uname]_baud+0 ;save result in global variable
-         mov     w1, uart[chars uname]_baud+2
-;
-;   The floating point baud rate is in W5:W4.
-;
-;   Compute the number of ticks per character time in W5:W4.  This is a
-;   intermediate value that will be used in two subsequent calculations.
-;
-;                  11
-;     W5:W4 = -------------
-;             BAUD * UTICKT
-;
-;   Note that 11 and UTICKT are constants known at build time.
-;
-         fpload  w0, [/ 11 utickt] ;get 11 / UTICKT
-         mov.d   w4, w2      ;get BAUD
-         gcall   fp32f_div   ;compute the result
-         mov.d   w0, w4      ;save it in W5:W4
-;
-;   The FP ticks/char are in W1:W0 and have been saved in W5:W4.
-;
-;   Compute the minimum number of ticks to wait between transmitted packets, and
-;   save the result in TICKTXGAP.  The basic number of ticks is:
-;
-;     TICKTXGAP = MINTXGAP * W1:W0
-;
-;   This will be rounded up and 1 added to make the minimum number of ticks to
-;   to wait to guarantee the specified time has elapsed.
-;
-         fpload  w2, [v mintxgap]
-         gcall   fp32f_mul   ;make FP ticks in time interval
-         fpload  w2, 0.9999  ;round up
-         gcall   fp32f_add
-         mov     #0, w2      ;number of fraction bits
-         gcall   fp32f_fixu  ;truncate to integer
-         add     #1, w0      ;make final number of ticks to wait
-         mov     w0, ticktxgap ;save the wait time, number of ticks
-;
-;   Compute the minimum number of ticks to occur between received characters to
-;   interpret the next character as a start of packet.  The result is save in
-;   TICKRXGAP.  The basic number of ticks is:
-;
-;     TICKRXGAP = MINRXGAP * W5:W4
-;
-;   This will be rounded up and 1 added to make the minimum number of ticks to
-;   to occur to guarantee the specified time has elapsed.
-;
-         mov.d   w4, w0      ;get ticks per character
-         fpload  w2, [v minrxgap] ;get time in numbers of characters
-         gcall   fp32f_mul   ;make FP ticks in time interval
-         fpload  w2, 0.9999  ;round up
-         gcall   fp32f_add
-         mov     #0, w2      ;number of fraction bits
-         gcall   fp32f_fixu  ;truncate to integer
-         add     #1, w0      ;make final number of ticks to wait
-         mov     w0, tickrxgap ;save the wait time, number of ticks
-
-         mcall   uart[chars uname]_on ;turn the UART back on with new config
-         leaverest
-  /del ii
-  /endif
-
-;*******************************************************************************
-;
 ;   Subroutine UART_TICK
 ;
 ;   This routine must be called regularly with a known period, which should be
@@ -1315,120 +1172,12 @@ utk_dtxwat:                  ;done updating transmit wait time state
 
 ;*******************************************************************************
 ;
-;   Subroutine UART_PARITY_EVEN
-;
-;   Configure to 8 data bits, even parity, 1 stop bit.
-;
-/if runtime_parity then
-         glbsubd uart[chars uname]_parity_even, regf0
-
-         mcall   uart[chars uname]_off ;make sure hardware is off during config change
-
-         bclr    Umode, #PDSEL1 ;8 bit data, even parity
-         bset    Umode, #PDSEL0
-         bclr    Umode, #STSEL ;1 stop bit
-
-         mov     #[v uart_parity_even], w0 ;save which parity is in use
-         mov     w0, parityid
-
-         mcall   uart[chars uname]_on ;turn on the hardware
-
-         leaverest
-  /endif
-
-;*******************************************************************************
-;
-;   Subroutine UART_PARITY_ODD
-;
-;   Configure to 8 data bits, odd parity, 1 stop bit.
-;
-/if runtime_parity then
-         glbsubd uart[chars uname]_parity_odd, regf0
-
-         mcall   uart[chars uname]_off ;make sure hardware is off during config change
-
-         bset    Umode, #PDSEL1 ;8 bit data, odd parity
-         bclr    Umode, #PDSEL0
-         bclr    Umode, #STSEL ;1 stop bit
-
-         mov     #[v uart_parity_odd], w0 ;save which parity is in use
-         mov     w0, parityid
-
-         mcall   uart[chars uname]_on ;turn on the hardware
-
-         leaverest
-  /endif
-
-;*******************************************************************************
-;
-;   Subroutine UART_PARITY_ONE
-;
-;   Configure to 8 data bits, parity bit 1, 1 stop bit.  This is the same as 8
-;   bit data, no parity, 2 stop bits.
-;
-/if runtime_parity then
-         glbsubd uart[chars uname]_parity_one, regf0
-
-         mcall   uart[chars uname]_off ;make sure hardware is off during config change
-
-         bclr    Umode, #PDSEL1 ;8 bit data, no parity
-         bclr    Umode, #PDSEL0
-         bset    Umode, #STSEL ;2 stop bits
-
-         mov     #[v uart_parity_one], w0 ;save which parity is in use
-         mov     w0, parityid
-
-         mcall   uart[chars uname]_on ;turn on the hardware
-
-         leaverest
-  /endif
-
-;*******************************************************************************
-;
-;   Subroutine UART_PARITY_NONE
-;
-;   Configure to 8 data bits, no parity, 1 stop bit.
-;
-/if runtime_parity then
-         glbsubd uart[chars uname]_parity_none, regf0
-
-         mcall   uart[chars uname]_off ;make sure hardware is off during config change
-
-         bclr    Umode, #PDSEL1 ;8 bit data, no parity
-         bclr    Umode, #PDSEL0
-         bclr    Umode, #STSEL ;1 stop bits
-
-         mov     #[v uart_parity_none], w0 ;save which parity is in use
-         mov     w0, parityid
-
-         mcall   uart[chars uname]_on ;turn on the hardware
-
-         leaverest
-  /endif
-
-;*******************************************************************************
-;
-;   Subroutine UART_PARITY
-;
-;   The ID of the current parity setting is returned in W0.  The value will be
-;   one of the constants UART_PARITY_xxx defined in UART_SETUP.INS.DSPIC.
-;
-/if runtime_parity then
-         glbsubd  uart[chars uname]_parity
-
-         mov     parityid, w0
-
-         leaverest
-  /endif
-
-;*******************************************************************************
-;
 ;   Subroutine UART_WAIT_SEND
 ;
 ;   Wait until the transmitter has been idle for long enough so that a new
 ;   Modbus packet can be sent.
 ;
-         glbsubd  uart[chars uname]_wait_send, regf0
+         glbsubd uart[chars uname]_wait_send, regf0
 
 wats_wait:                   ;back here if gap time not elapsed yet
          mov     ticktxwat, w0 ;get ticks left to wait
@@ -1468,30 +1217,363 @@ act_nsend:
 
          leaverest
 
-/if mdev then
-  //
-  //   Macro IPNUM id rpnum
-  //
-  //   Set W0 to the remappable pin number rpnum if W0 matches ID on input.
-  //   RPNUM is the bare characters of a integer constant that contains the
-  //   remappable pin number.
-  //
-  //   This macro falls thru if the RPNUM constant doesn't exist, or if W0
-  //   doesn't match ID.  Otherwise, this macro jumps to CFG_BUS_SET with ID in
-  //   W0.
-  //
-  /macro ipnum
-    /var local id integer = [vnl [arg 1]]
-    /var local sym string = [str [qstr [arg 2]] ":const"]
-    /if [exist sym] then
-      /var local rpnum integer = [vnl [chars sym]]
-         cp      w0, #[v id]
-         bra     nz, [lab nmatch]
-         mov     #[v rpnum], w0
-         jump    cfg_bus_set
-[lab nmatch]:
-      /endif
-    /endmac
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro MATCH_CONST const, label
+//
+//   Check whether W0 matches the value CONST.  If so, jump to LABEL, otherwise
+//   continue after the macro.  CONST must be in the 0-31 range.
+//
+/macro match_const
+  /var local k integer = [vnl [arg 1]] ;constant value
+         cp      w0, #[v k]
+         bra     z, [arg 2]
+  /endmac
+
+;*******************************************************************************
+;
+;   Subroutine UART_BUS_SET
+;
+;   Set the bus configuration.  W0 must be one of the UART_BUS_xxx values.
+;
+         glbsubd uart[chars uname]_bus_set, regf0 | regf1
+
+         match_const uart_bus_232, sbus_232 ;RS-232 ?
+         match_const uart_bus_485_2, sbus_485_2 ;RS-485 2-wire ?
+         match_const uart_bus_485_4, sbus_485_4 ;RS-485 4-wire ?
+         jump    sbus_leave  ;invalid bus configuration ID, ignore
+
+sbus_232:                    ;RS-232
+/if [exist "rpin_232:vcon"]
+  /then
+         mov     #[v rpin_232], w1
+         jump    sbus_set
+  /else
+         jump    sbus_leave  ;invalid bus configuration ID, ignore
+  /endif
+
+sbus_485_2:                  ;RS-485, 2-wire
+/if [exist "rpin_2wire:vcon"]
+  /then
+         mov     #[v rpin_2wire], w1
+         jump    sbus_set
+  /else
+         jump    sbus_leave  ;invalid bus configuration ID, ignore
+  /endif
+
+sbus_485_4:                  ;RS-485, 4-wire
+/if [exist "rpin_4wire:vcon"]
+  /then
+         mov     #[v rpin_4wire], w1
+  /else
+         jump    sbus_leave  ;invalid bus configuration ID, ignore
+  /endif
+;
+;   The 0-N bus ID is in W0, and the RPn pin number to use for the UART input is
+;   in W1.
+;
+sbus_set:
+         mov     w0, bussel  ;save ID of current bus selection
+         mov     #[chars rxpinreg], w0 ;point W0 to where to write input pin number
+         mov.b   w1, [w0]    ;set pin to use for UART RX function
+
+sbus_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_BUS
+;
+;   Return the ID of the current bus configuration in W0.  W0 will be one of the
+;   UART_BUS_xxx values.
+;
+         glbsubd uart[chars uname]_bus
+
+         mov     bussel, w0  ;get the current bus configuration ID
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_MASTER_SET
+;
+;   Enable the pullups/pulldowns on the primary RS-485 bus when W0 <> 0, and
+;   disable them when W0 = 0.  Generally, the bus master should have the
+;   pullups/pulldowns, with the slaves letting the lines float when not driving
+;   them.
+;
+         glbsubd uart[chars uname]_master_set
+
+/if [<> pin_master ""] then
+         cp0     w0
+         bra     nz, mast_on
+;
+;   Slave mode.
+;
+         set_[chars pin_master]_off
+         bclr    flags, #flg_master ;remember we are in slave mode
+         jump    mast_leave
+;
+;   Master mode.
+;
+mast_on:
+         set_[chars pin_master]_on
+         bset    flags, #flg_master ;remember we are in slave mode
+
+mast_leave:
+  /endif
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_MASTER
+;
+;   Returns 0 in W0 when configured as slave, and 1 when configured as master.
+;   Being master means this device provides the pullups/pulldowns on the primary
+;   RS-485 lines.
+;
+         glbsubd uart[chars uname]_master
+
+         mov     #0, w0      ;init to slave
+         btsc    flags, #flg_master ;really is slave ?
+         mov     #1, w0      ;no, indicate master
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_PARITY_SET
+;
+;   Set the parity configuration.  W0 must be one of the UART_PARITY_xxx values.
+;
+         glbsubd uart[chars uname]_parity_set
+
+         cp      w0, #[v uart_parity_idmax] ;compare to max valid parity ID
+         bra     gtu, par_leave ;ID out of range, ignore this request ?
+
+         mcall   uart[chars uname]_off ;make sure hardware is off during config change
+         mov     w0, parityid ;save new parity configuration ID
+
+         match_const uart_parity_even, par_even
+         match_const uart_parity_odd, par_odd
+         match_const uart_parity_one, par_one
+
+par_none:                    ;8-N-1
+         bclr    Umode, #PDSEL1 ;8 bit data, no parity
+         bclr    Umode, #PDSEL0
+         bclr    Umode, #STSEL ;1 stop bits
+
+         bclr    flags, #flg_parity_fixed
+         bclr    flags, #flg_parity_one
+         bset    flags, #flg_parity_none
+         bclr    flags, #flg_parity_hw
+         bclr    flags, #flg_9bit
+         jump    par_dset
+
+par_even:                    ;8-E-1
+         bclr    Umode, #PDSEL1 ;8 bit data, even parity
+         bset    Umode, #PDSEL0
+         bclr    Umode, #STSEL ;1 stop bit
+
+         bclr    flags, #flg_parity_fixed
+         bclr    flags, #flg_parity_one
+         bclr    flags, #flg_parity_none
+         bset    flags, #flg_parity_hw
+         bclr    flags, #flg_9bit
+         jump    par_dset
+
+par_odd:                     ;8-O-1
+         bset    Umode, #PDSEL1 ;8 bit data, odd parity
+         bclr    Umode, #PDSEL0
+         bclr    Umode, #STSEL ;1 stop bit
+
+         bclr    flags, #flg_parity_fixed
+         bclr    flags, #flg_parity_one
+         bclr    flags, #flg_parity_none
+         bset    flags, #flg_parity_hw
+         bclr    flags, #flg_9bit
+         jump    par_dset
+
+par_one:                     ;8-1-1, which is also 8-N-2
+         bclr    Umode, #PDSEL1 ;8 bit data, no parity
+         bclr    Umode, #PDSEL0
+         bset    Umode, #STSEL ;2 stop bits
+
+         bset    flags, #flg_parity_fixed
+         bset    flags, #flg_parity_one
+         bset    flags, #flg_parity_none
+         bclr    flags, #flg_parity_hw
+         bset    flags, #flg_9bit
+
+par_dset:                    ;done changing parity setting
+         mcall   uart[chars uname]_on ;turn on the hardware
+
+par_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_PARITY
+;
+;   The ID of the current parity setting is returned in W0.  The value will be
+;   one of the constants UART_PARITY_xxx defined in UART_SETUP.INS.DSPIC.
+;
+         glbsubd uart[chars uname]_parity
+
+         mov     parityid, w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_BAUD_SET
+;
+;   Set the baud rate from the value in W1:W0.  This requested baud rate will be
+;   saved in UBAUD, and the actual resulting baud rate in ABAUD.
+;
+/if runtime_baud then
+         glbsubd uart[chars uname]_baud_set, regf0 | regf1 | regf2 | regf3 | regf4 | regf5
+
+         mcall   uart[chars uname]_off ;turn the UART off
+         mov     w0, ubaud+0 ;save the user's original baud rate
+         mov     w1, ubaud+2
+;
+;   The baud rate register value is:
+;
+;            freq_inst
+;     Ubrg = --------- - 1
+;            16 * BAUD
+;
+         mov     #-4, w2     ;pass number of fraction bits
+         gcall   fp32f_fltu  ;convert BAUD*16 to floating point in W1:W0
+         mov.d   w0, w2      ;save BAUD*16 in W3:W2
+
+         fpload  w0, [v freq_inst] ;get FREQ_INST into W1:W0
+         gcall   fp32f_div   ;do the divide
+
+         fpload  w2, -.5     ;subtract 1, but add 1/2 for rounding
+         gcall   fp32f_add
+
+         mov     #0, w2      ;pass number of fraction bits
+         gcall   fp32f_fixu  ;convert FP in W1:W0 to integer
+         cp0     w1
+         skip_z              ;no overflow ?
+         mov     #0xFFFF, w0 ;overflow, use maximum possible value
+         mov     w0, Ubrg    ;set the new baud rate
+;
+;   Compute the actual new baud rate and save it in the global variable
+;   UART_BAUD.  The baud rate is:
+;
+;             freq_inst
+;     BAUD = ------------
+;            16(Ubrg + 1)
+;
+;   The baud rate in FP format is also saved in W5:W4.
+;
+         mov     Ubrg, w0    ;get baud rate register value into W1:W0
+         mov     #0, w1
+         add     #1, w0      ;add 1
+         addc    #0, w1
+
+         mov     #-4, w2     ;pass number of fraction bits in W1:W0
+         gcall   fp32f_fltu  ;make floating point 16(Ubrg - 1)
+         mov.d   w0, w2      ;save it in W3:W2
+
+         fpload  w0, [v freq_inst] ;get the numerator into W1:W0
+         gcall   fp32f_div   ;compute FP baud rate in W1:W0
+         mov.d   w0, w4      ;save FP baud rate in W5:W4
+         fpload  w2, .5      ;add 1/2 for rounding
+         gcall   fp32f_add
+
+         mov     #0, w2      ;pass number of fraction bits to make
+         gcall   fp32f_fixu  ;make integer baud rate in W1:W0
+         mov     w0, abaud+0 ;save actual resulting baud rate
+         mov     w1, abaud+2
+;
+;   The floating point baud rate is in W5:W4.
+;
+;   Compute the number of ticks per character time in W5:W4.  This is a
+;   intermediate value that will be used in two subsequent calculations.
+;
+;                  11
+;     W5:W4 = -------------
+;             BAUD * UTICKT
+;
+;   Note that 11 and UTICKT are constants known at build time.
+;
+         fpload  w0, [/ 11 utickt] ;get 11 / UTICKT
+         mov.d   w4, w2      ;get BAUD
+         gcall   fp32f_div   ;compute the result
+         mov.d   w0, w4      ;save it in W5:W4
+;
+;   The FP ticks/char are in W1:W0 and have been saved in W5:W4.
+;
+;   Compute the minimum number of ticks to wait between transmitted packets, and
+;   save the result in TICKTXGAP.  The basic number of ticks is:
+;
+;     TICKTXGAP = MINTXGAP * W1:W0
+;
+;   This will be rounded up and 1 added to make the minimum number of ticks to
+;   to wait to guarantee the specified time has elapsed.
+;
+         fpload  w2, [v mintxgap]
+         gcall   fp32f_mul   ;make FP ticks in time interval
+         fpload  w2, 0.9999  ;round up
+         gcall   fp32f_add
+         mov     #0, w2      ;number of fraction bits
+         gcall   fp32f_fixu  ;truncate to integer
+         add     #1, w0      ;make final number of ticks to wait
+         mov     w0, ticktxgap ;save the wait time, number of ticks
+;
+;   Compute the minimum number of ticks to occur between received characters to
+;   interpret the next character as a start of packet.  The result is save in
+;   TICKRXGAP.  The basic number of ticks is:
+;
+;     TICKRXGAP = MINRXGAP * W5:W4
+;
+;   This will be rounded up and 1 added to make the minimum number of ticks to
+;   to occur to guarantee the specified time has elapsed.
+;
+         mov.d   w4, w0      ;get ticks per character
+         fpload  w2, [v minrxgap] ;get time in numbers of characters
+         gcall   fp32f_mul   ;make FP ticks in time interval
+         fpload  w2, 0.9999  ;round up
+         gcall   fp32f_add
+         mov     #0, w2      ;number of fraction bits
+         gcall   fp32f_fixu  ;truncate to integer
+         add     #1, w0      ;make final number of ticks to wait
+         mov     w0, tickrxgap ;save the wait time, number of ticks
+
+         mcall   uart[chars uname]_on ;turn the UART back on with new config
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine UART_BAUD
+;
+;   Get the actual baud rate into W1:W0.
+;
+         glbsubd uart[chars uname]_baud
+
+         mov     abaud+0, w0
+         mov     abaud+2, w1
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_BAUD_SETTING
+;
+;   Get the original baud rate setting into W1:W0.  The actual baud rate may
+;   differ from this due to hardware limitations.
+;
+         glbsubd uart[chars uname]_baud_setting
+
+         mov     ubaud+0, w0
+         mov     ubaud+2, w1
+
+         leaverest
 
 ;*******************************************************************************
 ;
@@ -1510,7 +1592,7 @@ act_nsend:
 ;     |       |       |                       |       |               |
 ;     -----------------------------------------------------------------
 ;
-;     BUS
+;     BUS, same values as constants UART_BUS_xxx
 ;
 ;       0  -  RS-232
 ;       1  -  RS-485 2-wire
@@ -1518,7 +1600,7 @@ act_nsend:
 ;
 ;     PULL  -  Enable pullups and pulldowns on the RS-485 lines.
 ;
-;     PARITY
+;     PARITY, same values as constants UART_PARITY_xxx
 ;
 ;       0  -  None
 ;       1  -  Even
@@ -1528,77 +1610,43 @@ act_nsend:
 ;
 ;   BAUD is the unsigned 24 bit integer baud rate.  The closest realizable baud
 ;   rate to that specified by BAUD will be silently chosen.  Baud rates up to
-;   115.2 k can be achieved with low baud rate error.
+;   115.2 k can generally be achieved with low baud rate error.
 ;
-         glbsub  uart_modbus_cfg, regf0 | regf1 | regf2 | regf3 | regf4
+/if mdev then
+         glbsub  uart_modbus_cfg, regf0 | regf1 | regf2
 
          gcall   config_lock ;get exclusive access to CONFIG_xxx routines
 
          mov     #[v cfg_uart_modbus], w0 ;request config data for this module
          gcall   config_setup
-         cp      w0, #4      ;check for min expected number of config bytes
-         bra     ltu, cfg_leave ;less than min required config bytes ?
+         cp      w0, #4      ;check for required number of config bytes
+         bra     nz, cfg_leave ;invalid number of config bytes ?
 
-	gcall	config_adr	;get the address of our config data
-	mov	w1, cfgadr+0	;save it
-	mov	w2, cfgadr+2
+         gcall   config_adr  ;get the address of our config data into W2:W1
+         mov     w1, cfgadr+0 ;save it
+         mov     w2, cfgadr+2
 
          mcall   uart[chars uname]_init ;initialize the hardware
 
-         gcall   config_i8u  ;get PROT byte and save it in W3
-         mov     w0, w3
+         gcall   config_i8u  ;get PROT byte and save it in W2
+         mov     w0, w2
 ;
 ;   Select the bus.
 ;
-         and     w3, #0x03, w0 ;extract BUS field into W0
-	mov	w0, bussel	;save the bus selection ID
-         ipnum   0, rpin_232
-         ipnum   1, rpin_2wire
-         ipnum   2, rpin_4wire
-         jump    cfg_bus_done ;unrecognized code, ignore
-
-cfg_bus_set:                 ;set RX input to pin number in W0
-         mov     #[chars rxpinreg], w4 ;point W4 to where to write input pin number
-         mov.b   w0, [w4]    ;set pin to use for UART RX function
-
-cfg_bus_done:
+         and     w2, #0x03, w0 ;extract BUS field into W0
+         mcall   uart[chars uname]_bus_set ;set the bus configuration
 ;
 ;   Enable or disable the pullups.
 ;
-         btss    w3, #2
-         set_[chars pin_master]_off
-         btsc    w3, #2
-         set_[chars pin_master]_off
+         lsr     w2, #2, w0  ;get PULL field into W0
+         and     #1, w0
+         mcall   uart[chars uname]_master_set ;configure pullups on/off
 ;
 ;   Set the parity.
 ;
-         lsr     w3, #3, w4  ;extract PARITY field into W4
-         and     #0x7, w4
-         bra     z, cfg_par_none
-         sub     #1, w4
-         bra     z, cfg_par_even
-         sub     #1, w4
-         bra     z, cfg_par_odd
-         sub     #2, w4
-         bra     z, cfg_par_one
-         jump    cfg_par_done
-
-cfg_par_none:                ;no parity bit
-         mcall   uart[chars uname]_parity_none
-         jump    cfg_par_done
-
-cfg_par_even:                ;even parity
-         mcall   uart[chars uname]_parity_even
-         jump    cfg_par_done
-
-cfg_par_odd:                 ;odd parity
-         mcall   uart[chars uname]_parity_odd
-         jump    cfg_par_done
-
-cfg_par_one:                 ;parity bit 1, same as no parity with two stop bits
-         mcall   uart[chars uname]_parity_one
-
-cfg_par_done:
+         lsr     w2, #3, w0  ;get PARITY field into W0
+         and     #0x7, w0
+         mcall   uart[chars uname]_parity_set ;set the parity configuration
 ;
 ;   Set the baud rate.
 ;
