@@ -14,7 +14,7 @@
 /const   uart_parity_none integer = 0 ;no parity bit, 8-N-1
 /const   uart_parity_even integer = 1 ;even parity (even number of 1 bits total)
 /const   uart_parity_odd integer = 2 ;odd parity (odd number of 1 bits total)
-/const   uart_parity_one integer = 3 ;parity bit is always 1, same as 8-N-2
+/const   uart_parity_one integer = 4 ;parity bit is always 1, same as 8-N-2
 
 /const   uart_parity_idmax integer = 3 ;max valid parity config ID
 ;

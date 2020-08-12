@@ -373,9 +373,10 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 .equiv   flg_received, 9     ;char received since last checked
 .equiv   flg_sent, 10        ;char sent since last checked
 .equiv   flg_master, 11      ;configured as bus master (pullup/down enabled}
+.equiv   flg_config, 12      ;MDEV configured and enabled
+
 
 .section .code_uart[chars uname], code
-
 ////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro SET_LREADY
@@ -1577,6 +1578,42 @@ par_leave:
 
 ;*******************************************************************************
 ;
+;   Subroutine UART_SAVE
+;
+;   Save the live settings into the non-volatile MDEV config data.  Only the
+;   configuration data is written.  The NV mem checksum is not updated.
+;
+/if mdev then
+         glbsubd uart[chars uname]_save, regf0 | regf1 | regf2 | regf3
+
+         btss    flags, #flg_config ;MDEV configured and enabled ?
+         jump    save_leave  ;no, abort
+
+         mov     cfgadr+0, w1 ;get address of config data in NV mem
+         mov     cfgadr+2, w2
+
+         mov     bussel, w0  ;init PROT byte with bus selection ID
+         btsc    flags, #flg_master
+         bset    w0, #2      ;master, bus pullups/pulldows enabled
+         mov     parityid, w3 ;get the parity configuration ID
+         sl      w3, #3, w3  ;move it into place
+         ior     w0, w3, w0  ;merge it into the PROT byte
+         gcall   nvol_write  ;write the PROT byte
+
+         mov     ubaud+2, w0
+         gcall   nvol_write  ;write BAUD high byte
+         mov     ubaud+0, w0
+         swap    w0
+         gcall   nvol_write  ;write BAUD middle byte
+         swap    w0
+         gcall   nvol_write  ;write BAUD low byte
+
+save_leave:
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
 ;   Subroutine UART_CFG
 ;
 ;   Configure and initialize this MDEV.  The configuration data is:
@@ -1605,7 +1642,6 @@ par_leave:
 ;       0  -  None
 ;       1  -  Even
 ;       2  -  Odd
-;       3  -  Zero
 ;       4  -  One (same as no parity, 2 stop bits)
 ;
 ;   BAUD is the unsigned 24 bit integer baud rate.  The closest realizable baud
@@ -1659,6 +1695,7 @@ par_leave:
   /if [<> flag_run ""] then
          setflag [chars flag_run] ;indicate serial interface up and running
     /endif
+         bset    flags, #flg_config ;indicate MDEV configured and enabled
 
 cfg_leave:
          gcall   config_unlock ;release lock on CONFIG routines

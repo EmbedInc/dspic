@@ -323,9 +323,9 @@ void int32s_acc48s (                   //add 32 bit integer into 48 bit accumula
 #define uart_parity_none (0)           //8-N-1
 #define uart_parity_even (1)           //8-E-1
 #define uart_parity_odd (2)            //8-O-1
-#define uart_parity_one (3)            //8-1-1, same as 8-N-2
+#define uart_parity_one (4)            //8-1-1, same as 8-N-2
 
-int32u_t                               //actual baud rate, may differe from setting
+int32u_t                               //actual baud rate, may differ from setting
 uart_baud (void);
 
 void uart_baud_set (                   //set the baud rate
@@ -365,6 +365,8 @@ void uart_parity_set (                 //set the parity configuration
 
 void uart_put (                        //send character
   machine_intu_t);                     //char in low byte, upper byte ignored
+
+void uart_save (void);                 //save live settings to MDEV nvol config
 
 void uart_unlock (void);               //release sending lock
 
