@@ -1616,11 +1616,11 @@ save_leave:
 ;   Subroutine UART_MDEV_ON
 ;
 ;   Indicates whether this module is enabled or not as a result of MDEV
-;   configuration.  W0 is return 0 when the module is disabled, and 1 when
+;   configuration.  W0 is returned 0 when the module is disabled, and 1 when
 ;   enabled.  UART_CFG must have been previously called.
 ;
 /if mdev then
-         glbsub  uart[chars uname]_mdev_on
+         glbsubd uart[chars uname]_mdev_on
 
          mov     #0, w0      ;init to off
          btsc    flags, #flg_config ;really is off ?

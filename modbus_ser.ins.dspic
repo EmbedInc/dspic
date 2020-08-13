@@ -100,6 +100,10 @@ alloc    len1                ;number of bytes in BUF1
 alloc    len2                ;number of bytes in BUF2
 alloc    stack_p             ;pointer to start of stack
 
+/if subsys then
+alloc    cfgadr, 4           ;NV mem address of our config data
+  /endif
+
 /if [not subsys] then
          alloc   stack, [v stacksz], 2 ;Modbus reception task stack
   /endif
@@ -139,7 +143,7 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 .equiv   flg_stchar, 5       ;start character in front of all packets
 .equiv   flg_stcharn, 6      ;next received character must be start char
 .equiv   flg_slock, 7        ;packet sending is locked by a task
-
+.equiv   flg_config, 8       ;MDEV configured and enabled
 
 .section .code_modbus[chars uname], code
 ;*******************************************************************************
@@ -263,6 +267,19 @@ getst_nclear:                ;done clearing the counters, if at all
 
 ;*******************************************************************************
 ;
+;   Subroutine MODBUS_ADR_GET
+;
+;   Get the current slave address into W0.  The result is undefined in master
+;   mode.
+;
+         glbsubd modbus[chars uname]_adr_get
+
+         mov     slaveadr, w0
+
+         leaverest
+
+;*******************************************************************************
+;
 ;   Subroutine MODBUS_MASTER
 ;
 ;   Configure for master mode.
@@ -277,6 +294,38 @@ getst_nclear:                ;done clearing the counters, if at all
          bset    flags, #flg_master ;set to master mode
 
          leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_IS_MASTER
+;
+;   Sets W0 to 0 if configured as slave, and 1 if master.
+;
+         glbsubd modbus[chars uname]_is_master
+
+         mov     #0, w0      ;init to slave
+         btsc    flags, #flg_master ;really is slave ?
+         mov     #1, w0      ;no, indicate master
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_MDEV_ON
+;
+;   Indicates whether this module is enabled or not as a result of MDEV
+;   configuration.  W0 is returned 0 when the module is disabled, and 1 when
+;   enabled.  MODBUS_CFG must have been previously called.
+;
+/if subsys then
+         glbsubd modbus[chars uname]_mdev_on
+
+         mov     #0, w0      ;init to off
+         btsc    flags, #flg_config ;really is off ?
+         mov     #1, w0      ;no, indicate on
+
+         leaverest
+  /endif
 
 ;*******************************************************************************
 ;
@@ -304,6 +353,39 @@ getst_nclear:                ;done clearing the counters, if at all
          bclr    flags, #flg_stchar ;no special char sent or required before packets
 
          leaverest
+
+;*******************************************************************************
+;
+;   Subroutine MODBUS_SAVE
+;
+;   Save the live settings into the non-volatile MDEV config data.  Only the
+;   configuration data is written.  The NV mem checksum is not updated.
+;
+/if subsys then
+         glbsubd modbus[chars uname]_save, regf0 | regf1 | regf2 | regf3
+
+         btss    flags, #flg_config ;MDEV configured and enabled ?
+         jump    save_leave  ;no, abort
+
+         mov     cfgadr+0, w1 ;get address of config data in NV mem
+         mov     cfgadr+2, w2
+
+         mov     #0, w0      ;init all flag bits to off
+         btsc    flags, #flg_master
+         bset    w0, #0      ;master mode
+         btsc    flags, #flg_stchar
+         bset    w0, #1      ;start char in use
+         gcall   nvol_write  ;write flags byte
+
+         mov     slaveadr, w0
+         gcall   nvol_write  ;write slave address
+
+         mov     stchar, w0
+         gcall   nvol_write  ;write start character
+
+save_leave:
+         leaverest
+  /endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -333,14 +415,19 @@ getst_nclear:                ;done clearing the counters, if at all
   /if [<> uname ""] then
          glbent  modbus_cfg  ;hack until MDEVBUILD handles custom names
     /endif
-         glbsub  modbus[chars uname]_cfg, regf0 | regf1
+         glbsub  modbus[chars uname]_cfg, regf0 | regf1 | regf2
 
+         clr     flags       ;init all flags to off
          gcall   config_lock ;get exclusive access to CONFIG_xxx routines
 
          mov     #[v cfg_modbus], w0 ;request config data for this module
          gcall   config_setup
          cp      w0, #3      ;check for min expected number of config bytes
          bra     ltu, cfg_leave ;less than min required config bytes ?
+
+         gcall   config_adr  ;get the address of our config data into W2:W1
+         mov     w1, cfgadr+0 ;save it
+         mov     w2, cfgadr+2
 
          mcall   modbus_init ;initialize the module
 ;
@@ -383,6 +470,7 @@ cfg_dstart:
          mov     w0, stack_p ;save pointer to start of stack
 
          mcall   modbus_start ;start the packet receiving task
+         bset    flags, #flg_config ;indicate MDEV configured and enabled
 
 cfg_leave:
          gcall   config_unlock ;release lock on CONFIG routines

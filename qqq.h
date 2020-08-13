@@ -414,10 +414,21 @@ typedef struct {
 //   MODBUS_START when the task is already running can cause all manner of
 //   destruction.
 //
+machine_intu_t                         //slave address, invalid if master
+modbus_adr_get (void);                 //get the current slave address
+
 void modbus_adr_set (                  //make slave, set slave address
   machine_intu_t);                     //1-247 adr, 0 = none (recv broadcast only)
 
+machine_intu_t                         //true/false
+modbus_is_master (void);               //find whether master or slave
+
 void modbus_master (void);             //make this device the Modbus master
+
+machine_intu_t                         //true/false
+modbus_mdev_on (void);                 //find whether module enabled by MDEV config
+
+void modbus_save (void);               //save live settings to MDEV nvol config
 
 void modbus_startchar (                //special char preceeds all Modubs packets
   machine_intu_t);                     //special character in low byte
