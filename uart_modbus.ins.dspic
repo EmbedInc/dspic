@@ -375,7 +375,6 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 .equiv   flg_master, 11      ;configured as bus master (pullup/down enabled}
 .equiv   flg_config, 12      ;MDEV configured and enabled
 
-
 .section .code_uart[chars uname], code
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -1609,6 +1608,24 @@ par_leave:
          gcall   nvol_write  ;write BAUD low byte
 
 save_leave:
+         leaverest
+  /endif
+
+;*******************************************************************************
+;
+;   Subroutine UART_MDEV_ON
+;
+;   Indicates whether this module is enabled or not as a result of MDEV
+;   configuration.  W0 is return 0 when the module is disabled, and 1 when
+;   enabled.  UART_CFG must have been previously called.
+;
+/if mdev then
+         glbsub  uart[chars uname]_mdev_on
+
+         mov     #0, w0      ;init to off
+         btsc    flags, #flg_config ;really is off ?
+         mov     #1, w0      ;no, indicate on
+
          leaverest
   /endif
 

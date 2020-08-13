@@ -357,6 +357,9 @@ uart_master (void);                    //get current master/slave configuration
 void uart_master_set (                 //set master/slave mode (pullup/down on for master}
   machine_intu_t);                     //0 for slave, otherwise master
 
+machine_intu_t                         //true/false
+uart_mdev_on (void);                   //find whether module enabled by MDEV config
+
 machine_intu_t                         //current parity config ID, UART_PARITY_xxx
 uart_parity (void);
 
