@@ -1666,7 +1666,10 @@ save_leave:
 ;   115.2 k can generally be achieved with low baud rate error.
 ;
 /if mdev then
-         glbsub  uart_modbus_cfg, regf0 | regf1 | regf2
+  /if [<> uname ""] then
+         glbent  uart_modbus_cfg  ;hack until MDEVBUILD handles custom names
+    /endif
+         glbsub  uart[chars uname]_cfg, regf0 | regf1 | regf2
 
          gcall   config_lock ;get exclusive access to CONFIG_xxx routines
 
