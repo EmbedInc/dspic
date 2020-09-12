@@ -20,6 +20,7 @@
 #include "qq2_machine.h"               //define machine-dependent data types
 #include "qq2_debug.h"                 //define debug switches
 #include "qq2_const.h"                 //define constants from asm environment
+#include "qq2_ids.h"                   //define MDEV module IDs
 
 //******************************************************************************
 //
