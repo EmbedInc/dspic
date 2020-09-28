@@ -434,30 +434,30 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 
          clr     flags       ;init all flags to off
 
-  /pick first with [ucase parity]
-  /casematch "EVEN"
-  /set ii uart_parity_even
+  /pick first by [ucase parity]
+  /option "EVEN"
+    /set ii uart_parity_even
          bset    flags, #flg_parity_hw
-  /casematch "ODD"
-  /set ii uart_parity_odd
+  /option "ODD"
+    /set ii uart_parity_odd
          bset    flags, #flg_parity_hw
-  /casematch "ZERO"
-  /set ii uart_parity_zero
+  /option "ZERO"
+    /set ii uart_parity_zero
          bset    flags, #flg_parity_fixed
          bset    flags, #flg_9bit
-  /casematch "ONE"
-  /set ii uart_parity_one
+  /option "ONE"
+    /set ii uart_parity_one
          bset    flags, #flg_parity_fixed
          bset    flags, #flg_parity_one
          bset    flags, #flg_9bit
-  /casematch "NONE"
-  /set ii uart_parity_none
+  /option "NONE"
+    /set ii uart_parity_none
          bset    flags, #flg_parity_none
-  /caseelse
-  /show "  Invalid PARITY setting of """ [pick] """"
+  /optionelse
+    /show "  Invalid PARITY setting of """ [pick] """"
          .error  "Parity"
-  /stop
-  /endpick
+    /stop
+    /endpick
          mov     #[v ii], w0 ;save ID for current parity configuration
          mov     w0, parityid
 
@@ -1667,7 +1667,7 @@ save_leave:
 ;
 /if mdev then
   /if [<> uname ""] then
-         glbent  uart_modbus_cfg  ;hack until MDEVBUILD handles custom names
+         glbent  uart_modbus_cfg ;hack until MDEVBUILD handles custom names
     /endif
          glbsub  uart[chars uname]_cfg, regf0 | regf1 | regf2
 
