@@ -290,7 +290,7 @@ alloc    uarttw2
 //   WARNING: W0 is trashed.
 //
 /macro set_lready
-         fifow_empty_n fifoi ;get room in the input FIFO into W0
+         fifob_empty_n fifoi ;get room in the input FIFO into W0
          sub     #[v lready_n], w0 ;compare FIFO room to the threshold
          bra     gtu, [lab ready] ;enough room, ready to accept more ?
          set_[chars lready]_off ;too little room, indicate not ready for more bytes
