@@ -44,12 +44,6 @@
 ;   The remaining exported routines are the same for the fixed and MDEV
 ;   configurations:
 ;
-;     CAN_INIT  -  One-time module initialization.  Must be first call after
-;       reset.
-;
-;     CAN_START  -  Sets up the CAN hardware ready for use, and also starts the
-;       CAN receiving thread.
-;
 ;     CAN_SEND_INIT  -  Acquires exclusive lock on the CAN frame sending
 ;       facility and initializes the frame to send.  W0 indicates what kind of
 ;       frame to create:
@@ -78,7 +72,7 @@
 ;
 ;   The following global flags are used by this module:
 ;
-;     FLAG_CANIN  -  Automatically set by the CAN receiving task in this module
+;     FLAG CANIN  -  Automatically set by the CAN receiving task in this module
 ;       whenever a new CAN frame is received.  The CAN frame data will be in the
 ;       global CANIN_xxx variables.  This state is only valid when FLAG_CANIN is
 ;       set.  New received CAN frames will be held and will not overwrite the
@@ -110,16 +104,16 @@
 ;           half.  For example CANIN_D2 has data byte 2 in bits 7:0, and byte 3
 ;           in bits 15:8.
 ;
-;     FLAG_CANIN_EXT  -  Indicates the current received CAN frame is in extended
+;     FLAG CANIN_EXT  -  Indicates the current received CAN frame is in extended
 ;       format (29 bit ID) as apposed to standard format (11 bit ID).  This flag
 ;       is read-only outside this file, and is only valid while FLAG_CANIN is
 ;       set.
 ;
-;     FLAG_CANIN_RTR  -  Indicates the current received CAN frame is a remote
+;     FLAG CANIN_RTR  -  Indicates the current received CAN frame is a remote
 ;       request as apposed to a data frame.  This flag is read-only outside this
 ;       file, and is only valid while FLAG_CANIN is set.
 ;
-;     FLAG_CANSEND  -  Part of the mutex mechanism to guarantee a single task at
+;     FLAG CANSEND  -  Part of the mutex mechanism to guarantee a single task at
 ;       a time is building and sending a CAN frame.  Managed in this module, but
 ;       may be examined by external code to see if the CAN sending mechanism is
 ;       currently acquired by another task and therefore whether CAN_SEND_INIT
