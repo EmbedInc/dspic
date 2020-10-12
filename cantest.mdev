@@ -16,7 +16,7 @@ module cantest
   desc
     Tests CAN reception by forwarding all received CAN frames to config port.
   uses CanRecv
-  uses CanSend
+  uses CanSend shared
   uses ConfigSend shared
   uses ConfigRecv shared
   template qqq_cantest.dspic
