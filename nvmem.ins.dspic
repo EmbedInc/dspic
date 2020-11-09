@@ -234,6 +234,7 @@ rdy_done:                    ;done performing all checks
          jump    rdy_bad     ;no, it is bad
 
 rdy_leave:
+         setflag nvready     ;done checking NV mem, ready for app use
          leaverest
 
 rdy_bad:                     ;memory contents is bad

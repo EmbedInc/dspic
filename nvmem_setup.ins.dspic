@@ -5,3 +5,4 @@
 /flag    nvvalid             ;non-volatile memory contents appears to be valid
 /flag    nverased            ;the whole non-volatile memory is erased
 /flag    nvwrcks             ;non-volatile memory written since checksum test
+/flag    nvready             ;NV mem has been checked, remaining flags set
