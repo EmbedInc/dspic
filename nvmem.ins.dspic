@@ -170,9 +170,10 @@ ckp_byte:                    ;back here each new byte to add to the checksum
 ;
          glbsub  nvmem_check, regf0 | regf1 | regf3 | regf4 | regf5 | regf6
 
-         gcall   nvol_size   ;get the total number of nvol bytes into W6:W5
-         mov     w0, w5
-         mov     w1, w6
+         gcall   nvol_size   ;get the total number of nvol bytes into W1:W0
+         load32  w5, [v chkstart] ;number of bytes not to checksum at start
+         sub     w0, w5, w5  ;total number of bytes to checksum in W6:W5
+         subb    w1, w6, w6
          mcall   cksum_nbytes ;compute checksum on entire nvol memory
 ;
 ;   Current register contents:
@@ -271,10 +272,11 @@ rdy_bad:                     ;memory contents is bad
 ;   the checksum itself.  The checksum will be left in W4:W3, and W2:W1 will
 ;   be left the first address after the last checksummed byte.
 ;
-         gcall   nvol_size   ;get size of whole nvol memory into W1:W0
-         sub     w0, #[v crcsize], w5 ;make bytes to checksum over in W6:W5
-         subb    w1, #0, w6
-         mcall   cksum_nbytes ;compute the checksum on just the payload bytes
+         gcall   nvol_size   ;get the total number of nvol bytes into W1:W0
+         load32  w5, [+ chkstart crcsize] ;number of bytes not to checksum
+         sub     w0, w5, w5  ;total number of bytes to checksum in W6:W5
+         subb    w1, w6, w6
+         mcall   cksum_nbytes ;compute checksum on entire nvol memory
 ;
 ;   Add 0 bytes into the checksum for each checksum byte.  The CRC checksum we
 ;   use has the special property that if you do this, the resulting CRC
