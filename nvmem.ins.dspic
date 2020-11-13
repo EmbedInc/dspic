@@ -12,6 +12,10 @@
 ;
 ;   Derived constants.
 ;
+/if [not [exist "chkstart:vcon"]] then
+  /const chkstart integer = 0
+  /endif
+
 /block
   /var local ii integer
   /var local r real
@@ -20,6 +24,11 @@
 .equiv   xmaskl, [and crcmask 16#FFFF] ;low word of CRC XOR mask
 .equiv   xmaskh, [and [shiftr crcmask 16] 16#FFFF] ;high word of CRC XOR mask
 
+  /if [<> chkstart 0] then
+    /set s ""
+    /append s "First " chkstart " bytes not included in checksum"
+    /show "  " s
+    /endif
   /endblock
 
 ;*******************************************************************************
@@ -98,11 +107,14 @@ cks_nxor:                    ;done with XOR
 ;
 ;   Local subroutine CKSUM_NBYTES
 ;
-;   Compute the checksum on the first W6:W5 bytes of the non-volatile memory.
-;   This value must not be 0.  The resulting checksum will be left in W4:W3.
-;   W2:W1 will be left with the next non-volatile memory address after the last
-;   byte included in the checksum.  The low byte of W0 will contain the AND of
-;   all the bytes.  The high byte of W0 will be cleared.
+;   Compute the checksum on the first W6:W5 bytes of the checksummed region of
+;   the non-volatile memory.  W6:W5 must not be 0.  The address of the first
+;   byte covered by the checksum is provided by the constant CHKSTART.
+;
+;   The resulting checksum will be left in W4:W3.  W2:W1 will be left with the
+;   next non-volatile memory address after the last byte included in the
+;   checksum.  The low byte of W0 will contain the AND of all the bytes.  The
+;   high byte of W0 will be cleared.
 ;
 ;   Warning: W5, W6 are trashed.
 ;
@@ -135,7 +147,7 @@ cks_nxor:                    ;done with XOR
 ;     W7  -  AND of all data bytes.
 ;
          mcall   cksum_init  ;init the checksum accumulator in W4:W3.
-         load32  w1, 0       ;init address of next byte in W2:W1
+         load32  w1, [v chkstart] ;init address of next byte in W2:W1
          mov     #0xFF, w7   ;init AND of all data bytes
 
 ckp_byte:                    ;back here each new byte to add to the checksum

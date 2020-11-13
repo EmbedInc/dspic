@@ -144,7 +144,21 @@
 ;       from 0 up to and including the last byte that is not set to the erased
 ;       value are considered used.
 ;
+;
+;   Configuration constants.
+;
+;     CHKSTART, integer
+;
+;       The starting address of the checksummed area.  The checksum will cover
+;       from this address to the end of the non-volatile memory.  The checksum
+;       itself is stored in the last bytes of the non-volatile memory.
+;
+;       The default is 0, meaning all of the non-volatile memory is covered by
+;       the checksum.
+;
 /include "qq2.ins.dspic"
+
+/const   chkstart integer = 0 ;checksum covers from this adr to end of NV memory
 
 ////////////////////////////////////////////////////////////////////////////////
 //
