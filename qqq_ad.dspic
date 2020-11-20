@@ -179,6 +179,19 @@
 ;
 ;       FILT2 is then considered the final filtered result.
 ;
+;     AD_OFFSET
+;
+;       Bool to indicate that a separate variable is maintained that holds an
+;       offset to be added to the filtered A/D value before use.  This variable
+;       is initialized to 0 but otherwise not altered by the canned code here.
+;       A custom routine must be added to this module to set this offset.
+;
+;       When AD_OFFSET is TRUE, then an additional 32 bits is allocated
+;       immediately after the last filter pole and given the name ANx_OFS, where
+;       X is the hardware analog channel number.  These additional 32 bits are
+;       initialized to 0.  At run time, they are added to the final filtered
+;       value before that value is used further.
+;
 ;     AD_MAC_PROCESS
 ;
 ;       Name of the macro to run to process readings for this channel.  When
@@ -260,6 +273,14 @@
 ;   It is recommended to use ADINTR_AFTER instead of ADINTR_BEFORE, unless the
 ;   timing jitter of ADINTR_AFTER can not be tolerated.
 ;
+;   Other optional macros
+;
+;     APP_INIT
+;
+;       This is run in the AD_INIT routine after all the known global and local
+;       state has been initialized, and before the hardware is set up.  No
+;       arguments are supplied.  W0-W2 may be trashed.
+;
 /include "qq2.ins.dspic"
 
 //******************************************************************************
@@ -301,6 +322,7 @@
   /set ad_v3 adrefv
   /const ad_filtbits1 integer = 8 ;configure low pass filter
   /const ad_filtbits2 integer = 8
+  /set ad_offset false
   /call configure_channel
 
   /endblock

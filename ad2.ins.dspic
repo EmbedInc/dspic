@@ -34,7 +34,7 @@
   /const adbits integer = 12 ;default A/D result bit width
   /endif
 /if [not [or [= adbits 10] [= adbits 12]]] then
-  /show "  The A/D can not be configured for " adbits " output."
+  /show "  The A/D can not be configured for " adbits " bit output."
          .error  "ADBITS"
          .end
   /stop
@@ -124,6 +124,10 @@
 //     CHLn_CH  -  Integer constants that indicate the hardware channel number
 //       for a specific logical channel.  N is the logical channel number.
 //
+//     name_HWCHAN  -  Ineger constant that provides the hardware channel number
+//       for each analog input pin name.  The name is the string that AD_PNAME
+//       is set to in the user's A/D channel definition.
+//
 //     CHn_PORT  -  Lower case name of the I/O port the input pin is in.
 //
 //     CHn_BIT  -  Bit within the I/O port the input pin is in.
@@ -146,6 +150,8 @@
 //     CHn_FILTBITSx  -  Integer number of bits to shift right per filter stage.
 //       X is the 1-N sequential number of the filter stage.
 //
+//     CHn_ROFS  -  Bool.  True when additional run time offset maintained.
+//
 //     CHn_MAC_PROCESS  -  Name of the macro that implements the processing of
 //       the raw value for this channel.  This is the empty string to indicate
 //       the standard processing using the resistances, voltages, etc.  When
@@ -164,16 +170,12 @@
 //     MAXV  -  Center of input voltage range for max A/D output.
 //     MAXFILT  -  Max possible filtered value.
 //
-//     ADPERCY  -  A/D period in instruction cycles.
-//     ADFREQ  -  A/D frequency, Hz.
-//     CHANFREQ  -  Conversion frequency for any one channel.
-//
 //     TADCY  -  Tad time in instruction cycles.
 //     TAD  -  Tad time in seconds.
 //     ADCS  -  Value for ADCS field in AC1CON3
 //
 //     NFILTW  -  Total number of 16 bit words for all the filters of all the
-//       channels.
+//       channels.  This includes any runtime offsets to add after filtering.
 //
 //     CHn_NEXT  -  Next hardware channel number in use after the hardware
 //       channel N.  For the last used channel, this will be the first used
@@ -270,6 +272,9 @@
     /endif
 
   /set nfiltw [+ nfiltw [* ch[v ch]_nfilt 2]] ;update total number of filter words
+  /if ch[v ch]_rofs then
+    /set nfiltw [+ nfiltw 2]
+    /endif
   /endloop                   ;back for next logical channel
 //
 //   Compute the offset and gain required to convert the filtered value of
@@ -448,6 +453,9 @@ alloc    filtstart, 0        ;filters starting address
     /loop with f from 1 to ch[v ch]_nfilt ;once for each filter for this channel
 alloc    an[v ch]f[v f], 4
       /endloop               ;back for next filter this channel
+    /if ch[v ch]_rofs then   ;create runtime offset to add to filtered value ?
+alloc    an[v ch]_ofs, 4
+      /endif
     /endloop                 ;back for next channel
   /endif                     ;end of at least one filter exists
 
@@ -747,6 +755,34 @@ dochan[v ch]:
     /else                    ;no user-supplied code, do canned offset and scale processing
          filter              ;filter the reading
       //
+      //   Apply the runtime offset if this is enabled.  The offset is always
+      //   considered signed, but the result of the add is treated differently
+      //   for signed and unsigned overal values.
+      //
+      /if ch[v ch]_rofs then
+         ;
+         ;   Add the runtime offset.
+         ;
+         add     w0, [w2++], w0 ;do the raw add
+         addc    w1, [w2], w1
+
+        /if ch[v ch]_signed
+          /then              ;filtered value is signed
+          /else              ;filtered value is unsigned
+         bra     nn, rofs_done[v ch] ;no overflow ?
+         btss    [w2], #15   ;the offset was negative ?
+         jump    rofs_pos[v ch] ;the offset was positive
+         mov     #0, w0      ;clip at 0
+         mov     #0, w1
+         jump    rofs_done[v ch]
+rofs_pos[v ch]:              ;overflow with positive offset
+         mov     #[and maxfilt 16#FFFF], w0 ;clip at max possible filtered value
+         mov     #[shiftr maxfilt 16], w1
+          /endif             ;end of filtered value is unsigned
+
+rofs_done[v ch]:             ;done handling runtime offset
+        /endif
+      //
       //   Apply the offset if it is non-zero.  Unsigned values are clipped at 0 if
       //   they go negative.
       //
@@ -760,10 +796,10 @@ dochan[v ch]:
          mov     #0x[chars [int [shiftr ii 16] "fw 4 lz base 16 usin"]], w2 ;add offset high word
          addc    w1, w2, w1
         /if [and [not ch[v ch]_signed] [< ii 0]] then ;unsigned could have gone negative ?
-         bra     nn, [lab nn] ;result didn't go negative ?
+         bra     nn, nn[v ch] ;result didn't go negative ?
          mov     #0, w0      ;did go negative, clip at 0
          mov     #0, w1
-[lab nn]:
+nn[v ch]:
           /endif             ;done dealing with unsigned possibly going negative
         /endif               ;done adding fixed offset
       //
