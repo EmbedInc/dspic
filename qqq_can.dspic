@@ -121,6 +121,23 @@
 ;
 ;   The following pre-processor constant are used to configure this module:
 ;
+;     NAME  -  Preprocessor constant, type STRING.  Name to add to all symbols
+;       exported by this module.  When not the empty string, an underscore
+;       followed by the name is inserted after CAN or CANIN.  The default is no
+;       name.
+;
+;       For example when NAME is set to "xyz", then the routine "can_send_init"
+;       will actually be named "can_xyz_send_init".  Likewise, the global
+;       variable "canin_ndat" will actually be named "canin_xyz_ndat".  The
+;       names of exported symbols are shown above for NAME not existing or set
+;       to the empty string.
+;
+;       The NAME mechanism allows for multiple CAN modules, each driving a
+;       separate CAN peripheral, to exist in the same firmware.
+;
+;     CANN  -  Preprocessor constant, type INTEGER.  The 1-N number of the CAN
+;       peripheral to control with this module.  The default is 1.
+;
 ;     BITRATE  -  Preprocessor constant, type REAL.  The desired CAN bit rate in
 ;       bits per second.  Default = 500 kBits/second.
 ;
@@ -226,6 +243,8 @@
 ;
 ;   Configuration constants.
 ;
+/const   name    string = "" ;unique name to add to all exported symbols
+/const   cann    integer = 1 ;1-N number of CAN peripheral to control
 /const   bitrate real = 500e3 ;desired CAN bus baud rate, bits/second
 /const   canin_callback = "" ;routine to call when CAN frame received
 /const   canout_callback = "" ;routine to call when CAN frame sent

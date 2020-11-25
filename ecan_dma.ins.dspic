@@ -23,6 +23,12 @@
 ;
 ;   Configuration constants.
 ;
+/if [not [exist "name:vcon"]] then
+  /const name string = ""    ;unique name to add to all exported symbols
+  /endif
+/if [not [exist "cann:vcon"]] then
+  /const cann integer = 1    ;1-N number of CAN peripheral to control
+  /endif
 /if [not [exist "bitrate"]] then
   /const bitrate real = 500e3 ;CAN bus bit rate, Hz
   /endif
@@ -96,6 +102,13 @@
 ;
 ;   Derived constants.
 ;
+/if [= name ""]
+  /then                      ;no unique name to add to exported symbols
+    /const nam string = ""
+  /else                      ;need to add unique name to exported symbols
+    /const nam string = [str "_" name]
+  /endif
+
 /call can_timing [v bitrate] ;compute CAN bit timing setup
 /const   bufnb   integer = [* bufnw 2] ;bytes in one CAN message buffer
 /const   dmasize integer = [* ncanbuf bufnb] ;DMA memory size used, bytes
@@ -103,41 +116,27 @@
 /block                       ;make DMABS field for CiFCTRL register
   /var local ii integer
   /var local s string
-  /var local ok bool = false ;init to NCANBUF value not valid
-  /if [= ncanbuf 4] then
+  /pick one by ncanbuf
+  /option 4
     /const dmabs integer = 0
-    /set ok true
-    /endif
-  /if [= ncanbuf 6] then
+  /option 6
     /const dmabs integer = 1
-    /set ok true
-    /endif
-  /if [= ncanbuf 8] then
+  /option 8
     /const dmabs integer = 2
-    /set ok true
-    /endif
-  /if [= ncanbuf 12] then
+  /option 12
     /const dmabs integer = 3
-    /set ok true
-    /endif
-  /if [= ncanbuf 16] then
+  /option 16
     /const dmabs integer = 4
-    /set ok true
-    /endif
-  /if [= ncanbuf 24] then
+  /option 24
     /const dmabs integer = 5
-    /set ok true
-    /endif
-  /if [= ncanbuf 32] then
+  /option 32
     /const dmabs integer = 6
-    /set ok true
-    /endif
-  /if [not ok] then
+  /optionelse
     /show "  NCANBUF value of " ncanbuf " is invalid."
          .error  "NCANBUF"
          .end
     /stop
-    /endif
+    /endpick
   //
   //   Determine DMAALIGN, which is the multiple that the start of our DMA
   //   memory must be aligned to.  The CAN peripheral supplies the address
@@ -187,6 +186,36 @@
     /endif
   /endblock
 
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Function Can
+//
+//   When NAME is the empty string, then the function returns just the
+//   characters "can".  When NAME is not empty, then the function returns
+//   "can_<name>", where <name> is replaced with the contents of NAME.
+//
+//   The purpose of this function is to provide the leading part of exported
+//   symbol names that start with "can_".
+//
+/function Can
+  /funcval "can" nam
+  /endfunc
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Function Canin
+//
+//   When NAME is the empty string, then the function returns just the
+//   characters "canin".  When NAME is not empty, then the function returns
+//   "canin_<name>", where <name> is replaced with the contents of NAME.
+//
+//   The purpose of this function is to provide the leading part of exported
+//   symbol names that start with "canin_".
+//
+/function Canin
+  /funcval "canin" nam
+  /endfunc
+
 ;*******************************************************************************
 ;
 ;   Variables.
@@ -199,17 +228,17 @@
          ;
          ;   Received CAN frame buffer.
          ;
-allocg   canin_id, 4         ;11 or 29 bit frame ID
-allocg   canin_ndat          ;number of data bytes, always 0-8
-allocg   canin_dat, 0, 2     ;start of data bytes
-allocg   canin_d0, 1         ;symbols for individual data bytes
-allocg   canin_d1, 1
-allocg   canin_d2, 1
-allocg   canin_d3, 1
-allocg   canin_d4, 1
-allocg   canin_d5, 1
-allocg   canin_d6, 1
-allocg   canin_d7, 1
+allocg   [Canin]_id, 4       ;11 or 29 bit frame ID
+allocg   [Canin]_ndat        ;number of data bytes, always 0-8
+allocg   [Canin]_dat, 0, 2   ;start of data bytes
+allocg   [Canin]_d0, 1       ;symbols for individual data bytes
+allocg   [Canin]_d1, 1
+allocg   [Canin]_d2, 1
+allocg   [Canin]_d3, 1
+allocg   [Canin]_d4, 1
+allocg   [Canin]_d5, 1
+allocg   [Canin]_d6, 1
+allocg   [Canin]_d7, 1
 
 ;*******************
 ;
@@ -284,13 +313,13 @@ alloc    canbuf[v ii]w[v jj]
   /then
          locsub  can_init, regf0
   /else
-         glbsub  can_init, regf0
+         glbsub  [Can]_init, regf0
   /endif
 
          clr     canflags    ;init all local flags to 0
-         clrflag canin       ;reset to no CAN input frame available
-         clrflag cansend     ;no task has CAN sending facility acquired
-         clrflag canrun      ;init to CAN interface not up and running
+         clrflag [Canin]     ;reset to no CAN input frame available
+         clrflag cansend[chars nam] ;no task has CAN sending facility acquired
+         clrflag canrun[chars nam] ;init to CAN interface not up and running
 
          leaverest
 
@@ -356,7 +385,7 @@ done\@:
   /then
          locsub  can_start, regf0 | regf1 | regf13 | regf14
   /else
-         glbsub  can_start, regf0 | regf1 | regf13 | regf14
+         glbsub  [Can]_start, regf0 | regf1 | regf13 | regf14
   /endif
 ;
 ;   Set up the basic operation of the CAN peripheral.
@@ -610,7 +639,7 @@ done\@:
 ;   Configure this MDEV.
 ;
 /if mdev then
-         glbsub  can_cfg, regf0
+         glbsub  [Can]_cfg, regf0
          mcall   can_init    ;initialize the CAN state of off
 
          gcall   config_lock ;get exclusive access to CONFIG_xxx routines
@@ -651,7 +680,7 @@ cfg_leave:
 ;   new CAN frame transmitted, the caller has exclusive access to the transmit
 ;   state until it is released by CAN_SEND.
 ;
-         glbsub  can_send_init, regf0
+         glbsub  [Can]_send_init, regf0
 ;
 ;   Wait for the CAN transmit state to be available.
 ;
@@ -692,7 +721,7 @@ sin_avail:                   ;CAN sending state is available
 ;   the ID is in the low 11 bits of W0.  If this is a extended frame, then the
 ;   ID is in the low 29 bits of W1:W0.
 ;
-         glbsub  can_send_id, regf0 | regf1
+         glbsub  [Can]_send_id, regf0 | regf1
 
          btsc    canflags, #flg_ext ;standard frame ?
          jump    sid_ext     ;extended frame
@@ -722,7 +751,7 @@ sid_leave:                   ;common exit point
 ;   Add the byte in the low 8 bits of W0 as the next data byte in the transmit
 ;   frame state.  Data bytes beyond what the CAN frame can contain are ignored.
 ;
-         glbsubd can_send_dat, regf1 | regf2
+         glbsubd [Can]_send_dat, regf1 | regf2
 
          btsc    canflags, #flg_rtr ;data frame, not remote request ?
          jump    sdat_leave  ;remote request, can't take data bytes
@@ -748,12 +777,12 @@ sdat_leave:                  ;common exit point
 ;   built for transmission.  The bytes will be written into the CAN frame in
 ;   most to least significant order.
 ;
-         glbsubd can_send_dat16
+         glbsubd [Can]_send_dat16
 
          swap    w0
-         mcall   can_send_dat ;write the high byte
+         mcall   [Can]_send_dat ;write the high byte
          swap    w0
-         mcall   can_send_dat ;write the low byte
+         mcall   [Can]_send_dat ;write the low byte
 
          leaverest
 
@@ -765,15 +794,15 @@ sdat_leave:                  ;common exit point
 ;   frame being built for transmission.  The bytes will be written into the CAN
 ;   frame in most to least significant order.
 ;
-         glbsubd can_send_dat24
+         glbsubd [Can]_send_dat24
 
          exch    w0, w1      ;move high word into W0
-         mcall   can_send_dat ;send byte 2
+         mcall   [Can]_send_dat ;send byte 2
          exch    w0, w1      ;put low word back into W0
          swap    w0
-         mcall   can_send_dat ;send byte 1
+         mcall   [Can]_send_dat ;send byte 1
          swap    w0
-         mcall   can_send_dat ;send byte 0
+         mcall   [Can]_send_dat ;send byte 0
 
          leaverest
 
@@ -785,19 +814,19 @@ sdat_leave:                  ;common exit point
 ;   built for transmission.  The bytes will be written into the CAN frame in
 ;   most to least significant order.
 ;
-         glbsubd can_send_dat32
+         glbsubd [Can]_send_dat32
 
          exch    w0, w1      ;move high word into W0
          swap    w0
-         mcall   can_send_dat ;send byte 3
+         mcall   [Can]_send_dat ;send byte 3
          swap    w0
-         mcall   can_send_dat ;send byte 2
+         mcall   [Can]_send_dat ;send byte 2
          exch    w0, w1      ;put low word back into W0
 
          swap    w0
-         mcall   can_send_dat ;send byte 1
+         mcall   [Can]_send_dat ;send byte 1
          swap    w0
-         mcall   can_send_dat ;send byte 0
+         mcall   [Can]_send_dat ;send byte 0
 
          leaverest
 
@@ -811,7 +840,7 @@ sdat_leave:                  ;common exit point
 ;   information about the frame will have been transferred into the hardware and
 ;   the lock on the software transmit frame state released.
 ;
-         glbsubd can_send, regf0 | regf1 | regf2
+         glbsubd [Can]_send, regf0 | regf1 | regf2
 ;
 ;   Wait for the previous frame to be sent, and the transmit buffer therefore
 ;   available to write a new frame into.
@@ -1046,29 +1075,29 @@ cant_dctrl:                  ;done assembling control bits
 ;   received CAN frame to it.  The CAN frame data is in W0-W7.
 ;
 cant_rbuf:
-         skip_flag canin     ;software buffer still in use ?
+         skip_flag [Canin]   ;software buffer still in use ?
          jump    cant_rbufrdy ;no, done waiting
          gcall   task_yield  ;give other tasks a chance to run
          jump    cant_rbuf   ;back to check the software buffer again
 cant_rbufrdy:                ;the software receive buffer is ready for new frame
 
-         clrflag canin_ext   ;init to standard frame
+         clrflag [Canin]_ext ;init to standard frame
          btsc    w2, #0      ;really is standard frame ?
-         setflag canin_ext   ;extended frame
+         setflag [Canin]_ext ;extended frame
 
-         clrflag canin_rtr   ;init to data frame
+         clrflag [Canin]_rtr ;init to data frame
          btsc    w2, #1      ;really is data frame
-         setflag canin_rtr   ;remote request frame
+         setflag [Canin]_rtr ;remote request frame
 
-         mov     w0, canin_id+0 ;set frame ID
-         mov     w1, canin_id+2
-         mov     w3, canin_ndat ;set number of data bytes
-         mov     w4, canin_dat+0 ;set the data bytes
-         mov     w5, canin_dat+2
-         mov     w6, canin_dat+4
-         mov     w7, canin_dat+6
+         mov     w0, [Canin]_id+0 ;set frame ID
+         mov     w1, [Canin]_id+2
+         mov     w3, [Canin]_ndat ;set number of data bytes
+         mov     w4, [Canin]_dat+0 ;set the data bytes
+         mov     w5, [Canin]_dat+2
+         mov     w6, [Canin]_dat+4
+         mov     w7, [Canin]_dat+6
 
-         setflag canin       ;indicate a new received CAN frame available
+         setflag [Canin]     ;indicate a new received CAN frame available
 ;
 ;   Call the callback routine if this is enabled.  The preprocessor constant or
 ;   variable CANIN_CALLBACK is set to the name of the routine to call from this
@@ -1111,22 +1140,22 @@ cant_rbufrdy:                ;the software receive buffer is ready for new frame
 ;     W2  -  CAN frame ID.
 ;
          mov     #0b00, w0   ;indicate standard data frame
-         gcall   can_send_init ;set up for sending a CAN frame
+         gcall   [Can]_send_init ;set up for sending a CAN frame
 
          mov     w2, w0      ;set the frame ID
-         gcall   can_send_id
+         gcall   [Can]_send_id
 
          mov     #cmdbuf, w2 ;init pointer to first data byte
 sends_byte:                  ;back here each new data byte
          cp0     w1
          bra     z, sends_dbytes ;done all data bytes ?
          mov.b   [w2++], w0  ;get this data byte
-         gcall   can_send_dat ;write it to the CAN frame
+         gcall   [Can]_send_dat ;write it to the CAN frame
          sub     #1, w1      ;count one less byte left to do
          jump    sends_byte  ;back to do next byte
 sends_dbytes:                ;done writing all data bytes
 
-         gjump   can_send    ;send frame, release lock, return from command
+         gjump   [Can]_send  ;send frame, release lock, return from command
   /endif
 
 ;*******************************************************************************
@@ -1142,12 +1171,12 @@ sends_dbytes:                ;done writing all data bytes
          return              ;no, don't try to send the CAN frame
 
          mov     #0b10, w0   ;indicate standard remote request frame
-         gcall   can_send_init ;set up for sending a CAN frame
+         gcall   [Can]_send_init ;set up for sending a CAN frame
 
          mov     w1, w0      ;set the frame ID
-         gcall   can_send_id
+         gcall   [Can]_send_id
 
-         gjump   can_send    ;send frame, release lock, return from command
+         gjump   [Can]_send  ;send frame, release lock, return from command
   /endif
 
 ;*******************************************************************************
@@ -1173,22 +1202,22 @@ sends_dbytes:                ;done writing all data bytes
 ;     W4  -  Number of data bytes.
 ;
          mov     #0b01, w0   ;indicate extended data frame
-         gcall   can_send_init ;set up for sending a CAN frame
+         gcall   [Can]_send_init ;set up for sending a CAN frame
 
          mov.d   w2, w0      ;set the frame ID
-         gcall   can_send_id
+         gcall   [Can]_send_id
 
          mov     #cmdbuf, w2 ;init pointer to first data byte
 sende_byte:                  ;back here each new data byte
          cp0     w4
          bra     z, sende_dbytes ;done all data bytes ?
          mov.b   [w2++], w0  ;get this data byte
-         gcall   can_send_dat ;write it to the CAN frame
+         gcall   [Can]_send_dat ;write it to the CAN frame
          sub     #1, w4      ;count one less byte left to do
          jump    sende_byte  ;back to do next byte
 sende_dbytes:                ;done writing all data bytes
 
-         gjump   can_send    ;send frame, release lock, return from command
+         gjump   [Can]_send  ;send frame, release lock, return from command
   /endif
 
 ;*******************************************************************************
@@ -1204,10 +1233,10 @@ sende_dbytes:                ;done writing all data bytes
          return              ;no, don't try to send the CAN frame
 
          mov     #0b11, w0   ;indicate extended remote request frame
-         gcall   can_send_init ;set up for sending a CAN frame
+         gcall   [Can]_send_init ;set up for sending a CAN frame
 
          mov     w2, w0      ;set the frame ID
-         gcall   can_send_id
+         gcall   [Can]_send_id
 
-         gjump   can_send    ;send frame, release lock, return from command
+         gjump   [Can]_send  ;send frame, release lock, return from command
   /endif
