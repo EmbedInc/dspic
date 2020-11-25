@@ -96,8 +96,6 @@
 
 .equiv   stacksz, 128        ;CAN receiving task stack size
 /const   fcanclk real = freq_inst ;clock to CAN module, bit rate generator input
-/const   req_recv integer = 2#00100010 ;DMA REQ number for CAN reception
-/const   req_xmit integer = 2#01000110 ;DMA REQ number for CAN transmission
 /const   bufnw   integer = 8 ;number of 16-bit words in one CAN message buffer
 ;
 ;   Derived constants.
@@ -113,30 +111,45 @@
 /const   bufnb   integer = [* bufnw 2] ;bytes in one CAN message buffer
 /const   dmasize integer = [* ncanbuf bufnb] ;DMA memory size used, bytes
 
+/pick one by cann            ;configure to the specific CAN peripheral
+/option 1                    ;using CAN 1
+  /const req_recv integer = 2#00100010 ;DMA REQ number for CAN reception
+  /const req_xmit integer = 2#01000110 ;DMA REQ number for CAN transmission
+/option 2                    ;using CAN 2
+  /const req_recv integer = 2#00110111 ;DMA REQ number for CAN reception
+  /const req_xmit integer = 2#01000111 ;DMA REQ number for CAN transmission
+/optionelse
+  /show "  CAN peripheral " cann " is not supported"
+         .error  "CANN"
+         .end
+  /stop
+  /endpick
+
+/pick one by ncanbuf         ;configure to the number of CAN buffers
+/option 4
+  /const dmabs integer = 0
+/option 6
+  /const dmabs integer = 1
+/option 8
+  /const dmabs integer = 2
+/option 12
+  /const dmabs integer = 3
+/option 16
+  /const dmabs integer = 4
+/option 24
+  /const dmabs integer = 5
+/option 32
+  /const dmabs integer = 6
+/optionelse
+  /show "  NCANBUF value of " ncanbuf " is invalid."
+         .error  "NCANBUF"
+         .end
+  /stop
+  /endpick
+
 /block                       ;make DMABS field for CiFCTRL register
   /var local ii integer
   /var local s string
-  /pick one by ncanbuf
-  /option 4
-    /const dmabs integer = 0
-  /option 6
-    /const dmabs integer = 1
-  /option 8
-    /const dmabs integer = 2
-  /option 12
-    /const dmabs integer = 3
-  /option 16
-    /const dmabs integer = 4
-  /option 24
-    /const dmabs integer = 5
-  /option 32
-    /const dmabs integer = 6
-  /optionelse
-    /show "  NCANBUF value of " ncanbuf " is invalid."
-         .error  "NCANBUF"
-         .end
-    /stop
-    /endpick
   //
   //   Determine DMAALIGN, which is the multiple that the start of our DMA
   //   memory must be aligned to.  The CAN peripheral supplies the address
@@ -214,6 +227,17 @@
 //
 /function Canin
   /funcval "canin" nam
+  /endfunc
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Function N
+//
+//   Returns the characters for the decimal integer representation of the 1-N
+//   number of the CAN peripheral to control.
+//
+/function N
+  /funcval cann
   /endfunc
 
 ;*******************************************************************************
@@ -334,10 +358,10 @@ alloc    canbuf[v ii]w[v jj]
 ;   loop.
 ;
 ;   CFG is the 3-bit code for the new configuration.  See the description for
-;   the REQOP or OPMODE fields of the CiCTRL1 register for a list of the
+;   the REQOP or OPMODE fields of the CnCTRL1 register for a list of the
 ;   configuration codes.
 ;
-;   Other state in C1CTRL1 will be set according to our usage here:
+;   Other state in CnCTRL1 will be set according to our usage here:
 ;
 ;     CSIDL 0  -  Module will continue operation in CPU idle mode.
 ;
@@ -362,9 +386,9 @@ alloc    canbuf[v ii]w[v jj]
                  ;  ------------0--- disable input capture on CAN receptions
                  ;  -------------XX- unused
                  ;  ---------------0 access register space 0 for now
-         mov     w0, C1ctrl1
+         mov     w0, C[N]ctrl1
 loop\@:                      ;back here to check for new configuration again
-         mov     C1ctrl1, w0 ;read register with current config code
+         mov     C[N]ctrl1, w0 ;read register with current config code
          lsr     w0, #5, w0  ;move config code into low bits
          and     #7, w0      ;mask in only the current config ID
          cp      w0, #\cfg   ;compare to desired config
@@ -390,18 +414,18 @@ done\@:
 ;
 ;   Set up the basic operation of the CAN peripheral.
 ;
-         set_config 0b100    ;enter config mode, set C1CTRL1
+         set_config 0b100    ;enter config mode, set CnCTRL1
 
          mov     #0b0000000000000000, w0
                  ;  XXXXXXXXXXX----- unused
                  ;  -----------00000 disable DeviceNet ID compare with data bytes
-         mov     w0, C1ctrl2
+         mov     w0, C[N]ctrl2
 
          mov     #0b0000000000000000 | [- bdiv 1], w0
                  ;  XXXXXXXX-------- unused
                  ;  --------00------ synchronization jump width of 1 TQ
                  ;  ----------XXXXXX baud rate divider, merged in above
-         mov     w0, C1CFG1
+         mov     w0, C[N]CFG1
 
 /block
   /var local ii integer      ;fields from computed values
@@ -417,17 +441,17 @@ done\@:
                  ;  ---------0------ sample bus once at the sample point
                  ;  ----------XXX--- phase 1 segment length, merged from II above
                  ;  -------------XXX propagattion segment length, from II above
-         mov     w0, C1cfg2
+         mov     w0, C[N]cfg2
   /endblock
 
          mov     #0b0000000000000001 | ([v dmabs] << 13), w0
                  ;  XXX------------- code for N buffers, merged in from DMABS above
                  ;  ---XXXXXXXX----- unused
                  ;  -----------00001 receive FIFO starts at buffer 1
-         mov     w0, C1fctrl
+         mov     w0, C[N]fctrl
 
-         clr     C1intf      ;clear any interrupt condition flags
-         clr     C1inte      ;disable all CAN interrupts
+         clr     C[N]intf    ;clear any interrupt condition flags
+         clr     C[N]inte    ;disable all CAN interrupts
 ;
 ;   Set up the masks and filters.  The code here is a low level driver that
 ;   recieves all CAN frames and passes them to higher levels.  We therefore use
@@ -437,19 +461,19 @@ done\@:
 ;   frames are written to the FIFO region.
 ;
          mov     #1, w0      ;enable filter 0, all others disabled
-         mov     w0, C1fen1
+         mov     w0, C[N]fen1
 
-         clr     C1fmsksel1  ;all filters use mask 0
-         clr     C1fmsksel2
+         clr     C[N]fmsksel1 ;all filters use mask 0
+         clr     C[N]fmsksel2
          ;
          ;   Init the registers in overlay window 0.
          ;
-         bclr    C1ctrl1, #WIN ;select overlay window 0
+         bclr    C[N]ctrl1, #WIN ;select overlay window 0
 
-         clr     C1rxful1    ;clear all receive buffer full indicators
-         clr     C1rxful2
-         clr     C1rxovf1    ;clear all receive buffer overflow conditions
-         clr     C1rxovf2
+         clr     C[N]rxful1  ;clear all receive buffer full indicators
+         clr     C[N]rxful2
+         clr     C[N]rxovf1  ;clear all receive buffer overflow conditions
+         clr     C[N]rxovf2
 
          mov     #0b0000000010000000, w0
                  ;  0--------------- second buf is receive
@@ -462,7 +486,7 @@ done\@:
                  ;  ------------0--- first buf do not start transmit now
                  ;  -------------0-- first buf not auto respond to remote request
                  ;  --------------00 first buf transmission priority
-         mov     w0, C1tr01con ;first buf transmit, second receive
+         mov     w0, C[N]tr01con ;first buf transmit, second receive
          mov     #0b0000000000000000, w0
                  ;  0--------------- second buf is receive
                  ;  -XXX------------ second buf read-only status bits
@@ -474,13 +498,13 @@ done\@:
                  ;  ------------0--- first buf do not start transmit now
                  ;  -------------0-- first buf not auto respond to remote request
                  ;  --------------00 first buf transmission priority
-         mov     w0, C1tr23con ;set up remaining buffers to receive
-         mov     w0, C1tr45con
-         mov     w0, C1tr67con
+         mov     w0, C[N]tr23con ;set up remaining buffers to receive
+         mov     w0, C[N]tr45con
+         mov     w0, C[N]tr67con
          ;
          ;   Init the registers in overlay window 1.
          ;
-         bset    C1ctrl1, #WIN ;select overlay window 1
+         bset    C[N]ctrl1, #WIN ;select overlay window 1
 
          mov     #0b0000000000000000, w0
                  ;  00000000000----- standard ID match bits for filter
@@ -488,8 +512,8 @@ done\@:
                  ;  ------------0--- match only std ID, ignored due to mask setup
                  ;  -------------X-- unused
                  ;  --------------00 extended ID match bits <17,16>
-         mov     w0, C1rxf0sid ;set filter 0 standard ID config
-         clr     C1rxf0eid   ;set filter 0 extended ID match bits <15-0>
+         mov     w0, C[N]rxf0sid ;set filter 0 standard ID config
+         clr     C[N]rxf0eid ;set filter 0 extended ID match bits <15-0>
 
          mov     #0b0000000000000000, w0
                  ;  00000000000----- set all standard ID bits to don't care
@@ -497,15 +521,15 @@ done\@:
                  ;  ------------0--- match both stardard or extended IDs
                  ;  -------------X-- unused
                  ;  --------------00 set extended ID bits <17,16> to don't care
-         mov     w0, C1rxm0sid ;set mask 0 standard ID config
-         clr     C1rxm0eid   ;set extended ID bits <15-0> to don't care
+         mov     w0, C[N]rxm0sid ;set mask 0 standard ID config
+         clr     C[N]rxm0eid ;set extended ID bits <15-0> to don't care
 
          mov     #0b0000000000001111, w0
                  ;  XXXX------------ receive buffer for filter 3 (unused)
                  ;  ----XXXX-------- receive buffer for filter 2 (unused)
                  ;  --------XXXX---- receive buffer for filter 1 (unused)
                  ;  ------------1111 write filter 0 frames to receive FIFO
-         mov     w0, C1bufpnt1
+         mov     w0, C[N]bufpnt1
 ;
 ;   Set up DMA channel DMA_CANRECV for receiving CAN frames and writing them to
 ;   the DMA memory.
@@ -547,7 +571,7 @@ done\@:
          clr     Dma[v ii]stbh
     /endif
 
-         mov     #C1rxd, w0  ;set peripheral address to read from
+         mov     #C[N]rxd, w0 ;set peripheral address to read from
          mov     w0, Dma[v ii]pad
 
          bset    Dma[v ii]con, #CHEN ;turn on this DMA channel
@@ -593,7 +617,7 @@ done\@:
          clr     Dma[v ii]stbh
     /endif
 
-         mov     #C1txd, w0  ;set peripheral address to write to
+         mov     #C[N]txd, w0 ;set peripheral address to write to
          mov     w0, Dma[v ii]pad
 
          bset    Dma[v ii]con, #CHEN ;turn on this DMA channel
@@ -685,12 +709,12 @@ cfg_leave:
 ;   Wait for the CAN transmit state to be available.
 ;
 sin_wait:
-         skip_flag cansend   ;sending state is in use ?
+         skip_flag cansend[chars nam] ;sending state is in use ?
          jump    sin_avail   ;no, go grab it
          gcall   task_yield_save ;give other tasks a chance to run
          jump    sin_wait    ;back to check for in use again
 sin_avail:                   ;CAN sending state is available
-         setflag cansend     ;indicate sending state is now in use
+         setflag cansend[chars nam] ;indicate sending state is now in use
 ;
 ;   Get the flags from W0 and init the rest of the CAN frame info to zeros.
 ;
@@ -846,7 +870,7 @@ sdat_leave:                  ;common exit point
 ;   available to write a new frame into.
 ;
 snd_wait:
-         btss    C1tr01con, #TXREQ0 ;transmit buffer still in use ?
+         btss    C[N]tr01con, #TXREQ0 ;transmit buffer still in use ?
          jump    snd_avail   ;no
          gcall   task_yield_save ;give other tasks a chance to run
          jump    snd_wait    ;back to check transmit buffer available again
@@ -917,7 +941,7 @@ snd_dctrl:                   ;done setting the control and ID bits
          mov     wr_dat0+6, w0
          mov     w0, canbuf0w6
 
-         bset    C1tr01con, #TXREQ0 ;request transmission
+         bset    C[N]tr01con, #TXREQ0 ;request transmission
 ;
 ;   Call the routine to notify the application of a CAN transmission, if such a
 ;   routine was provided.
@@ -950,7 +974,7 @@ snd_dctrl:                   ;done setting the control and ID bits
          pop     w3
   /endif
 
-         clrflag cansend     ;release lock on the CAN transmit state
+         clrflag cansend[chars nam] ;release lock on the CAN transmit state
          leaverest
 
 ;*******************************************************************************
@@ -958,23 +982,23 @@ snd_dctrl:                   ;done setting the control and ID bits
 ;   CAN frames receiving task.
 ;
 can_task:                    ;task execution start point
-         setflag canrun      ;indicate CAN interface is up and running
+         setflag canrun[chars nam] ;indicate CAN interface is up and running
 
 cant_loop:                   ;back here after done processing each new frame
 ;
 ;   Wait for the next CAN frame to be received.
 ;
 cant_wframe:
-         clr     C1rxovf1    ;clear any receive overrun conditions
-         clr     C1rxovf2
+         clr     C[N]rxovf1  ;clear any receive overrun conditions
+         clr     C[N]rxovf2
          gcall   task_yield  ;give other tasks a chance to run
 
-         mov     C1fifo, w8  ;get 0-31 number of next receive buffer into W8
+         mov     C[N]fifo, w8 ;get 0-31 number of next receive buffer into W8
          and     #31, w8
-         mov     C1rxful1, w0 ;get full bits for buffers 0-15
+         mov     C[N]rxful1, w0 ;get full bits for buffers 0-15
 /if [> ncanbuf 16] then
          btsc    w8, #4      ;next buffer is in 0-15 range ?
-         mov     C1rxful2, w0 ;no, get full bits for buffers 16-31
+         mov     C[N]rxful2, w0 ;no, get full bits for buffers 16-31
   /endif
          and     w8, #15, w9 ;make bit number within CxRXFUL register
          btst.z  w0, w9      ;test the full bit for the current read buffer
@@ -1062,9 +1086,9 @@ cant_dctrl:                  ;done assembling control bits
 ;   (like BCLR) can not be used due to a silicon bug.  The CPU can only clear
 ;   bits, not set them, so trying to write 1 to the other bits does nothing.
 ;
-         mov     #C1rxful1, w9 ;point W9 to full bits for buffers 0-15
+         mov     #C[N]rxful1, w9 ;point W9 to full bits for buffers 0-15
          btsc    w8, #4      ;buffer is in 0-15 range ?
-         mov     #C1rxful2, w9 ;no, point W9 to full bits for buffers 16-31
+         mov     #C[N]rxful2, w9 ;no, point W9 to full bits for buffers 16-31
          and     w8, #15, w10 ;make bit number within register in W10
          mov     #1, w11     ;init mask for bit 0
          sl      w11, w10, w11 ;make mask for the selected bit
@@ -1130,7 +1154,7 @@ cant_rbufrdy:                ;the software receive buffer is ready for new frame
          mov     w1, w0      ;read the data bytes into the scratch buffer
          gcall   cmd_putbufn
 
-         skip_flag canrun    ;CAN interface is up ?
+         skip_flag canrun[chars nam] ;CAN interface is up ?
          return              ;no, don't try to send the CAN frame
 ;
 ;   Send the CAN frame.  Register contents:
@@ -1167,7 +1191,7 @@ sends_dbytes:                ;done writing all data bytes
 /if [Command cm_cansr] then
          gcall   cmd_get16   ;get the frame ID into W1
          mov     w0, w1
-         skip_flag canrun    ;CAN interface is up ?
+         skip_flag canrun[chars nam] ;CAN interface is up ?
          return              ;no, don't try to send the CAN frame
 
          mov     #0b10, w0   ;indicate standard remote request frame
@@ -1192,7 +1216,7 @@ sends_dbytes:                ;done writing all data bytes
          mov     w0, w4      ;save it in W4
          gcall   cmd_putbufn ;read the data bytes into the scratch buffer
 
-         skip_flag canrun    ;CAN interface is up ?
+         skip_flag canrun[chars nam] ;CAN interface is up ?
          return              ;no, don't try to send the CAN frame
 ;
 ;   Send the CAN frame.  Register contents:
@@ -1229,7 +1253,7 @@ sende_dbytes:                ;done writing all data bytes
 /if [Command cm_caner] then
          gcall   cmd_get32   ;get the frame ID into W1:W0
          mov     w0, w2      ;save it in W1:W2
-         skip_flag canrun    ;CAN interface is up ?
+         skip_flag canrun[chars nam] ;CAN interface is up ?
          return              ;no, don't try to send the CAN frame
 
          mov     #0b11, w0   ;indicate extended remote request frame
