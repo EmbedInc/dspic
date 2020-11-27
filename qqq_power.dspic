@@ -14,11 +14,16 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   This module uses a OC module to run a switching power supply.  The OC module
-;   output controls the switch.  Pulses are generated continually using PWM
-;   mode.  The fault input to the OC module is asserted by external hardware
-;   when the power supply output voltage exceeds its regulation threshold.  This
-;   stops the pulses until the output is again below the threshold.
+;   This module controls the *** INSERT DESCRIPTION OF THIS PARTICULAR SUPPLY
+;   HERE ***
+;
+;   ----------------------------------------------------------------------------
+;
+;   A OC module is used to run a switching power supply.  The OC module output
+;   controls the switch.  Pulses are generated continually using PWM mode.  The
+;   fault input to the OC module is asserted by external hardware when the power
+;   supply output voltage exceeds its regulation threshold.  This stops the
+;   pulses until the output is again below the threshold.
 ;
 ;   The overall power supply therefore is a pulse on demand controller.  It
 ;   requires no firmware intervention once started.
@@ -39,25 +44,21 @@
 ;       Switches on the power supply.  Resume normal operation after call to
 ;       name_OFF.
 ;
-;   ----------------------------------------------------------------------------
-;
-;   This supply *** INSERT DESCRIPTION OF THIS PARTICULAR SUPPLY HERE ***
-;
 /include "qq2.ins.dspic"
 
 ;*******************************************************************************
 ;
 ;   Configuration constants.
 ;
-/const   name    = "ledpwr"  ;name of this module
-/const   ocn     integer = 2 ;1-N number of the OC module to use
-/const   dpulset real = 2.5e-6 ;desired pulse time, seconds
+/const   name    string = "qq3" ;name of this module
+/const   ocn     integer = 1 ;1-N number of the OC module to use
+/const   dpulset real = 1.0e-6 ;desired pulse time, seconds
 /const   pstretch real = 0.0 ;amount pulse is stretched by the hardware, seconds
 /const   dperiod real = 15.0e-6 ;desired PWM period, seconds
 ;
 ;   PWM output.
 ;
-/const   ocpinid integer = 2#010001 ;remappable pin ID for OCn output
+/const   ocpinid integer = 2#010000 ;remappable pin ID for OCn output
 /const   ocpinreg = "Rpor6+0" ;byte adr of reg for remappable OCn output function ID
 ;
 ;   Fault input.  This input must be asserted (driven low) by the external
@@ -77,9 +78,9 @@
          ;   pullup or pulldown to be asserted here, delete all these constants,
          ;   or set FLTNAME to the empty string and both FLTPULLxx to FALSE.
          ;
-/const   fltname = "v25low"  ;INBIT name of fault input pin
-/const   fltpullup bool = false ;enable pullup on fault input
-/const   fltpulldn bool = true ;enable pulldown on fault input
+/const   fltname = ""        ;INBIT name of fault input pin
+/const   fltpullup bool = true ;enable pullup on fault input
+/const   fltpulldn bool = false ;enable pulldown on fault input
 
 /include "(cog)src/dspic/power.ins.dspic"
 
