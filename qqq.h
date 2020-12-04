@@ -443,7 +443,7 @@ void modbus_start (void);              //start Modbus reception task
 //   Routines intended for use during normal operation.
 //
 //   Modbus packets are received and verified by the Modbus reception task.
-//   Fully validated packets are receive by the application by calling
+//   Fully validated packets are received by the application by calling
 //   MODBUS_PACK_GET.  Packets are double-buffered internally, so another
 //   packet can be received while the application is processing the previous.
 //   When done with a packet, the application MUST call MODBUS_PACK_RELEASE.
