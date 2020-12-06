@@ -219,7 +219,7 @@
 ;       the indicated ID.  N is the 16 bit number of data bytes.  Exactly N data
 ;       bytes follow N.
 ;
-;     CFGSTAT: 10 subsys status
+;     CFGSTAT: subsys status
 ;
 ;       Sent asynchronously to indicate various events or status during system
 ;       configuration.
@@ -307,7 +307,9 @@
 /const   config_ind_hilo bool = true ;indirect adr stored high-low byte order
 
 /macro config_mdevs_notsys   ;define macro for calling all the CFG routines except SYS
-  /include "qq2_config_mdevs.ins.dspic"
+  /if [exist "qq2_config_mdevs.ins.dspic" fnam] then
+    /include "qq2_config_mdevs.ins.dspic"
+    /endif
   /endmac
 
 /include "(cog)src/dspic/config.ins.dspic"
