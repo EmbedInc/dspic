@@ -199,7 +199,7 @@
 ;     UART_TICK
 ;
 ;       This routine must be called with a regular period.  That period should
-;       be a few bits times or less.  The preprocessor constant UTICKT must be
+;       be a few bit times or less.  The preprocessor constant UTICKT must be
 ;       set to the call period in seconds.
 ;
 ;       Calls to this routine is how the UART module performs timing.  This is
