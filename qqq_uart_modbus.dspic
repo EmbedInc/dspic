@@ -66,6 +66,37 @@
 ;
 ;         Configures this MDEV according to its static configuration data.
 ;
+;       UART_MDEV_ON
+;
+;         Indicates whether this module is enabled as a result of the MDEV
+;         configuration.  W0 is 0 for disabled, 1 for enabled.  This result is
+;         only valid after UART_CFG is called.
+;
+;       UART_SAVE
+;
+;         Save current live configuration settings into the configuration data
+;         for this module.  The checksum is not updated, and the NV mem is not
+;         flushed.
+;
+;     UART_BUS_SET
+;
+;       Set the bus configuration.  W0 must be one of (defined in
+;       UART_SETUP.INS.DSPIC):
+;
+;         UART_BUS_232    -  RS-232
+;         UART_BUS_485_2  -  RS-485 2-wire
+;         UART_BUS_485_4  -  RS-485 4-wire
+;
+;       This causes the UART receive to be switched to the appropriate input
+;       pin.  The corresponding constant RPIN_xxx must exist and not be 0 for
+;       the bus configuration to be switched.  Nothing is done if the W0 value
+;       is unrecognized, or the corresponding RPIN_xxx constant 0 or undefined.
+;
+;     UART_BUS
+;
+;       Returns the ID for the current bus configuration in W0.  Will be one of
+;       UART_BUS_xxx.
+;
 ;     UART_LOCK
 ;     UART_UNLOCK
 ;
@@ -240,18 +271,20 @@
 ;
 ;   Configuration constants.
 ;
-/const   rpin_232 integer = 61 ;RPn pin number for RS-232 receive
-/const   rpin_2wire integer = 53 ;RPn pin number for R-485 2-wire receive
-/const   rpin_4wire integer = 52 ;RPn pin number for R-485 4-wire receive
-/const   pin_master = "master" ;pin to assert for master, off for slave
-/const   flag_run = "serrun" ;flag to set when up and running
+/const   rpin_232 integer = 0 ;RPn pin number for RS-232 receive
+/const   rpin_2wire integer = 0 ;RPn pin number for R-485 2-wire receive
+/const   rpin_4wire integer = 0 ;RPn pin number for R-485 4-wire receive
+/const   pin_master = ""     ;pin to assert for master, off for slave
+/const   flag_run = ""       ;flag to set when up and running
 
 /const   name    string = "" ;unique name for exported symbols, may be empty
 /const   un      integer = 1 ;1-N number of UART handled by this module
 /const   baud    real = 19200 ;desired baud rate (19200 is Modbus default)
-/const   runtime_baud bool = true ;allow changing baud rate at run time
-/const   parity  string = "EVEN" ;EVEN, ODD, ZERO, ONE, or NONE
+/const   runtime_baud bool = false ;runtime baud changing, always on for MDEV
+/const   parity  string = "EVEN" ;EVEN, ODD, ZERO, ONE, NONE (EVEN Modbus default)
 /const   runtime_parity bool = true ;allow changing parity at run time
+/const   altpins bool = false ;don't use alternate fixed pins
+/const   utickt  real = 100e-6 ;UART_TICK call period, seconds
 
 /const   prio_reg_rx string = "Ipc2" ;register containing RX intr priority
 /const   prio_bit_rx integer = 12 ;low bit of priority field within register
@@ -268,7 +301,6 @@
 
 /const   fifoi_sz integer = 256 ;software input FIFO size, capacity in words
 /const   fifoo_sz integer = 256 ;software output FIFO size, capacity in words
-/const   altpins bool = False ;do not use alternate UART pins
 /const   handle_overrun = "" ;routine to call from RX intr on hardware overrun
 /const   handle_framerr = "" ;routine to call from RX intr on framing error
 /const   handle_rfull = ""   ;routine to call from RX intr on software FIFO full
@@ -286,7 +318,7 @@
 /const   rrint_rpreg = "Rpinr0+1" ;byte reg to select RRINT remappable pin number
 
 /const   txdrive = ""        ;output line to assert during sending
-/const   txdrive_rts bool = true ;drive UART RTS output low when sending
+/const   txdrive_rts bool = false ;drive UART RTS output low when sending
 
 /const   callback_recv = ""  ;routine to call from UART_GET on event, must save regs
 

@@ -72,6 +72,16 @@
   /const mdev bool = b       ;create final MDEV constant
   /endblock
 
+/if [not [exist "rpin_232"]] then
+  /const rpin_232 integer = 0;
+  /endif
+/if [not [exist "rpin_2wire"]] then
+  /const rpin_2wire integer = 0;
+  /endif
+/if [not [exist "rpin_4wire"]] then
+  /const rpin_4wire integer = 0;
+  /endif
+
 /if [not [exist "pin_master"]] then
   /const pin_master string = ""
   /endif
@@ -165,27 +175,15 @@
   /endif
 /const   parity  string = [ucase s] ;PARITY is guaranteed upper case now
 /del s                       ;delete temporary string
-/block
-  /if [= parity "EVEN"] then
-    /quit
-    /endif
-  /if [= parity "ODD"] then
-    /quit
-    /endif
-  /if [= parity "ZERO"] then
-    /quit
-    /endif
-  /if [= parity "ONE"] then
-    /quit
-    /endif
-  /if [= parity "NONE"] then
-    /quit
-    /endif
+
+/pick one by parity
+/option "EVEN" "ODD" "ZERO" "ONE" "NONE"
+/optionelse
   /show "  """ parity """ is not a valid parity selection"
          .error  "Parity"
          .end
   /stop
-  /endblock
+  /endpick
 
 /if [not [exist "callback_recv"]] then
   /const callback_recv string = ""
@@ -199,8 +197,8 @@
 .equiv   Urxreg, U[v un]rxreg
 .equiv   Utxreg, U[v un]txreg
 
-/var new didun bool = false
-/if [= un 1] then            ;make interrupt system aliases if UART 1 selected
+/pick one by un
+/option 1
          .equiv  Urxif_reg, Ifs0 ;receive interrupt
          .equiv  Urxif_bit, U1rxif
          .equiv  Urxie_reg, Iec0
@@ -213,9 +211,7 @@
          .equiv  Utxie_bit, U1txie
          .equiv  Utxprio_reg, [chars prio_reg_tx]
          .equiv  Utxprio_bit, [v prio_bit_tx]
-  /set didun true            ;aliases created for the selected UART
-  /endif
-/if [= un 2] then            ;make interrupt system aliases if UART 2 selected
+/option 2
          .equiv  Urxif_reg, Ifs1 ;receive interrupt
          .equiv  Urxif_bit, U2rxif
          .equiv  Urxie_reg, Iec1
@@ -228,9 +224,7 @@
          .equiv  Utxie_bit, U2txie
          .equiv  Utxprio_reg, [chars prio_reg_tx]
          .equiv  Utxprio_bit, [v prio_bit_tx]
-  /set didun true            ;aliases created for the selected UART
-  /endif
-/if [= un 3] then            ;make interrupt system aliases if UART 3 selected
+/option 3
          .equiv  Urxif_reg, Ifs5 ;receive interrupt
          .equiv  Urxif_bit, U[v un]RXIF
          .equiv  Urxie_reg, Iec5
@@ -243,9 +237,7 @@
          .equiv  Utxie_bit, U[v un]TXIE
          .equiv  Utxprio_reg, [chars prio_reg_tx]
          .equiv  Utxprio_bit, [v prio_bit_tx]
-  /set didun true            ;aliases created for the selected UART
-  /endif
-/if [= un 4] then            ;make interrupt system aliases if UART 4 selected
+/option 4
          .equiv  Urxif_reg, Ifs5 ;receive interrupt
          .equiv  Urxif_bit, U[v un]RXIF
          .equiv  Urxie_reg, Iec5
@@ -258,17 +250,14 @@
          .equiv  Utxie_bit, U[v un]TXIE
          .equiv  Utxprio_reg, [chars prio_reg_tx]
          .equiv  Utxprio_bit, [v prio_bit_tx]
-  /set didun true            ;aliases created for the selected UART
-  /endif
-/if [not didun] then         ;no interrupt aliases created ?
+/optionelse
   /show "  No interrupt symbol aliases for UART " un
          .error  "UART number"
   /stop
-  /endif
-/del didun
+  /endpick
 
 /block
-  /var new s string
+  /var local s string
 
   /set s ""
   /append s "Using UART " un ", "
@@ -583,10 +572,10 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
          bset    Iec[v rrint_flgregn], #Int[v rrint]ie ;enable the RR interrupt
     /endif
 ;
-;   Initialize the UART interrupts.  Receive interrupts are enabled here
-;   and stay enabled.  Transmit interrupts are initialized to disabled.
-;   These are enabled when a byte is written into the software output
-;   FIFO, and disabled when the FIFO is drained to empty.
+;   Initialize the UART interrupts.  Receive interrupts are enabled here and
+;   stay enabled.  Transmit interrupts are initialized to disabled.  These are
+;   enabled when a byte is written into the software output FIFO, and disabled
+;   when the FIFO is drained to empty.
 ;
          intr_priority Urxprio_reg, Urxprio_bit, ipr_uart_recv ;recv intr priority
          intr_priority Utxprio_reg, Utxprio_bit, ipr_uart_xmit ;xmit intr priority
@@ -659,11 +648,10 @@ unlock_leave:
 ;
 ;   Subroutine UART_PUT
 ;
-;   Send the byte in the low 8 bits of W0 out the UART.  The byte is
-;   actually written to the UART output software FIFO, and will be written
-;   to the UART by the UART transmit interrupt routine separately.  If
-;   the software output FIFO is full, this routine waits until it can receive
-;   another byte.
+;   Send the byte in the low 8 bits of W0 out the UART.  The byte is actually
+;   written to the UART output software FIFO, and will be written to the UART by
+;   the UART transmit interrupt routine separately.  If the software output FIFO
+;   is full, this routine waits until it can receive another byte.
 ;
          glbsubd uart[chars uname]_put, regf1 | regf2
          push    w0          ;save word with data byte on the top of the stack
@@ -688,9 +676,9 @@ put_room:
 ;
 ;   UART transmit interrupt routine.
 ;
-;   The UART is ready to accept another output byte.  This interrupt is
-;   enabled whenever a byte is written to the output FIFO.  It is disabled
-;   in this interrupt routine when the FIFO is drained to empty.
+;   The UART is ready to accept another output byte.  This interrupt is enabled
+;   enabled whenever a byte is written to the output FIFO.  It is disabled in
+;   this interrupt routine when the FIFO is drained to empty.
 ;
 ;   If configured for transmit flow control, then the interrupt is disabled if
 ;   the RREADY input is high, which indicates that the remote system is not
@@ -1070,8 +1058,8 @@ act_leave:                   ;common exit point, Z flag already set
 ;   Subroutine UART_ON
 ;
 ;   Re-enables the UART after having been off.  The FIFOs are reset to empty.
-;   This routine is intended to be called when the UART is off.  The UART may
-;   be glitched and state reset if called when already on.
+;   This routine is intended to be called when the UART is off.  The UART may be
+;   glitched and state reset if called when already on.
 ;
 ;
 ;   Subroutine UART_RESET
@@ -1110,8 +1098,8 @@ act_leave:                   ;common exit point, Z flag already set
 ;
 ;   Subroutine UART_TICK
 ;
-;   This routine must be called regularly with a known period, which should be
-;   a few bits times or faster.  This UART subsystem will adjust to the actual
+;   This routine must be called regularly with a known period, which should be a
+;   few bits times or faster.  This UART subsystem will adjust to the actual
 ;   tick period, but it must be known.
 ;
 ;   The following preprocessor constants must exist:
@@ -1219,15 +1207,26 @@ act_nsend:
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//   Macro MATCH_CONST const, label
+//   Macro CHECK_CONFIG cfg, rpn
 //
-//   Check whether W0 matches the value CONST.  If so, jump to LABEL, otherwise
-//   continue after the macro.  CONST must be in the 0-31 range.
+//   CFG is the bus configuration ID, one of UART_BUS_xxx.  RPN is the RPn or
+//   RPIn remappable pin number to use for input with the indicated bus
+//   bus configuration.  If W0 matches the bus configuration ID and RPN is
+//   valid, then RPN is loaded into W1 and execution jumps to SBUS_SET.
+//   Otherwise, execution falls thru this macro.
 //
-/macro match_const
-  /var local k integer = [vnl [arg 1]] ;constant value
-         cp      w0, #[v k]
-         bra     z, [arg 2]
+/macro check_config
+  /var local cfg integer = [vnl [arg 1]]
+  /var local rpn integer = [vnl [arg 2]]
+
+  /if [= rpn 0] then         ;not input pin defined for this configuration ?
+    /quitmac
+    /endif
+
+  /write
+         mov     #[v rpn], w1 ;get RPn pin number for this config
+         cp      w0, #[v cfg]
+         bra     z, sbus_set ;is this config ?
   /endmac
 
 ;*******************************************************************************
@@ -1238,36 +1237,10 @@ act_nsend:
 ;
          glbsubd uart[chars uname]_bus_set, regf0 | regf1
 
-         match_const uart_bus_232, sbus_232 ;RS-232 ?
-         match_const uart_bus_485_2, sbus_485_2 ;RS-485 2-wire ?
-         match_const uart_bus_485_4, sbus_485_4 ;RS-485 4-wire ?
-         jump    sbus_leave  ;invalid bus configuration ID, ignore
-
-sbus_232:                    ;RS-232
-/if [exist "rpin_232:vcon"]
-  /then
-         mov     #[v rpin_232], w1
-         jump    sbus_set
-  /else
-         jump    sbus_leave  ;invalid bus configuration ID, ignore
-  /endif
-
-sbus_485_2:                  ;RS-485, 2-wire
-/if [exist "rpin_2wire:vcon"]
-  /then
-         mov     #[v rpin_2wire], w1
-         jump    sbus_set
-  /else
-         jump    sbus_leave  ;invalid bus configuration ID, ignore
-  /endif
-
-sbus_485_4:                  ;RS-485, 4-wire
-/if [exist "rpin_4wire:vcon"]
-  /then
-         mov     #[v rpin_4wire], w1
-  /else
-         jump    sbus_leave  ;invalid bus configuration ID, ignore
-  /endif
+         check_config uart_bus_232, rpin_232
+         check_config uart_bus_485_2, rpin_2wire
+         check_config uart_bus_485_4, rpin_4wire
+         jump    sbus_leave
 ;
 ;   The 0-N bus ID is in W0, and the RPn pin number to use for the UART input is
 ;   in W1.
@@ -1339,6 +1312,19 @@ mast_leave:
          mov     #1, w0      ;no, indicate master
 
          leaverest
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro MATCH_CONST const, label
+//
+//   Check whether W0 matches the value CONST.  If so, jump to LABEL, otherwise
+//   continue after the macro.  CONST must be in the 0-31 range.
+//
+/macro match_const
+  /var local k integer = [vnl [arg 1]] ;constant value
+         cp      w0, #[v k]
+         bra     z, [arg 2]
+  /endmac
 
 ;*******************************************************************************
 ;
@@ -1514,7 +1500,7 @@ par_leave:
 ;     TICKTXGAP = MINTXGAP * W1:W0
 ;
 ;   This will be rounded up and 1 added to make the minimum number of ticks to
-;   to wait to guarantee the specified time has elapsed.
+;   wait to guarantee the specified time has elapsed.
 ;
          fpload  w2, [v mintxgap]
          gcall   fp32f_mul   ;make FP ticks in time interval
@@ -1532,7 +1518,7 @@ par_leave:
 ;     TICKRXGAP = MINRXGAP * W5:W4
 ;
 ;   This will be rounded up and 1 added to make the minimum number of ticks to
-;   to occur to guarantee the specified time has elapsed.
+;   occur to guarantee the specified time has elapsed.
 ;
          mov.d   w4, w0      ;get ticks per character
          fpload  w2, [v minrxgap] ;get time in numbers of characters
