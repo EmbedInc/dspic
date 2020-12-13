@@ -93,7 +93,7 @@
 ;
 ;   The 0-255 byte value is returned as a whole word.
 ;
-         glbsubc buf_get8u
+         glbsubd buf_get8u
 ;
 ;   Register contents:
 ;
@@ -156,13 +156,13 @@ bget8_ret:                   ;return the value in W2
 ;
          push    w0          ;temp save registers
          push    w1
-         mcall   _buf_get8u  ;read high byte into W0
+         mcall   buf_get8u   ;read high byte into W0
          sl      w0, #8, w2  ;get high byte into position, save in W2
          pop     w1          ;restore original W0, W1
          pop     w0
 
          push    w2          ;save word with high byte
-         mcall   _buf_get8u  ;read low byte into W0
+         mcall   buf_get8u   ;read low byte into W0
          pop     w1          ;get high byte into w1
          ior     w0, w1, w0  ;make full word value in W0
 
