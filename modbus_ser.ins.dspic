@@ -932,7 +932,7 @@ prel_leave:
 ;   If this device is a Modbus master, then the packet address is passed in W0.
 ;
 ;   It is permissible for multiple tasks to call this routine asynchronously.  A
-;   internal mutex is used to guarantee only a single task is sendin a single
+;   internal mutex is used to guarantee only a single task is sending a single
 ;   packet at a time, while all other tasks are stalled awaiting their turn.
 ;   The callback routines are called with the mutex held.
 ;
