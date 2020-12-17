@@ -114,7 +114,7 @@ alloc    cfgadr, 4           ;NV mem address of our config data
          ;   documented for MODBUS_STATS.
          ;
 stats:
-alloc    recv_total, 4       ;total received packets
+alloc    recv_total, 4       ;total valid received packets
 alloc    recv_broadcast, 4   ;broadcast packets received (slave only)
 alloc    recv_mine, 4        ;packets received for this address (slave only)
 alloc    err_crc, 4          ;packets rejected due to CRC error
@@ -1029,8 +1029,14 @@ pput_byte:                   ;back here each new data byte
          bset    activity, #modbus_ev_sbyte ;packet byte sent event
          lsr     w4, #8, w0  ;send CRC high byte
          gcall   uart[chars uname]_put
+;
+;   The packet has been sent.  Update the statistics and release the sending
+;   lock.
+;
          bset    activity, #modbus_ev_sbyte ;packet byte sent event
          bset    activity, #modbus_ev_spack ;whole packet sent event
+         inc_stat send_total ;count one more packet sent
+
          bclr    flags, #flg_slock ;release the packet sending interlock
          gcall   task_yield_save ;give other tasks a chance to run with lock released
 
