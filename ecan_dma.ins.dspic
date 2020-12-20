@@ -76,23 +76,6 @@
          .end
   /stop
   /endif
-;
-;   Create the constant MDEV according to whether this module is a MDEV, as
-;   opposed to a fixed module.
-;
-/block
-  /var local b bool = false  ;init to fixed module, not MDEV
-  /block
-    /if [not [exist "cfg_can:const"]] then
-      /quit
-      /endif
-    /if [<> [sym "cfg_can:const" dtype] "INTEGER"] then
-      /quit
-      /endif
-    /set b true              ;is MDEV
-    /endblock
-  /const mdev bool = b       ;create final MDEV constant
-  /endblock
 
 .equiv   stacksz, 128        ;CAN receiving task stack size
 /const   fcanclk real = freq_inst ;clock to CAN module, bit rate generator input
@@ -106,6 +89,21 @@
   /else                      ;need to add unique name to exported symbols
     /const nam string = [str "_" name]
   /endif
+
+/block
+  /var local b bool = false  ;init to fixed module, not MDEV
+  /var local k string = [str "cfg_can" nam ":const"] ;name of CFG_xxx constant
+  /block
+    /if [not [exist k]] then
+      /quit
+      /endif
+    /if [<> [sym k dtype] "INTEGER"] then
+      /quit
+      /endif
+    /set b true              ;is MDEV
+    /endblock
+  /const mdev bool = b       ;create final MDEV constant
+  /endblock
 
 /call can_timing [v bitrate] ;compute CAN bit timing setup
 /const   bufnb   integer = [* bufnw 2] ;bytes in one CAN message buffer
@@ -248,7 +246,7 @@
 ;
 ;   Global state.
 ;
-.section .ram_can, bss
+.section .ram_[Can], bss
          ;
          ;   Received CAN frame buffer.
          ;
@@ -268,7 +266,7 @@ allocg   [Canin]_d7, 1
 ;
 ;   Local state.
 ;
-alloc    stack_can, stacksz, 2 ;CAN receiving task stack
+alloc    stack_[Can], stacksz, 2 ;CAN receiving task stack
          ;
          ;   Info about the transmit frame being built.
          ;
@@ -283,7 +281,7 @@ alloc    wr_dat5, 1
 alloc    wr_dat6, 1
 alloc    wr_dat7, 1
 
-.section .near_can, bss, near
+.section .near_[Can], bss, near
 
 alloc    canflags            ;local flag bits, use FLG_xxx bit numbers
 
@@ -326,7 +324,7 @@ alloc    canbuf[v ii]w[v jj]
   /endblock
 
 
-.section .code_can, code
+.section .code_[Can], code
 ;*******************************************************************************
 ;
 ;   Subroutine CAN_INIT
@@ -650,7 +648,7 @@ done\@:
 ;   Start the CAN frames receiving task.
 ;
          mov     #stacksz, w13 ;pass new task stack size
-         mov     #stack_can, w14 ;pass stack start address
+         mov     #stack_[Can], w14 ;pass stack start address
          call    task_new    ;create CAN frames receiving task
          goto    can_task    ;go to execution start of the new task
 
@@ -1141,7 +1139,7 @@ cant_rbufrdy:                ;the software receive buffer is ready for new frame
 ;   Send CAN standard data frame.  The frame ID is in NID<10:0> and the number
 ;   of data bytes in NID<14:11>.
 ;
-/if [Command cm_cansd] then
+/if [Command cm[chars nam]_cansd] then
 ;
 ;   Read the whole command.
 ;
@@ -1188,7 +1186,7 @@ sends_dbytes:                ;done writing all data bytes
 ;
 ;   Send CAN standard remote request frame.
 ;
-/if [Command cm_cansr] then
+/if [Command cm[chars nam]_cansr] then
          gcall   cmd_get16   ;get the frame ID into W1
          mov     w0, w1
          skip_flag canrun[chars nam] ;CAN interface is up ?
@@ -1209,7 +1207,7 @@ sends_dbytes:                ;done writing all data bytes
 ;
 ;   Send CAN extended data frame.
 ;
-/if [Command cm_caned] then
+/if [Command cm[chars nam]_caned] then
          gcall   cmd_get32   ;get the frame ID into W1:W0
          mov.d   w0, w2      ;save it in W3:W2
          gcall   cmd_get8    ;get the number of data bytes
@@ -1250,7 +1248,7 @@ sende_dbytes:                ;done writing all data bytes
 ;
 ;   Send CAN extended remote request frame.
 ;
-/if [Command cm_caner] then
+/if [Command cm[chars nam]_caner] then
          gcall   cmd_get32   ;get the frame ID into W1:W0
          mov     w0, w2      ;save it in W1:W2
          skip_flag canrun[chars nam] ;CAN interface is up ?
