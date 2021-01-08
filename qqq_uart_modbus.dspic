@@ -278,6 +278,7 @@
 /const   flag_run = ""       ;flag to set when up and running
 
 /const   name    string = "" ;unique name for exported symbols, may be empty
+/const   notmdev bool = false ;allow MDEV if CFG constant exists
 /const   un      integer = 1 ;1-N number of UART handled by this module
 /const   baud    real = 19200 ;desired baud rate (19200 is Modbus default)
 /const   runtime_baud bool = false ;runtime baud changing, always on for MDEV

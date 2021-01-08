@@ -68,6 +68,10 @@
   /const callback_send string = ""
   /endif
 
+/if [not [exist "notmdev:vcon"]] then
+  /const notmdev bool = false
+  /endif
+
 /if [not [exist "debug_cmddel:vcon"]] then
   /const debug_cmddel bool = false
   /endif
@@ -76,7 +80,19 @@
   /const debug_icd bool = false
   /endif
 
-/const   subsys  bool = [exist "cfg_modbus:const"] ;MDEV configurable subsystem ?
+/if notmdev
+  /then
+    /const subsys bool = false
+  /else
+    /const subsys bool = [exist "cfg_modbus:const"] ;MDEV configurable subsystem ?
+  /endif
+
+/if subsys
+  /then
+    /show "  Configured as MDEV."
+  /else
+    /show "  Configured as fixed module, not MDEV."
+  /endif
 
 ;*******************************************************************************
 ;

@@ -215,6 +215,7 @@
 ;   Configuration constants.
 ;
 /const   name    string = "" ;unique name for exported symbols, may be empty
+/const   notmdev bool = false ;allow MDEV if CFG constant exists
 /const   master  bool = false ;we are not the bus master
 /const   startchar string = "" ;no additional char preceeding all packets
 /const   callback_recv string = "" ;no routine to call on packet received

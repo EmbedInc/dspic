@@ -54,6 +54,10 @@
     /const uname string = [str "_" name]
   /endif
 
+/if [not [exist "notmdev:vcon"]] then
+  /const notmdev bool = false
+  /endif
+
 ;   Create the constant MDEV according to whether this module is a MDEV, as
 ;   opposed to a fixed module.
 ;
@@ -61,6 +65,9 @@
   /var local b bool = false  ;init to fixed module, not MDEV
   /var local sym string = "cfg_uart_modbus:const"
   /block
+    /if notmdev then
+      /quit
+      /endif
     /if [not [exist sym]] then
       /quit
       /endif
@@ -135,7 +142,7 @@
   /endif
 /if [<> lready ""] then
   /if [>= lready_n fifoi_sz] then
-    /show "  LREADY_N not less input FIFO size"
+    /show "  LREADY_N not less than input FIFO size"
          .error  "LREADY_N"
     /stop
     /endif

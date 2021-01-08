@@ -2107,36 +2107,36 @@ _\name:
 //   where <suff> indicates the contents of the SUFF variable or constant.
 //
 /function CmdRef
-/var local ent string = [qstr [arg 1]] //entry point name checking for
-/var local opc integer //command opcode
-/var local entpnt string //command routine entry point name
-/var local retval bool //function return value
-/var local ii integer //scratch integer
-/var local tk string //scratch token
-/if [not [exist "suff:vcon"]] then
-  /var local suff string
-  /endif
+  /var local ent string = [qstr [arg 1]] //entry point name checking for
+  /var local opc integer //command opcode
+  /var local entpnt string //command routine entry point name
+  /var local retval bool //function return value
+  /var local ii integer //scratch integer
+  /var local tk string //scratch token
+  /if [not [exist "suff:vcon"]] then
+    /var local suff string
+    /endif
 
-/set tk [str "cmd" suff "_"] //starting fixed part of CMD_xxx names
-/set ii [slen tk] //length of fixed part of CMD_xxx names
-/loop symbols sym vcon
-  /var local sy string
-  /set sy [sym sym name]
-  /if [<= [slen sy] ii] then
-    /repeat
-    /endif
-  /if [<> [substr 1 ii sy] tk] then
-    /repeat
-    /endif
-  /call parse_cmd [chars sym] [chars suff] //get entry point of this command
-  /if [= entpnt ent] then
-    /set retval True
-    /quit
-    /endif
-  /endloop
+  /set tk [str "cmd" suff "_"] //starting fixed part of CMD_xxx names
+  /set ii [slen tk] //length of fixed part of CMD_xxx names
+  /loop symbols sym vcon
+    /var local sy string
+    /set sy [sym sym name]
+    /if [<= [slen sy] ii] then
+      /repeat
+      /endif
+    /if [<> [substr 1 ii sy] tk] then
+      /repeat
+      /endif
+    /call parse_cmd [chars sym] [chars suff] //get entry point of this command
+    /if [= entpnt ent] then
+      /set retval True
+      /quit
+      /endif
+    /endloop
 
-/funcval retval
-/endfunc
+  /funcval retval
+  /endfunc
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -2147,14 +2147,14 @@ _\name:
 //   defined.  ENTPNT is a sequence of characters, not a string.
 //
 /function Command
-/if [CmdRef [arg 1]]
-  /then
-    /funcval TRUE
+  /if [CmdRef [arg 1]]
+    /then
+      /funcval TRUE
          glbent  [arg 1]
-  /else
-    /funcval FALSE
-  /endif
-/endfunc
+    /else
+      /funcval FALSE
+    /endif
+  /endfunc
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -3950,20 +3950,20 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
 //   expressed in Embed format (16#xxx).
 //
 /function fx3f29u
-/var local val real = [vnl [arg 1]] //input argument
-/var local ii integer //integer value of resulting fixed point
+  /var local val real = [vnl [arg 1]] //input argument
+  /var local ii integer //integer value of resulting fixed point
 
-/set val [max 0.0 val] //clip to min possible value
-/if [< val 7.99999]
-  /then
-    /set val [* val 8388608]
-    /set ii [rnd val]
-    /set ii [shiftl ii 6]
-    /funcval "16#" [int ii "fw 8 lz base 16 usin"]
-  /else
-    /funcval "16#FFFFFFFF"
-  /endif
-/endfunc
+  /set val [max 0.0 val] //clip to min possible value
+  /if [< val 7.99999]
+    /then
+      /set val [* val 8388608]
+      /set ii [rnd val]
+      /set ii [shiftl ii 6]
+      /funcval "16#" [int ii "fw 8 lz base 16 usin"]
+    /else
+      /funcval "16#FFFFFFFF"
+    /endif
+  /endfunc
 
 ;*******************************************************************************
 ;
