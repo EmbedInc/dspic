@@ -94,14 +94,19 @@ sertest_task_start:          ;task execution start point
 
 tsk_loop:                    ;start of main operating loop
          gcall   uart[chars uname]_get ;get next serial input event
-         mov     w0, w1      ;save the event info in W1
 
+  /if [exist "rsp_serevent:vcon"]
+    /then
+         mov     w0, w1      ;save the event info in W1
          gcall   cmd_lock_out ;acquire lock on config port response stream
          mov     #[v rsp_serevent], w0
          gcall   cmd_put8    ;send SEREVEVENT response opcode
          mov     w1, w0
          gcall   cmd_put16   ;send event descriptor
          gcall   cmd_unlock_out ;release lock on config port response stream
+    /else
+      /show "  SEREVENT command not defined."
+    /endif
 
          jump    tsk_loop
   /endif
@@ -113,7 +118,8 @@ tsk_loop:                    ;start of main operating loop
 ;   Send bytes out the serial interface.  N is the number of bytes to send minus
 ;   1.  Exactly N+1 data bytes follow N.
 ;
-/if [Command cm_sersend] then
+/if [Command cm_sersend]
+  /then
          gcall   cmd_get8    ;get the number of data bytes into W0
          add     #1, w0
          gcall   cmd_putbufn ;read the data bytes into the scratch buffer
@@ -129,6 +135,8 @@ ssend_byte:                  ;back here to send each new byte
          gcall   uart[chars uname]_unlock ;release lock on the serial output
 
          return
+  /else
+    /show "  SERSEND command not defined."
   /endif
 
 .end

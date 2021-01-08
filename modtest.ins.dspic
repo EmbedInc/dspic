@@ -117,6 +117,8 @@ tsk_loop:                    ;start of main operating loop
 ;
 ;     W3  -  Packet address.
 ;
+  /if [exist "rsp_modpack:vcon"]
+    /then
          gcall   cmd_lock_out ;acquire lock on config port response stream
          mov     #[v rsp_modpack], w0
          gcall   cmd_put8    ;send MODPACK response opcode
@@ -134,6 +136,9 @@ tsk_byte:                    ;back here each new data byte
          bra     nz, tsk_byte ;back for the next data byte
 
          gcall   cmd_unlock_out ;release lock on config port response stream
+    /else
+      /show "  MODPACK response not defined."
+    /endif
 
          gcall   modbus[chars uname]_pack_release ;done with this received packet
          jump    tsk_loop    ;back to get next packet
@@ -146,7 +151,8 @@ tsk_byte:                    ;back here each new data byte
 ;   Send Modbus packet.  ADR is the address.  N is the number of packet bytes
 ;   minus 1.
 ;
-/if [Command cm_modsend] then
+/if [Command cm_modsend]
+  /then
          gcall   cmd_get8    ;get the packet address into W3
          mov     w0, w3
 
@@ -158,4 +164,6 @@ tsk_byte:                    ;back here each new data byte
          mov     #cmdbuf, w1 ;pass pointer to start of packet data
          mov     ncmdbuf, w2 ;pass number of packet data bytes
          gjump   modbus[chars uname]_pack_put ;send the packet, end the command
+  /else
+    /show "  MODSEND command not defined."
   /endif

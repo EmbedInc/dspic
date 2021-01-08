@@ -161,8 +161,8 @@
   /const runtime_baud bool = mdev
   /endif
 /if [and mdev [not runtime_baud]] then
-  /del vcon runtime_baud
-  /const runtime_baud bool true
+  /del vcon "runtime_baud"
+  /const runtime_baud bool = true
   /endif
 
 /var new s string
