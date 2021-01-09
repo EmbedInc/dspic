@@ -965,7 +965,7 @@ s0_stat:                     ;status code is in W1
 ;   this routine is intended to be called from the main system configuration
 ;   routine.
 ;
-;   When MDEBUILD is in use, then the application calls CONFIG_MDEVS instead of
+;   When MDEVBUILD is in use, then the application calls CONFIG_MDEVS instead of
 ;   this routine separately.  In that case, this routine is private to this
 ;   module, called from CONFIG_MDEVS.
 ;
