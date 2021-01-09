@@ -105,7 +105,7 @@ tsk_loop:                    ;start of main operating loop
          gcall   cmd_put16   ;send event descriptor
          gcall   cmd_unlock_out ;release lock on config port response stream
     /else
-      /show "  SEREVENT command not defined."
+      /show "  SEREVENT response not defined."
     /endif
 
          jump    tsk_loop
