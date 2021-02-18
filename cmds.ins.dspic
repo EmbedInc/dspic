@@ -528,3 +528,32 @@ allocg   stop_leave          ;number of tasks for STOP command to leave
          gcall   [chars cmd]_put8 ;send NTASKS parameter
          return
   /endif
+
+;*******************************************************************************
+;
+;   Command RDRAM adr n
+;
+;   Read the contents of the N+1 RAM words, starting at address ADR.  ADR is
+;   16 bits.  Sends response for each word:
+;
+;     RDRAM adr val
+;
+/if [Command cm_rdram] then
+         gcall   cmd_get16   ;get starting address into W1
+         mov     w0, w1
+         gcall   cmd_get8    ;get number of words to read into W2
+         add     w0, #1, w2
+
+         gcall   cmd_lock_out ;acquire exclusive lock on the response stream
+rdram_word:                  ;back here to send each new word
+         mov     #[v rsp_rdram], w0 ;send RDRAM response opcode
+         gcall   cmd_put8
+         mov     w1, w0      ;send the address of this word
+         gcall   cmd_put16
+         mov     [w1++], w0  ;fetch this word, advance address to next
+         gcall   cmd_put16   ;send this data word
+         sub     #1, w2      ;count one less word left to send
+         bra     nz, rdram_word ;back to send next word
+
+         return
+  /endif
