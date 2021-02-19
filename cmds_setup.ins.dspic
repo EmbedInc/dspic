@@ -2,5 +2,11 @@
 ;   the CMDS library file.  This file is intended to be included from the main
 ;   include file of a project using the CMDS library module.
 ;
-/flag    usb_host            ;host may be connected to USB
-/flag    usb_app             ;app may have logical connection over the USB
+/if [CmdRef cm_ustat] then
+  /flag usb_host             ;host may be connected to USB
+  /flag usb_app              ;app may have logical connection over the USB
+  /endif
+
+/if [CmdRef cm_reconfig] then
+  /flag reconfig             ;cause main task to do reconfiguration
+  /endif

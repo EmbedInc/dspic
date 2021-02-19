@@ -557,3 +557,18 @@ rdram_word:                  ;back here to send each new word
 
          return
   /endif
+
+;*******************************************************************************
+;
+;   Command RECONFIG
+;
+;   Cause all the configurable modules to be stopped and reconfigured to the
+;   current configuration data.
+;
+;   Enabling this command automatically causes the global flag RECONFIG to be
+;   defined.
+;
+/if [Command cm_reconfig] then
+         setflag reconfig    ;cause the main task to do reconfiguration soon
+         return
+  /endif
