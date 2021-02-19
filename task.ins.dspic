@@ -824,3 +824,27 @@ tn_adreven:                  ;the stack start is word-aligned
          leaverest
 
   /endif                     ;end of XC16 is in use case
+
+;*******************************************************************************
+;
+;   Command NTASKS, subroutine TASK_SEND_NTASKS
+;
+;   Get the number of tasks currently defined.  Send the response:
+;
+;     NTASKS max curr
+;
+/if [Command cm_ntasks] then
+         glbsub  task_send_ntasks, regf0
+
+         gcall   cmd_lock_out ;acquire lock on response stream
+
+         mov     #[v rsp_ntasks], w0
+         gcall   cmd_put8    ;send NTASKS response opcode
+         mov     #[v maxtasks], w0
+         gcall   cmd_put8    ;send maximum tasks configured for
+         mcall   task_n_curr
+         gcall   cmd_put8    ;send number of tasks currently defined
+
+         gcall   cmd_unlock_out ;release lock on the response stream
+         leaverest
+  /endif
