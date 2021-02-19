@@ -27,7 +27,7 @@
 ;     permanent chunk is allocated.  No information is kept on the location and
 ;     size of individual permanent chunks.  Once a permanent chunk is allocated,
 ;     its memory is effectively no longer part of the heap, and specific
-;     information about the chunk are lost.
+;     information about the chunk is lost.
 ;
 ;     Two local variables are used to describe the permanent pool:
 ;
@@ -90,7 +90,7 @@
 ;     If there is no gap that is large enough, then the new memory is allocated
 ;     from the permanent pool.  The size of the permanent pool is decreased
 ;     accordingly.  When the first (lowest address) temporary block is
-;     deallocated, its memory is returned to the temporary pool.
+;     deallocated, its memory is returned to the permanent pool.
 ;
 ;     The new block is always taken from the end (high addresses) of whatever
 ;     region it is allocated from.
@@ -216,16 +216,42 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;
 ;   Find the heap size, and initialize all of it to the permanent pool.
 ;
-         mov     #0, w2      ;init to no heap
-         mov     w2, permlen
-         mov     w2, tempadr
+         mov     #0, w2
+         mov     w2, tempadr ;init to no temporarily allocated memory
+         mov     w2, permlen ;init heap size to 0
 
          sub     w1, w0, w1  ;last word adr minus first word adr
          bra     ltu, ini_leave ;flipped, no heap at all ?
          add     #2, w1      ;make size of the whole heap in bytes
-         mov     w1, permlen ;init all mem ot the permanent pool
+         mov     w1, permlen ;init all mem to the permanent pool
 
 ini_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DYMEM_RESET
+;
+;   Reset to the original heap before any allocations.  This essentially
+;   deallocates all dynamically allocated memory, both temporary and permanent.
+;
+         glbsub  dymem_reset, regf0 | regf1
+
+         lock                ;get exclusive access to the heap structures
+
+         mov     heapstart, w0
+         mov     w0, permstart ;reset start of permanent pool
+         mov     #0, w1
+         mov     w1, tempadr ;reset to no temporary blocks allocated
+
+         mov     heaplast, w1 ;get address of last heap word
+         add     #2, w1      ;make first address past heap end
+         sub     w1, w0, w0  ;make length of heap
+         skip_geu            ;didn't go negative ?
+         mov     #0, w0      ;end is before start, set length to 0
+         mov     w0, permlen ;set length in bytes of the permanent pool
+
+         unlock              ;release lock on the heap structures
          leaverest
 
 ;*******************************************************************************

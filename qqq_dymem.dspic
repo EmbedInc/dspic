@@ -82,6 +82,14 @@
 ;       address somewhere inside a temporarily-allocated block of dynamic
 ;       memory.
 ;
+;     DYMEM_RESET
+;
+;       Reset the dynamic memory system to the state it was in immediately after
+;       initialization.  All dynamically allocated memory, both temporary and
+;       permanent, will be deallocated.  Any pointers to dynamically allocated
+;       memory must be considered invalid.  The full original heap will again be
+;       available for new allocations.
+;
 ;     DYMEM_SEND
 ;
 ;       Send a series of DYMEM responses indicating the current state of the
