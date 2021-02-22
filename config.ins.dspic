@@ -1040,6 +1040,28 @@ cmdevs_done:                 ;done calling all configuration routines
 
 ;*******************************************************************************
 ;
+;   Subroutine DECONFIG_MDEVS
+;
+;   Call the de-config entry points of all MDEVs that have them.
+;
+/if mdevbuild then
+         glbsub  deconfig_mdevs
+  /block
+    /var local tnam string
+    /set tnam [tnam fwname "_deconfig_mdevs.ins.dspic"]
+    /if [not [exist tnam fnam]] then
+      /show "  *** ERROR: File " tnam " does not exist."
+         .error  "Deconfig missing"
+         .end
+      /stop
+      /endif
+    /include tnam
+         leaverest
+    /endblock
+  /endif
+
+;*******************************************************************************
+;
 ;   Command CFGOVR0 dat
 ;
 ;   Overrides the configuration data for subsystem 0.  DAT will be the single
