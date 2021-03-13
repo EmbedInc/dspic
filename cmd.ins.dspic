@@ -407,11 +407,14 @@ lckn_no:                     ;there is insufficient room
 /if [exist "putbyte:macro"]
   /then                      ;use custom macro
          putbyte
-
-         leaverest
   /else                      ;no macro
-         gjump   [chars uart]_put ;write the byte to the UART, return to caller
+         gcall   [chars uart]_put ;write the byte to the UART
   /endif
+
+/if [exist "sentbyte:macro"] then
+         sentbyte
+  /endif
+         leaverest
 
 ;*******************************************************************************
 ;

@@ -274,6 +274,10 @@
 ;       Send the byte in the low 8 bits of W0 to the response stream.  The
 ;       default is to call UART_PUT, as customized by UART_NAME.
 ;
+;     macro SENTBYTE
+;
+;       Invoked after each response stream byte is sent.
+;
 ;     macro PUTROOM
 ;
 ;       Get the maximum guaranteed number of bytes that can be written
@@ -389,6 +393,15 @@
 //   registers are preserved.
 //
 //macro putbyte
+//  endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro SENTBYTE
+//
+//   A response stream byte was just sent.  The byte value is in W0.
+//
+//macro sentbyte
 //  endmac
 
 ////////////////////////////////////////////////////////////////////////////////
