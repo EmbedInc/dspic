@@ -15,19 +15,18 @@
 ;   ***************************************************************
 ;
 ;   Standard include file assumed by most dsPIC source modules.  The specifics
-;   must be configured to the particular processor and application.  This
-;   is done by setting assembly values before this file is included.  The
-;   include file STD_DEF.INS.DSPIC is provided to set defaults for all
-;   the required assembly values.  An application should include STD_DEF.INS.DSPIC,
-;   then set any values it knows and cares about, then include STD.INS.DSPIC.
-;   In this way, applications are protected from changes to this include
-;   file that may require additional values to be set.
+;   must be configured to the particular processor and application.  This is
+;   done by setting assembly values before this file is included.  The include
+;   file STD_DEF.INS.DSPIC is provided to set defaults for all the required
+;   assembly values.  An application should include STD_DEF.INS.DSPIC, then set
+;   any values it knows and cares about, then include STD.INS.DSPIC.  In this
+;   way, applications are protected from changes to this include file that may
+;   require additional values to be set.
 ;
 ;   The following preprocessor symbols may be defined before this file.
 ;
-;     FREQ_OSC  -  Processor oscillator frequency in Hz.  This is the
-;       effective oscillator frequency after the PLL, if enabled, is
-;       applied.  Required.
+;     FREQ_OSC  -  Processor oscillator frequency in Hz.  This is the effective
+;       oscillator frequency after the PLL, if enabled, is applied.  Required.
 ;
 ;     FREQ_INST  -  Instruction cycle frequency in Hz.  The default is
 ;       FREQ_OSC / 4.
@@ -40,7 +39,8 @@
 ;       instead of the C30 compiler.
 ;
 
-////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Set up the debugging environment.
 //
@@ -110,7 +110,7 @@
 .equiv   debug,  [if debugging 1 0]
 .equiv   debug_icd, [if debug_icd 1 0]
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Set up other constants.
 //
@@ -137,11 +137,14 @@
 .equiv   freq_osc, [rnd freq_osc] ;final oscillator frequency in Hz
 .equiv   freq_inst, [rnd freq_inst] ;instruction cycle frequency in Hz
 
+
+;*******************************************************************************
 ;*******************************************************************************
 ;
-;   General utility macros.
+;   Skip and branch macros.
 ;
-;********************
+
+;*******************************************************************************
 ;
 ;   Macro NOSKID
 ;
@@ -152,7 +155,7 @@
     .endif
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SKIP_Z
 ;
@@ -162,7 +165,7 @@
          btss    Sr, #Z
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SKIP_NZ
 ;
@@ -172,29 +175,29 @@
          btsc    Sr, #Z
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro BRA_BORR target
 ;
-;   Branch to TARGET if the last arthmetic operation resulted in a
-;   borrow (C flag not set).
+;   Branch to TARGET if the last arthmetic operation resulted in a borrow (C
+;   flag not set).
 ;
 .macro bra_borr target
          bra     nc, \target
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro BRA_NBORR target
 ;
-;   Branch to TARGET if the last arthmetic operation did not result in a
-;   borrow (C flag set).
+;   Branch to TARGET if the last arthmetic operation did not result in a borrow
+;   (C flag set).
 ;
 .macro bra_nborr target
          bra     c, \target
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SKIP_BORR
 ;
@@ -205,7 +208,7 @@
          btsc    Sr, #C
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SKIP_NBORR
 ;
@@ -216,18 +219,18 @@
          btss    Sr, #C
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro BRA_CARR target
 ;
-;   Branch to TARGET if the last arthmetic operation resulted in a
-;   carry (C flag set).
+;   Branch to TARGET if the last arthmetic operation resulted in a carry (C flag
+;   set).
 ;
 .macro bra_carr target
          bra     c, \target
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro BRA_NCARR target
 ;
@@ -238,7 +241,7 @@
          bra     nc, \target
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SKIP_CARR
 ;
@@ -249,7 +252,7 @@
          btss    Sr, #C
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SKIP_NCARR
 ;
@@ -260,7 +263,7 @@
          btsc    Sr, #C
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SKIP_xxx
 ;
@@ -324,7 +327,7 @@
          bra     nov, $+4
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SETVAR val, var
 ;
@@ -337,7 +340,7 @@
          mov     w0, \var
   .endm
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro SHIFTRA32 Wh, Wl, Ws, N
 //
@@ -382,7 +385,7 @@
   /write
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro SHIFTRA32L Wh, Wl, N
 //
@@ -423,7 +426,7 @@
   /write
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro SHIFTRL32 Wh, Wl, Ws, N
 //
@@ -468,7 +471,7 @@
   /write
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro SHIFTRL32L Wh, Wl, N
 //
@@ -509,7 +512,7 @@
   /write
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro ADD_HALF Wd, Ws, N
 //
@@ -534,7 +537,7 @@
     /endif
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro ADD_HALF32 Wh, wl, Ws, N
 //
@@ -566,7 +569,7 @@
       /endif
     /quitmac
     /endif
-
+//
 //   The constant must be added to the low word with the carry added to the high
 //   word.
 //
@@ -581,7 +584,7 @@
 
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine SHIFTL_MULT16U m
 //
@@ -640,11 +643,11 @@
 //   input value by a 16 bit unsigned scale factor, leaving the result in the
 //   high word of the 32 bit unsigned integer product.
 //
-//   In case a 16 bit scale factor is insufficient (RESULT > INPUT), a
-//   shift count is generated that indicates how many bits to shift the result
-//   left after multiply by a suitable scale factor.  In the special case of
-//   RESULT = INPUT, no actual multiply will be performed.  The input value will
-//   be loaded into the high word of the result.
+//   In case a 16 bit scale factor is insufficient (RESULT > INPUT), a shift
+//   count is generated that indicates how many bits to shift the result left
+//   after multiply by a suitable scale factor.  In the special case of RESULT =
+//   INPUT, no actual multiply will be performed.  The input value will be
+//   loaded into the high word of the result.
 //
 //   This subroutine creates or sets the following variables:
 //
@@ -673,11 +676,7 @@
   /var exist [chars name]_mult integer ;final integer mult factor
   /var exist [chars name]_shiftl integer ;bits to shift product left
 
-
-
   /write ";   SCALE_CONFIG " res " " inp " " name
-
-
 
   /set r [* [/ res inp] 65536.0] ;scale factor for result in product high word
   /set jj 0                  ;init number of bits to shift product left
@@ -812,7 +811,7 @@
     /endif
   /endmac
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro INTR_PRIORITY reg, bit, prio
 ;
@@ -831,33 +830,33 @@
          mov     w0, \reg    ;update priority register with the new value
   .endm
 
-;********************
-;
-;   Subroutine FP48_MAKE val
-;
-;   Converts VAL to 48 bit floating point.  VAL must be convertable to a
-;   preprocessor floating point value.  The integer preprocessor variables
-;   FP48_EXP and FP48_MANT are set to the exponent word and mantissa,
-;   respectively.
-;
-;   The exponent word is 16 bits wide with the high bit being the overall sign
-;   bit.  0 is positive and 1 negative.  The low 15 bits of the exponent word
-;   are the power of 2 exponent to apply to the mantissa value plus 16384.  For
-;   example, if the low 15 bits have a value of 16385, then 2^1 is to be applied
-;   to the mantissa value.  Likewise, 16381 specifies to apply 2^-3.
-;
-;   The mantissa is 32 bits wide.  Its value is as if the binary point and then
-;   a 1 bit were immediately to its left.  For example, the mantissa value of
-;   3456789Ah is to be interpreted as the hexadecimal fixed point value
-;   1.3456789A, which has a decimal value of about 1.204444.  The mantissa value
-;   is therefore always from 1 up to but not including 2.
-;
-;   The overal floating point value is the mantissa value times the power of
-;   2 indicated by the exponent, and the sign indicated by the high bit of the
-;   exponent word.
-;
-;   The special case of 0 is represented by all 48 bits 0.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine FP48_MAKE val
+//
+//   Converts VAL to 48 bit floating point.  VAL must be convertable to a
+//   preprocessor floating point value.  The integer preprocessor variables
+//   FP48_EXP and FP48_MANT are set to the exponent word and mantissa,
+//   respectively.
+//
+//   The exponent word is 16 bits wide with the high bit being the overall sign
+//   bit.  0 is positive and 1 negative.  The low 15 bits of the exponent word
+//   are the power of 2 exponent to apply to the mantissa value plus 16384.  For
+//   example, if the low 15 bits have a value of 16385, then 2^1 is to be
+//   applied to the mantissa value.  Likewise, 16381 specifies to apply 2^-3.
+//
+//   The mantissa is 32 bits wide.  Its value is as if the binary point and then
+//   a 1 bit were immediately to its left.  For example, the mantissa value of
+//   3456789Ah is to be interpreted as the hexadecimal fixed point value
+//   1.3456789A, which has a decimal value of about 1.204444.  The mantissa
+//   value is therefore always from 1 up to but not including 2.
+//
+//   The overal floating point value is the mantissa value times the power of 2
+//   indicated by the exponent, and the sign indicated by the high bit of the
+//   exponent word.
+//
+//   The special case of 0 is represented by all 48 bits 0.
+//
 /subroutine fp48_make
   /var exist fp48_exp integer
   /var exist fp48_mant integer
@@ -919,7 +918,7 @@
     /endif
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine GET_WN Wn, var
 //
@@ -949,7 +948,7 @@
   /stop
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro PGMADR Wn, label
 //
@@ -972,15 +971,15 @@
          and     #0x00FF, w[+ wn 1] ;remove control bits, make pure address
   /endmac
 
-;********************
-;
-;   Macro FPLOAD Wn, fpval
-;
-;   Load the floating point constant FPVAL in 32 bit fast format into the
-;   register pair starting at Wn.  N must be in the range of 0 to 13, which
-;   allows the register pairs from W1:W0 to W14:W13 to be loaded.  This macro
-;   specifically refuses to load W15 (the stack pointer).
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro FPLOAD Wn, fpval
+//
+//   Load the floating point constant FPVAL in 32 bit fast format into the
+//   register pair starting at Wn.  N must be in the range of 0 to 13, which
+//   allows the register pairs from W1:W0 to W14:W13 to be loaded.  This macro
+//   specifically refuses to load W15 (the stack pointer).
+//
 /macro fpload
   /if [exist -1 arg] then
     /show "  Dumb place for a label, moron."
@@ -1025,12 +1024,12 @@
          mov     #0x[chars [substr 3 4 [qstr [fp32f fp]]]], w[+ wn 1]
   /endmac
 
-;********************
-;
-;   Macro FPPUT Wn, var
-;
-;   Write the floating point value starting in Wn into memory starting at VAR.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro FPPUT Wn, var
+//
+//   Write the floating point value starting in Wn into memory starting at VAR.
+//
 /macro fpput
   /if [exist -1 arg] then
     /show "  Dumb place for a label, moron."
@@ -1069,13 +1068,13 @@
          mov     w[+ wn 1], [arg 2]+2
   /endmac
 
-;********************
-;
-;   Macro FPGET var, Wn
-;
-;   Get the floating point value from memory starting at VAR into the registers
-;   starting at Wn.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro FPGET var, Wn
+//
+//   Get the floating point value from memory starting at VAR into the registers
+//   starting at Wn.
+//
 /macro fpget
   /if [exist -1 arg] then
     /show "  Dumb place for a label, moron."
@@ -1114,17 +1113,17 @@
          mov     [arg 1]+2, w[+ wn 1]
   /endmac
 
-;********************
-;
-;   Macro [label] EEWORD val, ... val
-;
-;   Define one or more consecutive EEPROM words.  If present, LABEL will be
-;   defined as the label for the first word.  The preprocessor constants
-;   LASTEE and NEXTEE will be updated to be the word offset into the EEPROM of
-;   the last defined and next location, respectively.  These offsets start at 0
-;   and increment by 1 each word (16 bits).  This is different from the program
-;   memory addresses that will be assigned to the label, if present.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro [label] EEWORD val, ... val
+//
+//   Define one or more consecutive EEPROM words.  If present, LABEL will be
+//   defined as the label for the first word.  The preprocessor constants
+//   LASTEE and NEXTEE will be updated to be the word offset into the EEPROM of
+//   the last defined and next location, respectively.  These offsets start at 0
+//   and increment by 1 each word (16 bits).  This is different from the program
+//   memory addresses that will be assigned to the label, if present.
+//
 /var new nextee integer = 0  ;external word address of next EEPROM location
 /var new lastee integer = [- nextee 1] ;external word adr of last defined EEPROM loc
 
@@ -1152,15 +1151,15 @@
          .word   [chars s]
   /endmac
 
-;********************
-;
-;   Macro [label] FPWORDS fp
-;
-;   Define two successive 16 bit words that have the floating point value FP
-;   when interpreted in 32 bit fast floating point format.  This macro is
-;   intended for defining floating point constants in EEPROM.  It expands to
-;   two EEWORD invocations in least to most significant word order.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro [label] FPWORDS fp
+//
+//   Define two successive 16 bit words that have the floating point value FP
+//   when interpreted in 32 bit fast floating point format.  This macro is
+//   intended for defining floating point constants in EEPROM.  It expands to
+//   two EEWORD invocations in least to most significant word order.
+//
 /macro fpwords
   /var local fp real = [arg 1] ;get the floating point value
   /var local ifp integer = [fp32f_int fp] ;FP bits as 32 bit integer
@@ -1190,7 +1189,7 @@
 [chars s]
   /endmac
 
-////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro WAITCY n
 //
@@ -1237,7 +1236,7 @@
   /write
   /endmac
 
-////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro BUSYWAIT time [, cycles]
 //
@@ -1266,7 +1265,7 @@
          waitcy  [v cy]      ;write the instructions to do the wait
   /endmac
 
-////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro MINWAIT time [, cycles]
 //
@@ -1296,7 +1295,7 @@
          waitcy  [v cy]      ;write the instructions to do the wait
   /endmac
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro WAITNOP n
 ;
@@ -1304,17 +1303,15 @@
 ;   Nothing is done if N <= 0.
 ;
 .macro waitnop n
-
   .if \n >> 23
          .exitm              ;abort if N is negative
     .endif
-
 .rept    \n
          nop
          .endr
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro ALLOC name [, size [, align]]
 ;
@@ -1344,7 +1341,7 @@
     .endif
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro ALLOCG name [, size [, align]]
 ;
@@ -1374,19 +1371,19 @@ _\name:
          .global _\name, \name
   .endm
 
-;********************
-;
-;   Subroutine ALIGN_ADR adr align var
-;
-;   Align the address ADR to the alignment rule ALIGN and write the result to
-;   variable VAR.  ADR will be increased as necessary so that it is a multiple
-;   of ALIGN.  This means the resulting value written to VAR will be ADR plus
-;   0 to ALIGN-1.
-;
-;   ADR and ALIGN must be integer values, and VAR the bare name of a integer
-;   variable (not a string of the variable name).  VAR will be created if it
-;   does not already exist.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine ALIGN_ADR adr align var
+//
+//   Align the address ADR to the alignment rule ALIGN and write the result to
+//   variable VAR.  ADR will be increased as necessary so that it is a multiple
+//   of ALIGN.  This means the resulting value written to VAR will be ADR plus 0
+//   to ALIGN-1.
+//
+//   ADR and ALIGN must be integer values, and VAR the bare name of a integer
+//   variable (not a string of the variable name).  VAR will be created if it
+//   does not already exist.
+//
 /subroutine align_adr
   /var local adr integer = [arg 1]
   /var local align integer = [arg 2]
@@ -1397,31 +1394,31 @@ _\name:
   /set [arg 3] [* align mult]
   /endsub
 
-;********************
-;
-;   Subroutine STRUCT_START
-;
-;   Start the definition of a memory structure with named fields.  After
-;   this routine is called, the FIELD macro can be invoked any number of
-;   times to define successive fields in the structure.
-;
-;   After this call and every FIELD macro the following state is updated:
-;
-;     STRUCT_ALIGN  -  The minimum alignment byte multiple of the structure.
-;       This is initialized to 1, and updated to the largest ALIGN parameter
-;       each FIELD invocation.
-;
-;     STRUCT_OFFSET  -  Offset from the beginning of the structure where the
-;       next field can start.  The next field will start at this offset or
-;       later, depending on alignment requirements.  Fields with alignment 1
-;       will always start exactly at the current STRUCT_OFFSET.
-;
-;     STRUCT_SIZE  -  Aligned size of the structure.  This is STRUCT_OFFSET
-;       padded to STRUCT_ALIGN alignment.  Put another way, if a array of these
-;       structures were created, this is the amount of memory that would be
-;       reserved per array element.  The total array size would be STRUCT_SIZE
-;       times the number of elements.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine STRUCT_START
+//
+//   Start the definition of a memory structure with named fields.  After this
+//   routine is called, the FIELD macro can be invoked any number of times to
+//   define successive fields in the structure.
+//
+//   After this call and every FIELD macro the following state is updated:
+//
+//     STRUCT_ALIGN  -  The minimum alignment byte multiple of the structure.
+//       This is initialized to 1, and updated to the largest ALIGN parameter
+//       each FIELD invocation.
+//
+//     STRUCT_OFFSET  -  Offset from the beginning of the structure where the
+//       next field can start.  The next field will start at this offset or
+//       later, depending on alignment requirements.  Fields with alignment 1
+//       will always start exactly at the current STRUCT_OFFSET.
+//
+//     STRUCT_SIZE  -  Aligned size of the structure.  This is STRUCT_OFFSET
+//       padded to STRUCT_ALIGN alignment.  Put another way, if a array of these
+//       structures were created, this is the amount of memory that would be
+//       reserved per array element.  The total array size would be STRUCT_SIZE
+//       times the number of elements.
+//
 /subroutine struct_start
   /var exist struct_align integer
   /var exist struct_offset integer
@@ -1433,31 +1430,31 @@ _\name:
   /set struct_defalign 2     ;default self-align size
   /endsub
 
-;********************
-;
-;   [name] Macro FIELD [size [, align]]
-;   Macro FIELD [name] [, size [, align]]
-;
-;   Define one more field in a structure.
-;
-;   NAME will be defined as the offset from the start of the structure to the
-;   start of the new field.  Subroutine STRUCT_START must be called once to
-;   initialize creating the structure, then this macro invoked to define each
-;   field.
-;
-;   NAME is normally provided as the label before the macro name.  However, for
-;   backward compatibility with old versions, NAME is the first argument when
-;   there is no label preceeding the macro name.
-;
-;   SIZE is the size of the field in bytes.  It defaults to 2, meaning
-;   the default field is a 16 bit word.
-;
-;   ALIGN is the minimum required address alignment of the field.  Addresses
-;   will be skipped as necessary so that the offset of the field is a
-;   multiple of ALIGN.  The default alignment is 2 (field starts on a
-;   16 bit word boundary) for SIZE values of 2 or more.  The default
-;   alignment is 1 for SIZE values of 1 or less.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   [name] Macro FIELD [size [, align]]
+//   Macro FIELD [name] [, size [, align]]
+//
+//   Define one more field in a structure.
+//
+//   NAME will be defined as the offset from the start of the structure to the
+//   start of the new field.  Subroutine STRUCT_START must be called once to
+//   initialize creating the structure, then this macro invoked to define each
+//   field.
+//
+//   NAME is normally provided as the label before the macro name.  However, for
+//   backward compatibility with old versions, NAME is the first argument when
+//   there is no label preceeding the macro name.
+//
+//   SIZE is the size of the field in bytes.  It defaults to 2, meaning the
+//   default field is a 16 bit word.
+//
+//   ALIGN is the minimum required address alignment of the field.  Addresses
+//   will be skipped as necessary so that the offset of the field is a multiple
+//   of ALIGN.  The default alignment is 2 (field starts on a 16 bit word
+//   boundary) for SIZE values of 2 or more.  The default alignment is 1 for
+//   SIZE values of 1 or less.
+//
 /macro field
   /var local name string
   /var local size integer = 2
@@ -1492,27 +1489,27 @@ _\name:
   /call align_adr [v struct_offset] [v struct_align] struct_size
   /endmac
 
-;********************
-;
-;   Subroutine TIMER_SEC time
-;
-;   Computes the setup of a timer to achive TIME seconds period.  The following
-;   preprocessor variables are set, or created if they do not exist:
-;
-;     TIMER_PER (real)  -  Actual resulting period in seconds.
-;
-;     TIMER_PERCY (integer)  -  Actual resulting period in instruction cycles.
-;
-;     TIMER_TICK (real)  -  Seconds for one count of the timer.
-;
-;     TIMER_CNT (integer)  -  Period in timer counts, will be 0-65536.
-;
-;     TIMER_PRE (integer)  -  Prescaler divide value.  This 1, 8, 64, or 256.
-;
-;     TIMER_TCKPS (integer)  -  The prescaler selection field value in the
-;       position it is in in the TxCON timer control register.  All other bits
-;       are 0.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine TIMER_SEC time
+//
+//   Computes the setup of a timer to achive TIME seconds period.  The following
+//   preprocessor variables are set, or created if they do not exist:
+//
+//     TIMER_PER (real)  -  Actual resulting period in seconds.
+//
+//     TIMER_PERCY (integer)  -  Actual resulting period in instruction cycles.
+//
+//     TIMER_TICK (real)  -  Seconds for one count of the timer.
+//
+//     TIMER_CNT (integer)  -  Period in timer counts, will be 0-65536.
+//
+//     TIMER_PRE (integer)  -  Prescaler divide value.  This 1, 8, 64, or 256.
+//
+//     TIMER_TCKPS (integer)  -  The prescaler selection field value in the
+//       position it is in in the TxCON timer control register.  All other bits
+//       are 0.
+//
 /subroutine timer_sec
   /var local time real = [arg 1] ;desired timer period, seconds
   /var exist timer_per real
@@ -1568,22 +1565,23 @@ _\name:
   /set timer_per [/ timer_percy freq_inst] ;final resulting period in seconds
   /endsub
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro TIMER_PERIOD timer, cycles
 ;
-;   Compute the period setup parameters for timer TIMER so that its period comes as
-;   close as possible to CYCLES instruction cycles.  This macro only computes values
-;   and does not emit any executable code.  The parameter TIMER must be an integer
-;   indicating the number of the timer to compute the setup values for.  An error
-;   is generated if the period is out of range for the hardware to achieve.
+;   Compute the period setup parameters for timer TIMER so that its period comes
+;   as close as possible to CYCLES instruction cycles.  This macro only computes
+;   values and does not emit any executable code.  The parameter TIMER must be
+;   an integer indicating the number of the timer to compute the setup values
+;   for.  An error is generated if the period is out of range for the hardware
+;   to achieve.
 ;
 ;   The following assembly variables are set:
 ;
 ;     VAL_PR  -  PRn register value to achieve the desired period.
 ;
-;     VAL_TCKPS  -  TCKPS field value in the TnCON control register for the timer.
-;       This field controls the prescaler divide value.
+;     VAL_TCKPS  -  TCKPS field value in the TnCON control register for the
+;       timer.  This field controls the prescaler divide value.
 ;
 ;     VAL_PRESCALE  -  Actual presscaler divide value selected by VAL_TCKPS.
 ;
@@ -1591,10 +1589,11 @@ _\name:
 ;       instruction cycles.  This may not be exactly the same as CYCLES if the
 ;       prescaler divide value is greater than 1.
 ;
-;     VAL_TnCON  -  Timer control register value for periodic ticks as specified.
+;     VAL_TnCON  -  Timer control register value for periodic ticks as
+;       specified.
 ;
-;   The lowest possible prescaler divide value is used such that the VAL_PR is within
-;   the range of the period register.
+;   The lowest possible prescaler divide value is used such that the VAL_PR is
+;   within the range of the period register.
 ;
 .macro timer_period timer, cycles
 
@@ -1634,23 +1633,23 @@ _\name:
                  ;          --------------0-  clock source is intruction clock
   .endm
 
-;********************
-;
-;   Subroutine BAUD_SETUP30 baud
-;
-;   Compute the baud rate setup of a old style 30F UART.  These do not have the
-;   high speed mode that the newer enhanced UARTs do.
-;
-;   The following preprocessor variables are set:
-;
-;     UART_BRG  -  UART baud rate divisor register.
-;
-;     UART_BAUD  -  Actual resulting baud rate.
-;
-;     BAUD_ERR  -  Error fraction of actual baud rate compared to ideal.
-;
-;   These variables are created if not previously defined.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine BAUD_SETUP30 baud
+//
+//   Compute the baud rate setup of a old style 30F UART.  These do not have the
+//   high speed mode that the newer enhanced UARTs do.
+//
+//   The following preprocessor variables are set:
+//
+//     UART_BRG  -  UART baud rate divisor register.
+//
+//     UART_BAUD  -  Actual resulting baud rate.
+//
+//     BAUD_ERR  -  Error fraction of actual baud rate compared to ideal.
+//
+//   These variables are created if not previously defined.
+//
 /subroutine baud_setup30
   /var local baudr real = [arg 1]
   /var exist uart_brg integer
@@ -1672,28 +1671,28 @@ _\name:
   /show "  " [eng uart_baud 4] "baud, " [eng baud_time] "s/bit, " [fp errp "sig 0 rit 2 pl zb"] "% error"
   /endsub
 
-;********************
-;
-;   Subroutine BAUD_SETUP baud
-;
-;   Compute the baud rate setup of a enhanced UART.  These have a high speed
-;   mode that the original 30F UART did not.
-;
-;   The following preprocessor variables are set:
-;
-;     UART_BRG  -  UART baud rate divisor register.
-;
-;     BAUD_MODE  -  Baud rate control bits for the UART MODE register.  Only
-;       bits relevant to baud rate generation are set with the remainder 0.
-;       This value is intended to be ORed with the other control bits to form
-;       the value written to the MODE register.
-;
-;     UART_BAUD  -  Actual resulting baud rate.
-;
-;     BAUD_ERR  -  Error fraction of actual baud rate compared to ideal.
-;
-;   These variables are created if not previously defined.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine BAUD_SETUP baud
+//
+//   Compute the baud rate setup of a enhanced UART.  These have a high speed
+//   mode that the original 30F UART did not.
+//
+//   The following preprocessor variables are set:
+//
+//     UART_BRG  -  UART baud rate divisor register.
+//
+//     BAUD_MODE  -  Baud rate control bits for the UART MODE register.  Only
+//       bits relevant to baud rate generation are set with the remainder 0.
+//       This value is intended to be ORed with the other control bits to form
+//       the value written to the MODE register.
+//
+//     UART_BAUD  -  Actual resulting baud rate.
+//
+//     BAUD_ERR  -  Error fraction of actual baud rate compared to ideal.
+//
+//   These variables are created if not previously defined.
+//
 /subroutine baud_setup
   /var local baudr real = [arg 1]
   /var exist uart_brg integer
@@ -1727,17 +1726,17 @@ _\name:
   /show "  Baud rate " [rnd uart_baud] ", error " [fp errp "sig 0 rit 2 pl zb"] "%"
   /endsub
 
-;********************
-;
-;   Macro SELECT_OUTPIN n, id
-;
-;   Configure the RPn pin to the peripheral output identified by ID.  N must be
-;   the 0-63 remappable pin number, and ID must be the ID of the peripheral
-;   output to map to that pin.  Only the selection for the indicated pin is
-;   changed.  Other selections in the same register are preserved.
-;
-;   WARNING:  W0, W1 are trashed.
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro SELECT_OUTPIN n, id
+//
+//   Configure the RPn pin to the peripheral output identified by ID.  N must be
+//   the 0-63 remappable pin number, and ID must be the ID of the peripheral
+//   output to map to that pin.  Only the selection for the indicated pin is
+//   changed.  Other selections in the same register are preserved.
+//
+//   WARNING:  W0, W1 are trashed.
+//
 /macro select_outpin
   /var local rpn integer = [arg 1] ;0-N remappable pin number
   /var local regn integer = [div rpn 2] ;0-N RPORn register number
@@ -1752,7 +1751,7 @@ _\name:
          mov.b   w0, [w1] [chars ";select output peripheral for RP" rpn " pin"]
   /endmac
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SELECT_INPIN n, rpinreg
 ;
@@ -1770,43 +1769,43 @@ _\name:
          mov.b   w0, [w1]    ;stuff the pin number into the register
   .endm
 
-;********************
-;
-;   Subroutine CAN_TIMING bitrate
-;
-;   Determine the CAN bit timing.  CAN bits are divided into time segments, each
-;   defined in terms of the number of time quanta.  The length of time quanta is
-;   determined by the CAN input clock and the baud rate divider setup.  We
-;   require a minimum of 9 time quanta per bit.  The maximum allowed is 25 time
-;   quanta per bit.  The time quanta budget for a bit is allocated between the
-;   various bit segments as follows:
-;
-;     Sync  -  Always 1.
-;
-;     Propagation  -  1-8, we require at least 2.
-;
-;     Phase1  -  1-8, we require at least 3.
-;
-;     Phase2  -  2-8, we require at least 3.
-;
-;   The desired CAN bit rate in Hz is passed as argument 1, which must be
-;   convertable to floating point.  The input frequency in Hz to the CAN baud
-;   rate generator must be previously set in FCANCLK.
-;
-;   This subroutine sets the following preprocessor variables:
-;
-;     TQBIT  -  Number of time quanta per whole bit, 9-25
-;
-;     TQPROP  -  Time quanta per propagation segment, 2-8
-;
-;     TQPH1  -  Time quanta per phase 1 segment, 3-8
-;
-;     TQPH2  -  Time quanta per phase 2 segment, 3-8
-;
-;     BDIV  -  Baud rate divisor to make time quanta rate, 1-64
-;
-;     FERR  -  CAN bit frequency error fraction
-;
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine CAN_TIMING bitrate
+//
+//   Determine the CAN bit timing.  CAN bits are divided into time segments,
+//   each defined in terms of the number of time quanta.  The length of time
+//   quanta is determined by the CAN input clock and the baud rate divider
+//   setup.  We require a minimum of 9 time quanta per bit.  The maximum allowed
+//   is 25 time quanta per bit.  The time quanta budget for a bit is allocated
+//   between the various bit segments as follows:
+//
+//     Sync  -  Always 1.
+//
+//     Propagation  -  1-8, we require at least 2.
+//
+//     Phase1  -  1-8, we require at least 3.
+//
+//     Phase2  -  2-8, we require at least 3.
+//
+//   The desired CAN bit rate in Hz is passed as argument 1, which must be
+//   convertable to floating point.  The input frequency in Hz to the CAN baud
+//   rate generator must be previously set in FCANCLK.
+//
+//   This subroutine sets the following preprocessor variables:
+//
+//     TQBIT  -  Number of time quanta per whole bit, 9-25
+//
+//     TQPROP  -  Time quanta per propagation segment, 2-8
+//
+//     TQPH1  -  Time quanta per phase 1 segment, 3-8
+//
+//     TQPH2  -  Time quanta per phase 2 segment, 3-8
+//
+//     BDIV  -  Baud rate divisor to make time quanta rate, 1-64
+//
+//     FERR  -  CAN bit frequency error fraction
+//
 /subroutine can_timing
   /var local bitrate real = [arg 1] ;desired bit rate, Hz
   /if [not [exist "debug_cancfg"]] then
@@ -1919,7 +1918,7 @@ _\name:
 
   /endsub
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro DISPATCH [table [, maxind]]
 //
@@ -2182,12 +2181,13 @@ _\name:
   /endsub
 
 ;*******************************************************************************
+;*******************************************************************************
 ;
 ;   Support for the global 1-bit flags defined with the preprocessor /FLAG
 ;   command.
 ;
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SETFLAG flag
 ;
@@ -2197,7 +2197,7 @@ _\name:
          bset    flag_&flag&_reg, #flag_&flag&_bit
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro CLRFLAG flag
 ;
@@ -2207,7 +2207,7 @@ _\name:
          bclr    flag_&flag&_reg, #flag_&flag&_bit
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SKIP_FLAG flag
 ;
@@ -2218,7 +2218,7 @@ _\name:
          btss    flag_&flag&_reg, #flag_&flag&_bit
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SKIP_NFLAG flag
 ;
@@ -2229,7 +2229,7 @@ _\name:
          btsc    flag_&flag&_reg, #flag_&flag&_bit
   .endm
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FLAGS_DEFINE
 //
@@ -2274,7 +2274,7 @@ alloc    gfl[v word], 2, 2
   /write
   /endmac
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FLAGS_CLEAR
 //
@@ -2299,7 +2299,7 @@ alloc    gfl[v word], 2, 2
   /write
   /endmac
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine GET_FLAG_DATA name gflN bitN
 //
@@ -2315,7 +2315,7 @@ alloc    gfl[v word], 2, 2
   /set flag_bit [arg 3]
   /endsub
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine WRITE_C_FLAGS [fnam]
 //
@@ -2323,8 +2323,8 @@ alloc    gfl[v word], 2, 2
 //   they are accessible from C code.
 //
 //   If FNAM is supplied, then a file of that name is opened, the C code written
-//   to it, then closed.  If FNAM is not supplied, then the C code is written
-//   to the current output file.  FNAM must be a string expression, if supplied.
+//   to it, then closed.  If FNAM is not supplied, then the C code is written to
+//   the current output file.  FNAM must be a string expression, if supplied.
 //
 
 //   Local subroutine CLOSE_FLAG_DEF
@@ -2432,7 +2432,7 @@ alloc    gfl[v word], 2, 2
     /endif
   /endsub
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine WRITE_C_MACHINE [fnam]
 //
@@ -2473,12 +2473,12 @@ typedef  unsigned short machine_intptr_t;
     /endif
   /endsub
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine WRITE_C_CONST name
 //
-//   Write the numeric preprocessor constant as a C #define statement.  The
-//   NAME parameter is the raw name characters, not a string.  NAME may be a
+//   Write the numeric preprocessor constant as a C #define statement.  The NAME
+//   parameter is the raw name characters, not a string.  NAME may be a
 //   qualified name (contain symbol type and version).
 //
 /subroutine write_c_const
@@ -2522,7 +2522,7 @@ typedef  unsigned short machine_intptr_t;
 
   /endsub
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine WRITE_C_CONSTS [fnam]
 //
@@ -2530,8 +2530,8 @@ typedef  unsigned short machine_intptr_t;
 //   statements.
 //
 //   If FNAM is supplied, then a file of that name is opened, the C code written
-//   to it, then closed.  If FNAM is not supplied, then the C code is written
-//   to the current output file.  FNAM must be a string expression, if supplied.
+//   to it, then closed.  If FNAM is not supplied, then the C code is written to
+//   the current output file.  FNAM must be a string expression, if supplied.
 //
 /subroutine write_c_consts
   /var local wfile bool      ;write to new file, not existing stream
@@ -2553,7 +2553,7 @@ typedef  unsigned short machine_intptr_t;
     /endif
   /endsub
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine WRITE_C_CONSTS_PREF_INT pref
 //
@@ -2580,7 +2580,7 @@ typedef  unsigned short machine_intptr_t;
     /endloop
   /endsub
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro START_TASK name
 //
@@ -2609,12 +2609,12 @@ typedef  unsigned short machine_intptr_t;
 ;
 ;   Subroutine and other entry point linkage.
 ;
-;   By convention, subroutines preserve the general registers W0 - W14
-;   and trash status bits and other related state unless explicitly documented
-;   to the contrary.
+;   By convention, subroutines preserve the general registers W0 - W14 and trash
+;   status bits and other related state unless explicitly documented to the
+;   contrary.
 ;
-;   Create the REGF0 - REGF14 flag bits.  These can be ORed together to
-;   indicate an arbitrary set of W0 - W14 registers.
+;   Create the REGF0 - REGF14 flag bits.  These can be ORed together to indicate
+;   an arbitrary set of W0 - W14 registers.
 ;
 .irp     ii,     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
          .equiv  regf\ii, 1 << \ii
@@ -2624,13 +2624,13 @@ typedef  unsigned short machine_intptr_t;
 ;
 .equiv   regf_ctrash, regf0 | regf1 | regf2 | regf3 | regf4 | regf5 | regf6 | regf7
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro PUSHREGS regflags
 ;
-;   Push the indicated registers W0-W14 onto the stack.  REGFLAGS is the
-;   mask of the registers to push.  Bit 0 set indicates to push W0, bit 1
-;   set to push W1, etc.  Registers are pushed in W0 to W14 order.
+;   Push the indicated registers W0-W14 onto the stack.  REGFLAGS is the mask of
+;   the registers to push.  Bit 0 set indicates to push W0, bit 1 set to push
+;   W1, etc.  Registers are pushed in W0 to W14 order.
 ;
 .macro pushregs regflags
 .irp     ii,     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14
@@ -2640,14 +2640,14 @@ typedef  unsigned short machine_intptr_t;
          .endr
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro POPREGS regflags
 ;
 ;   Pop the indicated registers off the stack.  REGFLAGS is the mask of the
 ;   selected registers in the same format as for macro PUSHREGS, above.  This
-;   macro undoes what PUSHREGS did if the same REGFLAGS value is passed to
-;   both.  The registers are popped in W14 to W0 order.
+;   macro undoes what PUSHREGS did if the same REGFLAGS value is passed to both.
+;   The registers are popped in W14 to W0 order.
 ;
 .macro popregs regflags
 .irp     ii,     14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
@@ -2657,28 +2657,27 @@ typedef  unsigned short machine_intptr_t;
          .endr
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro ENTER [regflags]
 ;
 ;   Perform standard subroutine entry.
 ;
-;   REGFLAGS is the logical OR of any combination of REGF0 - REGF14 to
-;   indicate which of the general registers W0 - W14 are to be
-;   automatically saved on the stack.  The appropriate PUSH instructions
-;   will be emitted, and the mask of pushed registers is saved in the
-;   assembler variable SAVEDREGS.  The registers will be pushed in low to
-;   high register number order.
+;   REGFLAGS is the logical OR of any combination of REGF0 - REGF14 to indicate
+;   which of the general registers W0 - W14 are to be automatically saved on the
+;   stack.  The appropriate PUSH instructions will be emitted, and the mask of
+;   pushed registers is saved in the assembler variable SAVEDREGS.  The
+;   registers will be pushed in low to high register number order.
 ;
-;   The default value for REGFLAGS is zero, meaning no registers are pushed
-;   onto the stack.
+;   The default value for REGFLAGS is zero, meaning no registers are pushed onto
+;   the stack.
 ;
 .macro enter regflags = 0
          pushregs \regflags
 .set     savedregs, \regflags
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro SAVEREGS regflags
 ;
@@ -2687,61 +2686,61 @@ typedef  unsigned short machine_intptr_t;
 .set     savedregs, \regflags
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro POPSAVED
 ;
 ;   Pop saved registers from the stack.
 ;
-;   The registers indicated by SAVEDREGS are popped.  SAVEDREGS is usually
-;   set by the GLBSUB macro at the beginning of a subroutine.  The POPSAVED
-;   macro allows those registers to be popped without having to know the
-;   explicit list of registers.
+;   The registers indicated by SAVEDREGS are popped.  SAVEDREGS is usually set
+;   by the GLBSUB macro at the beginning of a subroutine.  The POPSAVED macro
+;   allows those registers to be popped without having to know the explicit list
+;   of registers.
 ;
 .macro popsaved
          popregs savedregs
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro LEAVE [regflags]
 ;
 ;   Perform standard subroutine exit.  This macro is intended to be used
 ;   together with ENTER at the beginning of the subroutine.
 ;
-;   REGFLAGS is the logical OR of any combination of REGF0 - REGF14 to
-;   indicate which of the general registers W0 - W14 are to be automatically
-;   restored from the stack.  The appropriate POP instructions will be
-;   emitted in high to low register number order.
+;   REGFLAGS is the logical OR of any combination of REGF0 - REGF14 to indicate
+;   which of the general registers W0 - W14 are to be automatically restored
+;   from the stack.  The appropriate POP instructions will be emitted in high to
+;   low register number order.
 ;
-;   The default value for REGFLAGS is zero, meaning no registers are popped
-;   from the stack.
+;   The default value for REGFLAGS is zero, meaning no registers are popped from
+;   the stack.
 ;
 .macro leave regflags = 0
          popregs \regflags
          return
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro LEAVEREST
 ;
 ;   Just like LEAVE except that the registers indicated by SAVEDREGS are
-;   automatically restored.  SAVEDREGS should have been set by the ENTER
-;   macro to the routine being left.
+;   automatically restored.  SAVEDREGS should have been set by the ENTER macro
+;   to the routine being left.
 ;
 .macro leaverest
          leave   savedregs
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro GLBSUB name, [regflags]
 ;
-;   Define the entry point of a globally callable subroutine.  NAME is the
-;   name the subroutine will be called by.  REGFLAGS indicates which
-;   registers to automatically save on the stack.  See the ENTER macro
-;   description for details.
+;   Define the entry point of a globally callable subroutine.  NAME is the name
+;   the subroutine will be called by.  REGFLAGS indicates which registers to
+;   automatically save on the stack.  See the ENTER macro description for
+;   details.
 ;
 ;
 .macro glbsub name, regflags = 0
@@ -2751,7 +2750,7 @@ typedef  unsigned short machine_intptr_t;
          noskid
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro GLBSUBC name, [regflags]
 ;
@@ -2767,7 +2766,7 @@ _\name:                      ;define the C entry point label
          noskid
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro GLBSUBD name, [regflags]
 ;
@@ -2785,14 +2784,14 @@ _\name:                      ;define the C30 entry point label
          noskid
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro LOCSUB name, regflags
 ;
-;   Define the entry point of a local subroutine.  NAME is the
-;   name the subroutine will be called by.  REGFLAGS indicates which
-;   registers to automatically save on the stack.  See the ENTER macro
-;   description for details
+;   Define the entry point of a local subroutine.  NAME is the name the
+;   subroutine will be called by.  REGFLAGS indicates which registers to
+;   automatically save on the stack.  See the ENTER macro description for
+;   details.
 ;
 .macro locsub name, regflags = 0
 \name:                       ;define the entry point label
@@ -2800,19 +2799,18 @@ _\name:                      ;define the C30 entry point label
          noskid
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro LOCENT name
 ;
-;   Define a generic local entry point.  NAME is the name of the entry
-;   point.
+;   Define a generic local entry point.  NAME is the name of the entry point.
 ;
 .macro locent name
 \name:                       ;define the entry point label
          noskid
   .endm
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   [label] Macro GLBLAB [name]
 //
@@ -2849,7 +2847,7 @@ _\name:                      ;define the C30 entry point label
 .global  [chars lab]
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   [label] Macro GLBENT [name]
 //
@@ -2884,7 +2882,7 @@ _\name:                      ;define the C30 entry point label
          noskid
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   [label] Macro GLBLABD [name]
 //
@@ -2926,7 +2924,7 @@ _\name:                      ;define the C30 entry point label
     /endif
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   [label] Macro GLBENTD [name]
 //
@@ -2965,12 +2963,12 @@ _\name:                      ;define the C30 entry point label
          noskid
   /endmac
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro GCALL target
 ;
-;   Call subroutine TARGET, which is assumed to be outside the current
-;   module and can therefore be anywhere in program memory.
+;   Call subroutine TARGET, which is assumed to be outside the current module
+;   and can therefore be anywhere in program memory.
 ;
 .macro gcall target
          noskid
@@ -2978,7 +2976,7 @@ _\name:                      ;define the C30 entry point label
          noskid
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro GJUMP target
 ;
@@ -2990,12 +2988,12 @@ _\name:                      ;define the C30 entry point label
          goto    \target
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro MCALL target
 ;
-;   Call subroutine TARGET, which is assumed to be in the same module and
-;   the same program memory linker section as the call.
+;   Call subroutine TARGET, which is assumed to be in the same module and the
+;   same program memory linker section as the call.
 ;
 .macro mcall target
          noskid
@@ -3003,12 +3001,12 @@ _\name:                      ;define the C30 entry point label
          noskid
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro JUMP target
 ;
-;   Jump to label TARGET, which is assumed to be in the same module and
-;   the same program memory linker section as this macro.
+;   Jump to label TARGET, which is assumed to be in the same module and the same
+;   program memory linker section as this macro.
 ;
 .macro jump target
          bra     \target
@@ -3039,7 +3037,7 @@ _\name:                      ;define the C30 entry point label
 
   /endloop
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine GET_PORT_DATA name dir pol ana [ANx]
 //
@@ -3074,15 +3072,15 @@ _\name:                      ;define the C30 entry point label
     /endif
   /endsub
 
-/////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine WRITE_C_IOPINS [fnam]
 //
 //   Exports the symbolic I/O pin definitions in C.
 //
 //   If FNAM is supplied, then a file of that name is opened, the C code written
-//   to it, then closed.  If FNAM is not supplied, then the C code is written
-//   to the current output file.  FNAM must be a string expression, if supplied.
+//   to it, then closed.  If FNAM is not supplied, then the C code is written to
+//   the current output file.  FNAM must be a string expression, if supplied.
 //
 /subroutine write_c_iopins
   /var local port string     ;lower case a-z port name
@@ -3111,8 +3109,8 @@ _\name:                      ;define the C30 entry point label
     /set port [char [+ [ccode "a"] portn -1]] ;make lower case port name letter
     /set portu [ucase port]  ;make upper case port name letter
 //
-//   Check that anything is defined for this port.  If not, skip it and go on
-//   to the next port.
+//   Check that anything is defined for this port.  If not, skip it and go on to
+//   the next port.
 //
     /set def false           ;init to no I/O bits in this port
     /set bit 0               ;init to first bit within port
@@ -3225,18 +3223,17 @@ _\name:                      ;define the C30 entry point label
 .equiv   fifob_ofs_buf, [v struct_offset] ;start of data buffer
 .equiv   fifob_size, [v struct_offset] ;size of FIFO without the data buffer
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro FIFOB_DEFINE name, size
 ;
 ;   Define a byte FIFO.  NAME will be defined as the starting address of the
-;   FIFO data structure.  SIZE is the maximum number of bytes the FIFO must
-;   be able to hold, and must not exceed 255.  The constant <name>_SZ will
-;   be defined to be the size of the FIFO unless it already exists.  It is
-;   an  error if <name>_SZ is previously defined but is not equal to SIZE.
+;   FIFO data structure.  SIZE is the maximum number of bytes the FIFO must be
+;   able to hold, and must not exceed 255.  The constant <name>_SZ will be
+;   defined to be the size of the FIFO unless it already exists.  It is an error
+;   if <name>_SZ is previously defined but is not equal to SIZE.
 ;
 .macro fifob_define name, size
-
   .ifdef &name&_sz
     .if (&name&_sz - (\size))
          .error  "Pre-existing FIFO size constant not equal to new FIFO size."
@@ -3250,7 +3247,7 @@ _\name:                      ;define the C30 entry point label
 alloc    \name,  (\size) + fifob_size, 1
 .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro FIFOB_INIT name
 ;
@@ -3265,7 +3262,7 @@ alloc    \name,  (\size) + fifob_size, 1
          clr.b   [w0++]      ;init read index to start of buffer
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro FIFOB_Z_EMPTY name
 ;
@@ -3279,7 +3276,7 @@ alloc    \name,  (\size) + fifob_size, 1
          and     #0xFF, w0   ;mask off upper byte, set Z if FIFO is empty
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro FIFOB_EMPTY_N name
 ;
@@ -3293,7 +3290,7 @@ alloc    \name,  (\size) + fifob_size, 1
          add     #&name&_sz, w0 ;make number of empty FIFO slots
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro FIFOB_Z_FULL name
 ;
@@ -3309,7 +3306,7 @@ alloc    \name,  (\size) + fifob_size, 1
          cp      w0, w1
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro FIFOB_FULL_N name
 ;
@@ -3321,7 +3318,7 @@ alloc    \name,  (\size) + fifob_size, 1
          and     #0xFF, w0   ;mask off upper byte which contains garbage
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro FIFOB_PUT name
 ;
@@ -3350,7 +3347,7 @@ m\@_1:                       ;W2 contains new PUT index
          mov.b   w2, [w1 + fifob_ofs_n]
   .endm
 
-;********************
+;*******************************************************************************
 ;
 ;   Macro FIFOB_GET name
 ;
@@ -3457,7 +3454,7 @@ m\@_1:                       ;W2 contains new GET index
 ;       Reads next word into W0.  FIFO must not be empty.  Trashes W1, W2.
 ;
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_DEFINE name, size
 //
@@ -3482,7 +3479,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
 
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_INIT name
 //
@@ -3496,7 +3493,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          mov     w0, fifow_[arg 1]_get
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_Z_EMPTY name
 //
@@ -3510,7 +3507,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          cp      w0, w1
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_JUMP_EMPTY name, adr
 //
@@ -3524,7 +3521,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          bra     z, [arg 2]  ;FIFO is empty ?
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_JUMP_NOTEMPTY name, adr
 //
@@ -3538,7 +3535,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          bra     nz, [arg 2] ;FIFO is not empty ?
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_JUMP_FULL name, adr
 //
@@ -3558,7 +3555,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          bra     z, [arg 2]  ;the FIFO is full ?
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_JUMP_NOTFULL name, adr
 //
@@ -3578,7 +3575,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          bra     nz, [arg 2] ;the FIFO is not full ?
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_FULL_N name
 //
@@ -3595,7 +3592,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          add     w0, w1, w0  ;account for buffer wrap
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_EMPTY_N name
 //
@@ -3615,7 +3612,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          add     w0, w1, w0  ;account for buffer wrap
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_PUT name
 //
@@ -3640,7 +3637,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          mov     w2, fifow_[arg 1]_put ;update the PUT index
   /endmac
 
-//////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FIFOW_GET name
 //
@@ -3670,7 +3667,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
 //   General preprocessor string manipulation.
 //
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine TABTO varname column
 //
@@ -3699,7 +3696,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
     /endblock
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine TABOPCODE varname
 //
@@ -3714,7 +3711,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /call tabto [arg 1] 10
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine TABOPERAND varname
 //
@@ -3729,7 +3726,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /call tabto [arg 1] 18
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine STARTCOMM varname
 //
@@ -3747,7 +3744,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /set [arg 1] [str [arg 1] ";"]
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine STRING_TOKEN str ind tok
 //
@@ -3792,7 +3789,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
     /endblock
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine SHOWVAL name [description]
 //
@@ -3831,7 +3828,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /show "  " nam " " val desc
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine SHOWHEX name [description]
 //
@@ -3868,7 +3865,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /show "  " nam " " val desc
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine SHOWBIN name [description]
 //
@@ -3905,7 +3902,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /show "  " nam " " val desc
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro LOAD32 Wn, val
 //
@@ -3941,7 +3938,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /write s
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Function FX3F29U val
 //
@@ -3970,7 +3967,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
 ;   Low level preprocessor macros and routines for writing to program memory.
 ;
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine PBYTE_START
 //
@@ -3983,7 +3980,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /set pbyte_offset 0 //initialize or reset the offset to 0
   /endsub
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro PWORD val [, comment]
 //
@@ -4019,7 +4016,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /write s                   ;write the output file line
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro [label] PB_HERE
 //
@@ -4052,7 +4049,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
     /endif
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro [label] PBYTE val
 //
@@ -4114,7 +4111,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /set pbyte_offset [+ pbyte_offset 1] ;make offset for next byte
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Subroutine PBYTE_FINISH
 //
@@ -4165,7 +4162,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
 ;   word.  The unused bytes are set to the erased value of FFh.
 ;
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro [label] PB_WORD16 val [, fracbits]
 //
@@ -4173,9 +4170,9 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
 //   FRACBITS is the number of fraction bits in the fixed-point value.  The
 //   default is 0, meaning the word is a normal integer.
 //
-//   Another way to look at this is that VAL is shifted left FRACBITS bits,
-//   then rounded to the nearest integer.  The low 16 bits of the result are
-//   written to program memory.
+//   Another way to look at this is that VAL is shifted left FRACBITS bits, then
+//   rounded to the nearest integer.  The low 16 bits of the result are written
+//   to program memory.
 //
 //   Here are some examples and their resulting 16 bit words:
 //
@@ -4195,7 +4192,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          pbyte   [and [shiftr ii 8] 16#FF]
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro [label] PB_WORD24 val [, fracbits]
 //
@@ -4213,7 +4210,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          pbyte   [and [shiftr ii 16] 16#FF]
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro [label] PB_WORD32 val [, fracbits]
 //
@@ -4232,7 +4229,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          pbyte   [and [shiftr ii 24] 16#FF]
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro [label] PB_FP32F val
 //
@@ -4248,7 +4245,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          pbyte   [and [shiftr ii 24] 16#FF]
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro FP48P fpval
 //
@@ -4268,7 +4265,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          pbyte   [shiftr fp48_exp 8]
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro [label] RAWSTRING "..."
 //
@@ -4323,7 +4320,7 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /call pbyte_finish         ;write any partial program memory word
   /endmac
 
-////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 //
 //   Macro [label] PGSTRING "..."
 //
