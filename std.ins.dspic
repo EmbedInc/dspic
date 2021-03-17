@@ -38,7 +38,61 @@
 ;     USING_XC16  -  Boolean.  Just like USING_C30, except for the XC16 compiler
 ;       instead of the C30 compiler.
 ;
+;   This file is divided into sections of related features.  Each section starts
+;   with two lines of stars.  Briefly, the sections, in order in this file, are:
+;
+;     Configuration constants.
+;
+;     Skip and branch macros.
+;
+;     General utility macros and preprocessor subroutines.
+;
+;       NOSKID  -  Add NOPs for debugger to skid over.
+;       SETVAR  -  Set variable to constant value.
+;       SHIRTRA32, SHIFTRA32L, SHIFTRL32, SHIFTRL32L  -  32 bit shift.
+;       ADD_HALF, ADD_HALF32  -  Add 1/2 to fixed point, for rounding.
+;       SHIFTL_MULT16U, SCALE_CONFIG, SCALE  -  Scaling by constants.
+;       INTR_PRIORITY  -  Set priority of a specific interrupt.
+;       FP48_MAKE  -  Create 48 bit floating point in preprocessor.
+;       GET_WN  -  Parse "Wn" register reference.
+;       PGMADR  -  Load sanitized fixed address into Wn register pair.
+;       FPLOAD, FPPUT, FPGET  -  32 bit fast floating point handling.
+;       EEWORD, FPWORDS  -  Define constants in EEPROM.
+;       WAITCY, BUSYWAIT, MINWAIT, WAITNOP  -  Short timing.
+;       ALLOC, ALLOCG  -  Allocate memory in RAM.
+;       STRUCT_START, FIELD  -  Define data structure with named fields.
+;       TIMER_SEC, TIMER_PERIOD  -  Hardware timer configuration.
+;       BAUD_SETUP30, BAUD_SETUP  -  UART baud rate setup.
+;       SELECT_OUTPIN, SELECT_INPIN  -  Peripheral pin select helpers.
+;       CAN_TIMING  -  CAN peripheral timing configuration.
+;       DISPATCH  -  Branch according to dispatch table.
+;       WRITE_PUSH, WRITE_POP  -  Writing to separate output file.
+;       PARSE_CMD, CmdRef, ENTPNT, EXPORT_RSP  -  Command/response helpers.
+;       START_TASK  -  Embed multi-tasking helper.
+;       LOAD32  -  Load 32-bit constant into W register pair.
+;       FX3F29U  -  Convert constant to 3.29 fixed point.
+;
+;     Global 1-bit named flags.
+;
+;     Writing ASM state to .H files.
+;
+;     Subroutine linkage and gloabl entry points.
+;
+;     I/O port configuration.
+;
+;     FIFOs.
+;
+;     Preprocessor string parsing and manipulation.
+;
+;     Defining constants in program memory.
+;
 
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Configuration constants.
+;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -143,17 +197,6 @@
 ;
 ;   Skip and branch macros.
 ;
-
-;*******************************************************************************
-;
-;   Macro NOSKID
-;
-.macro noskid
-  .if debug
-         nop
-         nop
-    .endif
-  .endm
 
 ;*******************************************************************************
 ;
@@ -325,6 +368,25 @@
 
 .macro skip_nov              ;skip on not overflow
          bra     nov, $+4
+  .endm
+
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   General utility macros and preprocessor subroutines.
+;
+
+
+;*******************************************************************************
+;
+;   Macro NOSKID
+;
+.macro noskid
+  .if debug
+         nop
+         nop
+    .endif
   .endm
 
 ;*******************************************************************************
@@ -2180,11 +2242,96 @@ _\name:
     /endloop
   /endsub
 
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro START_TASK name
+//
+//   Start a new task.  Several symbols must exist:
+//
+//     STACKSZ_name  -  Size of net task's stack, bytes.
+//
+//     STACK_name  -  Start of stack area for the new task.
+//
+//     name_TASK_START  -  Execution start point of the new task.
+//
+//   W13 and W14 are trashed.
+//
+/macro start_task
+  /write
+  /write "         ;   Start " [ucase [qstr [arg 1]]] " task."
+  /write "         ;"
+         mov     #[v stacksz_[arg 1]], w13 ;pass stack size
+         mov     #stack_[arg 1], w14 ;pass start address of stack
+         call    task_new    ;create the new task
+         goto    [arg 1]_task_start ;start point of the new task
+  /write
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro LOAD32 Wn, val
+//
+//   Load the value VAL into Wn+1:Wn.  Loading into W15 (the stack pointer) is a
+//   error.
+//
+/macro load32
+  /var local val integer = [arg 2]
+  /var local wn integer
+  /var local s string
+
+  /call get_wn [arg 1] wn    ;get register number
+  /if [>= wn 14] then        ;includes W15 ?
+    /show "  LOAD32 to stack pointer is not allowed."
+         .error  "LOAD32 W15"
+         .end
+    /stop
+    /endif
+
+  /call tabopcode s
+  /set s [str s "mov"]
+  /call taboperand s
+  /set s [str s "#0x" [int [and val 16#FFFF] "fw 4 lz base 16 usin"] ", w" wn]
+  /call startcomm s
+  /set s [str s val " (" [int val "base 16 usin"] "h) --> W" [+ wn 1] ":W" wn]
+  /write s
+
+  /set s ""
+  /call tabopcode s
+  /set s [str s "mov"]
+  /call taboperand s
+  /set s [str s "#0x" [int [shiftr val 16] "fw 4 lz base 16 usin"] ", w" [+ wn 1]]
+  /write s
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Function FX3F29U val
+//
+//   Converts the value VAL to its unisgned fixed point 3.29 format
+//   representation.  The function value is a 32 bit hexadecimal integer
+//   expressed in Embed format (16#xxx).
+//
+/function fx3f29u
+  /var local val real = [vnl [arg 1]] //input argument
+  /var local ii integer //integer value of resulting fixed point
+
+  /set val [max 0.0 val] //clip to min possible value
+  /if [< val 7.99999]
+    /then
+      /set val [* val 8388608]
+      /set ii [rnd val]
+      /set ii [shiftl ii 6]
+      /funcval "16#" [int ii "fw 8 lz base 16 usin"]
+    /else
+      /funcval "16#FFFFFFFF"
+    /endif
+  /endfunc
+
+
 ;*******************************************************************************
 ;*******************************************************************************
 ;
-;   Support for the global 1-bit flags defined with the preprocessor /FLAG
-;   command.
+;   Global 1-bit named flags.
 ;
 
 ;*******************************************************************************
@@ -2314,6 +2461,13 @@ alloc    gfl[v word], 2, 2
   /set flag_word [arg 2]
   /set flag_bit [arg 3]
   /endsub
+
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Writing ASM state to .H files.
+;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -2582,32 +2736,133 @@ typedef  unsigned short machine_intptr_t;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//   Macro START_TASK name
+//   Subroutine WRITE_C_IOPINS [fnam]
 //
-//   Start a new task.  Several symbols must exist:
+//   Exports the symbolic I/O pin definitions in C.
 //
-//     STACKSZ_name  -  Size of net task's stack, bytes.
+//   If FNAM is supplied, then a file of that name is opened, the C code written
+//   to it, then closed.  If FNAM is not supplied, then the C code is written to
+//   the current output file.  FNAM must be a string expression, if supplied.
 //
-//     STACK_name  -  Start of stack area for the new task.
+/subroutine write_c_iopins
+  /var local port string     ;lower case a-z port name
+  /var local portu string    ;lower case A-Z port name
+  /var local portn integer   ;1-26 number of port name letter
+  /var local bit integer     ;0-15 bit number within port
+  /var local def bool        ;at least one I/O bit defined in current port
+  /var local pdata string    ;name of Portdata_<port><bit> variable
+  /var local ii integer      ;scratch integer
+  /var local wfile bool      ;write to new file, not existing stream
+
+  /if [exist 1 arg]
+    /then
+      /call write_push [arg 1]
+      /set wfile true
+    /else
+      /set wfile false
+    /endif
+
+  /set portn 0               ;init to before first port letter
+  /block                     ;back here each new port
+    /set portn [+ portn 1]   ;make 1-26 number of letter for this port
+    /if [> portn 26] then
+      /quit
+      /endif
+    /set port [char [+ [ccode "a"] portn -1]] ;make lower case port name letter
+    /set portu [ucase port]  ;make upper case port name letter
 //
-//     name_TASK_START  -  Execution start point of the new task.
+//   Check that anything is defined for this port.  If not, skip it and go on to
+//   the next port.
 //
-//   W13 and W14 are trashed.
+    /set def false           ;init to no I/O bits in this port
+    /set bit 0               ;init to first bit within port
+    /block                   ;back here each new bit in this port
+      /set pdata [str "Portdata_" port bit] ;make full name of Portdata constant
+      /if [exist pdata] then ;this I/O pin has been given a name ?
+        /set def true
+        /quit
+        /endif
+      /set bit [+ bit 1]     ;advance to next bit in this port
+      /if [> bit 15] then    ;done with whole port ?
+        /quit
+        /endif
+      /repeat                ;back and do next bit in this port
+      /endblock
+
+    /if [not def] then       ;no named bits in this port ?
+      /repeat                ;skip this port, on to next
+      /endif
 //
-/macro start_task
-  /write
-  /write "         ;   Start " [ucase [qstr [arg 1]]] " task."
-  /write "         ;"
-         mov     #[v stacksz_[arg 1]], w13 ;pass stack size
-         mov     #stack_[arg 1], w14 ;pass start address of stack
-         call    task_new    ;create the new task
-         goto    [arg 1]_task_start ;start point of the new task
-  /write
-  /endmac
+//   Write the data type definition for this port.
+//
+    /write "typedef struct {"
+
+    /set bit 0               ;init to first bit within port
+    /block                   ;back here each new bit in this port
+      /set pdata [str "Portdata_" port bit] ;make full name of Portdata constant
+      /if [exist pdata]
+        /then                ;this I/O pin has been given a name
+          /call get_port_data [chars [chars pdata]]
+          /write "  unsigned " iobit_name ": 1;"
+        /else                ;this I/O pin has not been given a explicit name
+          /write "  unsigned : 1;"
+        /endif
+
+      /set bit [+ bit 1]     ;advance to next bit in this port
+      /if [> bit 15] then    ;done with whole port ?
+        /quit
+        /endif
+      /repeat                ;back and do next bit in this port
+      /endblock
+
+    /write "  } ioport_" port "_t;"
+    /write "extern volatile ioport_" port "_t PORT" portu ";"
+    /write "extern volatile ioport_" port "_t LAT" portu ";"
+    /write
+//
+//   Write the macros for each named pin in this port.  These allow manipulation
+//   of the I/O pin without having to know which port it is in.
+//
+    /set bit -1              ;init to before first bit number
+    /block                   ;back here each new bit in this port
+      /set bit [+ bit 1]     ;make 0-N number of this bit
+      /if [> bit 15] then    ;done all bits
+        /quit
+        /endif
+      /set pdata [str "Portdata_" port bit] ;make full name of Portdata constant
+      /if [not [exist pdata]] then
+        /repeat              ;this bit does not have a symbolic name, skip it
+        /endif
+      /call get_port_data [chars [chars pdata]] ;get info about this bit
+
+      /if iobit_out
+        /then                ;this is a output pin
+          /set ii [if iobit_pos 1 0]
+          /write "#define set_" iobit_name "_on() do {LAT" portu "." iobit_name "=" ii ";} while(0)"
+          /set ii [if iobit_pos 0 1]
+          /write "#define set_" iobit_name "_off() do {LAT" portu "." iobit_name "=" ii ";} while(0)"
+        /else                ;this is a input pin
+          /write "#define " iobit_name "_pin PORT" portu "." iobit_name
+        /endif
+
+      /repeat                ;back and do next bit in this port
+      /endblock
+    /write
+
+    /repeat                  ;back to do next I/O port
+    /endblock                ;done with all I/O ports
+
+  /if wfile then             ;close output file is one was created
+    /writepop
+    /endif
+  /endsub
+
 
 ;*******************************************************************************
+;*******************************************************************************
 ;
-;   Subroutine and other entry point linkage.
+;   Subroutine linkage and gloabl entry points.
+;
 ;
 ;   By convention, subroutines preserve the general registers W0 - W14 and trash
 ;   status bits and other related state unless explicitly documented to the
@@ -3012,9 +3267,11 @@ _\name:                      ;define the C30 entry point label
          bra     \target
   .endm
 
+
+;*******************************************************************************
 ;*******************************************************************************
 ;
-;   I/O port initialization.
+;   I/O port configuration.
 ;
 ;   Create and initialize the various assembler variables assumed by the /INBIT,
 ;   /INANA, and /OUTBIT commands.  These variables are later used in the PORT
@@ -3072,133 +3329,15 @@ _\name:                      ;define the C30 entry point label
     /endif
   /endsub
 
-////////////////////////////////////////////////////////////////////////////////
-//
-//   Subroutine WRITE_C_IOPINS [fnam]
-//
-//   Exports the symbolic I/O pin definitions in C.
-//
-//   If FNAM is supplied, then a file of that name is opened, the C code written
-//   to it, then closed.  If FNAM is not supplied, then the C code is written to
-//   the current output file.  FNAM must be a string expression, if supplied.
-//
-/subroutine write_c_iopins
-  /var local port string     ;lower case a-z port name
-  /var local portu string    ;lower case A-Z port name
-  /var local portn integer   ;1-26 number of port name letter
-  /var local bit integer     ;0-15 bit number within port
-  /var local def bool        ;at least one I/O bit defined in current port
-  /var local pdata string    ;name of Portdata_<port><bit> variable
-  /var local ii integer      ;scratch integer
-  /var local wfile bool      ;write to new file, not existing stream
-
-  /if [exist 1 arg]
-    /then
-      /call write_push [arg 1]
-      /set wfile true
-    /else
-      /set wfile false
-    /endif
-
-  /set portn 0               ;init to before first port letter
-  /block                     ;back here each new port
-    /set portn [+ portn 1]   ;make 1-26 number of letter for this port
-    /if [> portn 26] then
-      /quit
-      /endif
-    /set port [char [+ [ccode "a"] portn -1]] ;make lower case port name letter
-    /set portu [ucase port]  ;make upper case port name letter
-//
-//   Check that anything is defined for this port.  If not, skip it and go on to
-//   the next port.
-//
-    /set def false           ;init to no I/O bits in this port
-    /set bit 0               ;init to first bit within port
-    /block                   ;back here each new bit in this port
-      /set pdata [str "Portdata_" port bit] ;make full name of Portdata constant
-      /if [exist pdata] then ;this I/O pin has been given a name ?
-        /set def true
-        /quit
-        /endif
-      /set bit [+ bit 1]     ;advance to next bit in this port
-      /if [> bit 15] then    ;done with whole port ?
-        /quit
-        /endif
-      /repeat                ;back and do next bit in this port
-      /endblock
-
-    /if [not def] then       ;no named bits in this port ?
-      /repeat                ;skip this port, on to next
-      /endif
-//
-//   Write the data type definition for this port.
-//
-    /write "typedef struct {"
-
-    /set bit 0               ;init to first bit within port
-    /block                   ;back here each new bit in this port
-      /set pdata [str "Portdata_" port bit] ;make full name of Portdata constant
-      /if [exist pdata]
-        /then                ;this I/O pin has been given a name
-          /call get_port_data [chars [chars pdata]]
-          /write "  unsigned " iobit_name ": 1;"
-        /else                ;this I/O pin has not been given a explicit name
-          /write "  unsigned : 1;"
-        /endif
-
-      /set bit [+ bit 1]     ;advance to next bit in this port
-      /if [> bit 15] then    ;done with whole port ?
-        /quit
-        /endif
-      /repeat                ;back and do next bit in this port
-      /endblock
-
-    /write "  } ioport_" port "_t;"
-    /write "extern volatile ioport_" port "_t PORT" portu ";"
-    /write "extern volatile ioport_" port "_t LAT" portu ";"
-    /write
-//
-//   Write the macros for each named pin in this port.  These allow manipulation
-//   of the I/O pin without having to know which port it is in.
-//
-    /set bit -1              ;init to before first bit number
-    /block                   ;back here each new bit in this port
-      /set bit [+ bit 1]     ;make 0-N number of this bit
-      /if [> bit 15] then    ;done all bits
-        /quit
-        /endif
-      /set pdata [str "Portdata_" port bit] ;make full name of Portdata constant
-      /if [not [exist pdata]] then
-        /repeat              ;this bit does not have a symbolic name, skip it
-        /endif
-      /call get_port_data [chars [chars pdata]] ;get info about this bit
-
-      /if iobit_out
-        /then                ;this is a output pin
-          /set ii [if iobit_pos 1 0]
-          /write "#define set_" iobit_name "_on() do {LAT" portu "." iobit_name "=" ii ";} while(0)"
-          /set ii [if iobit_pos 0 1]
-          /write "#define set_" iobit_name "_off() do {LAT" portu "." iobit_name "=" ii ";} while(0)"
-        /else                ;this is a input pin
-          /write "#define " iobit_name "_pin PORT" portu "." iobit_name
-        /endif
-
-      /repeat                ;back and do next bit in this port
-      /endblock
-    /write
-
-    /repeat                  ;back to do next I/O port
-    /endblock                ;done with all I/O ports
-
-  /if wfile then             ;close output file is one was created
-    /writepop
-    /endif
-  /endsub
 
 ;*******************************************************************************
+;*******************************************************************************
+;
+;   FIFOs.
 ;
 ;   FIFOs of 8 bit bytes.
 ;
+
 ;   FIFOs that contain 8 bit bytes have the following format:
 ;
 ;     name + FIFOB_OFS_N  -  Number of data bytes currently in the FIFO (byte).
@@ -3398,8 +3537,8 @@ m\@_1:                       ;W2 contains new GET index
 ;       are written and read in ascending address order, except that the buffer
 ;       wraps back to the first word after the last.
 ;
-;     FIFOW_name_BUFSZ  -  BUF size in words.  The number of words the FIFO can
-;       hold is BUFSZ - 1.
+;     FIFOW_name_BUFSZ  -  Integer preprocessor constant, BUF size in words.
+;       The number of words the FIFO can hold is BUFSZ - 1.
 ;
 ;   The data structure and protocol have been deliberately designed so that
 ;   reading and writing can be done concurrently, even between foreground code
@@ -3662,10 +3801,12 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
          mov     w2, fifow_[arg 1]_get ;update the GET index
   /endmac
 
-////////////////////////////////////////////////////////////////////////////////
-//
-//   General preprocessor string manipulation.
-//
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Preprocessor string parsing and manipulation.
+;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -3902,69 +4043,36 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /show "  " nam " " val desc
   /endsub
 
-////////////////////////////////////////////////////////////////////////////////
-//
-//   Macro LOAD32 Wn, val
-//
-//   Load the value VAL into Wn+1:Wn.  Loading into W15 (the stack pointer) is a
-//   error.
-//
-/macro load32
-  /var local val integer = [arg 2]
-  /var local wn integer
-  /var local s string
-
-  /call get_wn [arg 1] wn    ;get register number
-  /if [>= wn 14] then        ;includes W15 ?
-    /show "  LOAD32 to stack pointer is not allowed."
-         .error  "LOAD32 W15"
-         .end
-    /stop
-    /endif
-
-  /call tabopcode s
-  /set s [str s "mov"]
-  /call taboperand s
-  /set s [str s "#0x" [int [and val 16#FFFF] "fw 4 lz base 16 usin"] ", w" wn]
-  /call startcomm s
-  /set s [str s val " (" [int val "base 16 usin"] "h) --> W" [+ wn 1] ":W" wn]
-  /write s
-
-  /set s ""
-  /call tabopcode s
-  /set s [str s "mov"]
-  /call taboperand s
-  /set s [str s "#0x" [int [shiftr val 16] "fw 4 lz base 16 usin"] ", w" [+ wn 1]]
-  /write s
-  /endmac
-
-////////////////////////////////////////////////////////////////////////////////
-//
-//   Function FX3F29U val
-//
-//   Converts the value VAL to its unisgned fixed point 3.29 format
-//   representation.  The function value is a 32 bit hexadecimal integer
-//   expressed in Embed format (16#xxx).
-//
-/function fx3f29u
-  /var local val real = [vnl [arg 1]] //input argument
-  /var local ii integer //integer value of resulting fixed point
-
-  /set val [max 0.0 val] //clip to min possible value
-  /if [< val 7.99999]
-    /then
-      /set val [* val 8388608]
-      /set ii [rnd val]
-      /set ii [shiftl ii 6]
-      /funcval "16#" [int ii "fw 8 lz base 16 usin"]
-    /else
-      /funcval "16#FFFFFFFF"
-    /endif
-  /endfunc
-
+;*******************************************************************************
 ;*******************************************************************************
 ;
-;   Low level preprocessor macros and routines for writing to program memory.
+;   Defining constants in program memory.
+;
+;   Facilities for writing bytes to program memory.  Program memory is
+;   essentially treated as byte-addressed, even though there are 3 bytes per
+;   program memory word, and that word occupies 2 addresses.
+;
+;   Labels, if specified, will be the byte offset into a data structure, not the
+;   program memory address.
+;
+;   These routines can be useful for creating efficiently-packed constant data
+;   in program memory, or for creating a image of data stored elsewhere, like
+;   the initial data for a non-volatile memory.
+;
+;   The current byte offset is kept in PBYTE_OFFSET.  This is automatically
+;   initialized to 0 on the first invocation of PBYTE.  It is then incremented
+;   by PBYTE each byte.  It can be explicitly set to any value at any time,
+;   and subsequent labels will have different values accordingly.
+;
+;   All the high level macros may be optionally preceeded by a label.  If the
+;   label ends with a colon, then it will be a local symbol with the colon
+;   stripped off.  If the label does not end in a colon, then the label will be
+;   used as provided, and will be made global.  In all cases, the label value is
+;   the byte offset of the first byte being defined.
+;
+;   When done writing constants to program memory with these macros, subroutine
+;   PBYTE_FINISH should be called to write any remaining partial program memory
+;   word.  Unused bytes are set to the erased value of FFh.
 ;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4132,35 +4240,6 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
     /repeat
     /endblock
   /endsub
-
-;*******************************************************************************
-;
-;   Facilities for writing bytes to program memory.  Labels, if specified, will
-;   be the byte offset from the first byte written by PBYTE.  Program memory is
-;   essentially treated as byte-addressed.
-;
-;   These routines can be useful for creating efficiently-packed constant data
-;   in program memory, or for creating a image of data stored elsewhere, like
-;   the initial data for a non-volatile memory.
-;
-;   The low level byte-writing macro is PBYTE, defined above.  The macros here
-;   are all named PB_xxx, and are layered on PBYTE.
-;
-;   The current byte offset is kept in PBYTE_OFFSET.  This is automatically
-;   initialized to 0 on the first invocation of PBYTE.  It is then incremented
-;   by PBYTE each byte.  It can be explicitly set to any value at any time,
-;   and subsequent labels will have different values accordingly.
-;
-;   All these macros may be optionally preceeded by a label.  If the label ends
-;   with a colon, then it will be a local symbol with the colon stripped off.
-;   If the label does not end in a colon, then the label will be used as
-;   provided, and will be made global.  In all cases, the label value is the
-;   byte offset of the first byte being defined.
-;
-;   When done writing constants to program memory with these macros, subroutine
-;   PBYTE_FINISH should be called to write any remaining partial program memory
-;   word.  The unused bytes are set to the erased value of FFh.
-;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
