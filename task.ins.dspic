@@ -36,11 +36,17 @@
 ;
 ;   Derived constants.
 ;
-/if [not [exist "maxtasks"]] then
+/if [not [exist "maxtasks:vcon"]] then
   /const maxtasks integer = 4
   /endif
-/if [not [exist "endlim"]] then
+/if [not [exist "endlim:vcon"]] then
   /const endlim integer = 6
+  /endif
+/if [not [exist "yield_check_inuse:vcon"]] then
+  /const yield_check_inuse bool = false
+  /endif
+/if [not [exist "yield_check_inuse_timer:vcon"]] then
+  /const yield_check_inuse_timer bool = false
   /endif
 
 /if [< maxtasks 1] then
@@ -49,6 +55,21 @@
          .end
   /stop
   /endif
+
+/block
+  /var local s string
+
+  /if yield_check_inuse then
+    /set s "Yield check mechanism enabled"
+    /if yield_check_inuse_timer then
+      /append s " using timer " yield_check_timer
+      /append s ", " [eng yield_check_time] "s"
+      /append s " (" [rnd [* freq_inst yield_check_time]] " inst)"
+      /endif
+    /show "  " s
+    /endif
+
+  /endblock
 ;
 ;   Tasks table.
 ;
@@ -168,7 +189,12 @@ alloc    ntasks              ;number of tasks currently defined
          mov     #1, w0
          mov     w0, nextid  ;init ID to try to assign to the next-created task
          mov     w0, ntasks  ;init number of current tasks
-
+;
+;   Init the yield check mechanism if code was provided for that.
+;
+/if [exist "yield_check_init"] then
+         yield_check_init
+  /endif
          leaverest
 
 ;*******************************************************************************
@@ -395,6 +421,12 @@ run_this:                    ;run task at CURR_P and W0
          mov     [w0 + tsk_id], w1 ;get the ID of this task
          mov     w1, currtask ;update the global current task ID variable
 ;
+;   Reset the yield check timing mechanism if code was provided for that.
+;
+/if [exist "yield_check_reset:macro"] then
+         yield_check_reset
+  /endif
+;
 ;   Restore the registers indicated by TSKSAVE.
 ;
 .irp     ii,     14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 ;once for each reg
@@ -404,22 +436,6 @@ run_this:                    ;run task at CURR_P and W0
          .endr
 
          return              ;restart the new task
-
-;*******************************************************************************
-;
-;   Subroutine TASK_YIELD_SAVE
-;
-;   Like TASK_YIELD except that all the W registers are preserved, not just the
-;   ones listed in TSKSAVE.
-;
-;   If TASK_YIELD saves all registers, then TASK_YIELD_SAVE has already been
-;   defined as a synonym for TASK_YIELD.
-;
-.if tsknsave
-         glbsub  task_yield_save, tsknsave
-         mcall   task_yield
-         leaverest
-  .endif
 
 ;*******************************************************************************
 ;
@@ -450,6 +466,59 @@ run_this:                    ;run task at CURR_P and W0
          leaverest
   .endif
   /endif
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Create TASK_YIELD_CHECK if the yield check mechanism is in use.
+//
+/if [exist "skip_nyieldnow:macro"] then
+;*******************************************************************************
+;
+;   Subroutine TASK_YIELD_CHECK
+;
+;   Yield if the intended time for the current task has elapsed.  If not, this
+;   routine does nothing.  This routine only exists when the yield check
+;   mechanism is in use.
+;
+         glbsub  task_yield_check
+
+         skip_nyieldnow      ;don't need to yield yet ?
+         call    task_yield  ;is time, do the yield
+
+         leaverest
+;
+;   C version of TASK_YIELD_CHECK
+;
+  /if using_c then
+         glbsubc task_yield_check
+
+         skip_nyieldnow      ;don't need to yield yet ?
+         call    _task_yield ;is time, do the yield
+
+         leaverest
+    /endif                   ;end of using C case
+
+  /endif                     ;end of yield check mechanism in use
+//
+//   End of code included only if the yield check mechanism is in use.
+//
+////////////////////////////////////////////////////////////////////////////////
+
+;*******************************************************************************
+;
+;   Subroutine TASK_YIELD_SAVE
+;
+;   Like TASK_YIELD except that all the W registers are preserved, not just the
+;   ones listed in TSKSAVE.
+;
+;   If TASK_YIELD saves all registers, then TASK_YIELD_SAVE has already been
+;   defined as a synonym for TASK_YIELD.
+;
+.if tsknsave
+         glbsub  task_yield_save, tsknsave
+         mcall   task_yield
+         leaverest
+  .endif
 
 ;*******************************************************************************
 ;

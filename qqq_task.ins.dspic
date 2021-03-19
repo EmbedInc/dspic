@@ -1,0 +1,86 @@
+//   Global configuration of the multi-tasking system.
+//
+//   This file defines the part of the TASK module configuration that needs to
+//   be known outside that module.  Preprocessor macros and subroutines are
+//   defined for global use.
+//
+//   This file is meant to be copied into a project and modified to configure
+//   the multi-tasking system specifically for that project.  It is intended to
+//   be referenced from the main project include file.
+//
+
+//   YIELD_CHECK_TIME
+//
+//   The time in seconds for a task to run before the indication is asserted
+//   that it should yield.  Tasks are not forced to yield, but macro
+//   SKIP_NYIELDNOW will skip after this time and not before it.  The existance
+//   of this constant does not enable the yield check mechanism.  It only sets
+//   the task yield timeout, whether used or not.
+//
+/const   yield_check_time real = [/ 5700 freq_inst]
+
+//   YIELD_CHECK_TIMER
+//
+//   The 1-N number of the system timer to use for timing when a task should
+//   yield.  The yield check mechanism is not restricted to being implemented by
+//   a system timer dedicated to that purpose, although that can be a useful
+//   mechanism when a system timer is available.
+//
+//   Setting this constant to a timer number "fills in" the yield check
+//   mechanism with code to use that timer.  Not creating this constant or
+//   setting it to 0 disables automatically generating the yield check code to
+//   use a timer.  In that case, the application must either create the yield
+//   check code on its own (by implementing the SKIP_NYIELDNOW macro, below), or
+//   not enable the yield check mechanism at all.
+//
+/const   yield_check_timer integer = 0
+
+//   Macro SKIP_NYIELDNOW
+//
+//   Skip the next instruction after this macro if it is not yet time for the
+//   current task to yield.  If the current task should yield now, then
+//   execution continues immediately after this macro.  All registers must be
+//   preserved.
+//
+//   The yield check mechanism is only implemented when this macro is defined.
+//   This macro will be automatically defined if canned mechansims are enabled
+//   to implement the yield check mechanism (like setting YIELD_CHECK_TIMER to a
+//   valid timer number).  Do not define this macro here if the generic canned
+//   mechanism is desired.  Defining this macro here overrides any automatic
+//   definition of this macro later.
+//
+//macro skip_nyieldnow
+  //endmac
+
+//   Macro YIELD_CHECK_INIT
+//
+//   Initialize the yield check mechanism.  This macro is run by TASK_INIT after
+//   the rest of the multi-tasking system has been initialized.  W0 may be
+//   trashed.  The remaining registers must be preserved.
+//
+//   This macro will be automatically defined if canned mechansims are enabled
+//   to implement the yield check mechanism (like setting YIELD_CHECK_TIMER to a
+//   valid timer number).  Do not define this macro here if the generic canned
+//   mechanism is desired.  Defining this macro here overrides any automatic
+//   definition of this macro later.
+//
+//macro yield_check_init
+  //endmac
+
+//   Macro YIELD_CHECK_RESET
+//
+//   Reset the time until the current task should yield.  This macro is run by
+//   the task switching code after switching to a new task.  It is run with the
+//   task of the new stack, but before the saved registers for that task are
+//   popped from the stack.  All the registers listed in TSKSAVE may be trashed.
+//
+//   This macro will be automatically defined if canned mechansims are enabled
+//   to implement the yield check mechanism (like setting YIELD_CHECK_TIMER to a
+//   valid timer number).  Do not define this macro here if the generic canned
+//   mechanism is desired.  Defining this macro here overrides any automatic
+//   definition of this macro later.
+//
+//macro yield_check_reset
+  //endmac
+
+/include "(cog)src/dspic/task_setup.ins.dspic"

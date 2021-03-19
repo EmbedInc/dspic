@@ -61,16 +61,17 @@
 ;       WAITCY, BUSYWAIT, MINWAIT, WAITNOP  -  Short timing.
 ;       ALLOC, ALLOCG  -  Allocate memory in RAM.
 ;       STRUCT_START, FIELD  -  Define data structure with named fields.
-;       TIMER_SEC, TIMER_PERIOD  -  Hardware timer configuration.
 ;       BAUD_SETUP30, BAUD_SETUP  -  UART baud rate setup.
 ;       SELECT_OUTPIN, SELECT_INPIN  -  Peripheral pin select helpers.
 ;       CAN_TIMING  -  CAN peripheral timing configuration.
 ;       DISPATCH  -  Branch according to dispatch table.
 ;       WRITE_PUSH, WRITE_POP  -  Writing to separate output file.
 ;       PARSE_CMD, CmdRef, ENTPNT, EXPORT_RSP  -  Command/response helpers.
-;       START_TASK  -  Embed multi-tasking helper.
+;       START_TASK, YIELD_CHECK  -  Embed multi-tasking helpers.
 ;       LOAD32  -  Load 32-bit constant into W register pair.
 ;       FX3F29U  -  Convert constant to 3.29 fixed point.
+;
+;     Timer setup and manipulation.
 ;
 ;     Global 1-bit named flags.
 ;
@@ -1553,150 +1554,6 @@ _\name:
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//   Subroutine TIMER_SEC time
-//
-//   Computes the setup of a timer to achive TIME seconds period.  The following
-//   preprocessor variables are set, or created if they do not exist:
-//
-//     TIMER_PER (real)  -  Actual resulting period in seconds.
-//
-//     TIMER_PERCY (integer)  -  Actual resulting period in instruction cycles.
-//
-//     TIMER_TICK (real)  -  Seconds for one count of the timer.
-//
-//     TIMER_CNT (integer)  -  Period in timer counts, will be 0-65536.
-//
-//     TIMER_PRE (integer)  -  Prescaler divide value.  This 1, 8, 64, or 256.
-//
-//     TIMER_TCKPS (integer)  -  The prescaler selection field value in the
-//       position it is in in the TxCON timer control register.  All other bits
-//       are 0.
-//
-/subroutine timer_sec
-  /var local time real = [arg 1] ;desired timer period, seconds
-  /var exist timer_per real
-  /var exist timer_percy integer
-  /var exist timer_tick real
-  /var exist timer_cnt integer
-  /var exist timer_pre integer
-  /var exist timer_tckps integer
-
-  //   Find TIMER_PRE and TIMER_CNT.  The lowest possible prescaler value will
-  //   be used such that the timer count fits into the available 16 bits.
-  //
-  //   TIMER_TCKPS is set to the prescaler selection field value corresponding
-  //   to the chosen TIMER_PRE value.
-  //
-  /block
-    /set timer_pre 1         ;try with prescaler of 1
-    /set timer_tckps 0
-    /set timer_cnt [rnd [/ [* freq_inst time] timer_pre]]
-    /if [<= timer_cnt 65536] then
-      /quit
-      /endif
-    /set timer_pre 8         ;try with prescaler of 8
-    /set timer_tckps 1
-    /set timer_cnt [rnd [/ [* freq_inst time] timer_pre]]
-    /if [<= timer_cnt 65536] then
-      /quit
-      /endif
-    /set timer_pre 64        ;try with prescaler of 64
-    /set timer_tckps 2
-    /set timer_cnt [rnd [/ [* freq_inst time] timer_pre]]
-    /if [<= timer_cnt 65536] then
-      /quit
-      /endif
-    /set timer_pre 256       ;try with prescaler of 256
-    /set timer_tckps 3
-    /set timer_cnt [rnd [/ [* freq_inst time] timer_pre]]
-    /if [<= timer_cnt 65536] then
-      /quit
-      /endif
-    /show "  Unable to achieve the timer period of " time " seconds."
-         .error  "  Timer period too long."
-         .end
-    /stop
-    /endblock
-  /set timer_tckps [shiftl timer_tckps 4] ;move prescaler selection field into place
-  //
-  //   The configuration has been found.  TIMER_PRE is the prescaler divide
-  //   factor, and TIMER_CNT the timer 1-65535 timer period.
-  //
-  /set timer_percy [* timer_pre timer_cnt] ;instruction cycle in timer period
-  /set timer_tick [/ timer_pre freq_inst] ;seconds for one timer count
-  /set timer_per [/ timer_percy freq_inst] ;final resulting period in seconds
-  /endsub
-
-;*******************************************************************************
-;
-;   Macro TIMER_PERIOD timer, cycles
-;
-;   Compute the period setup parameters for timer TIMER so that its period comes
-;   as close as possible to CYCLES instruction cycles.  This macro only computes
-;   values and does not emit any executable code.  The parameter TIMER must be
-;   an integer indicating the number of the timer to compute the setup values
-;   for.  An error is generated if the period is out of range for the hardware
-;   to achieve.
-;
-;   The following assembly variables are set:
-;
-;     VAL_PR  -  PRn register value to achieve the desired period.
-;
-;     VAL_TCKPS  -  TCKPS field value in the TnCON control register for the
-;       timer.  This field controls the prescaler divide value.
-;
-;     VAL_PRESCALE  -  Actual presscaler divide value selected by VAL_TCKPS.
-;
-;     VAL_PERIOD  -  Actual period resulting from the computed setup in units of
-;       instruction cycles.  This may not be exactly the same as CYCLES if the
-;       prescaler divide value is greater than 1.
-;
-;     VAL_TnCON  -  Timer control register value for periodic ticks as
-;       specified.
-;
-;   The lowest possible prescaler divide value is used such that the VAL_PR is
-;   within the range of the period register.
-;
-.macro timer_period timer, cycles
-
-.set     val_prescale, 1     ;init prescaler divide value to smallest possible
-.set     val_tckps, 0        ;init prescaler select field to match divide value
-.set     val_pr, ((((\cycles * 2) / val_prescale) + 1) >> 1) - 1
-
-  .if val_pr & ~0xFFFF       ;need larger prescaler ?
-         .set    val_prescale, 8
-         .set    val_tckps, 1
-         .set    val_pr, ((((\cycles * 2) / val_prescale) + 1) >> 1) - 1
-    .endif
-  .if val_pr & ~0xFFFF       ;need larger prescaler ?
-         .set    val_prescale, 64
-         .set    val_tckps, 2
-         .set    val_pr, ((((\cycles * 2) / val_prescale) + 1) >> 1) - 1
-    .endif
-  .if val_pr & ~0xFFFF       ;need larger prescaler ?
-         .set    val_prescale, 256
-         .set    val_tckps, 3
-         .set    val_pr, ((((\cycles * 2) / val_prescale) + 1) >> 1) - 1
-    .endif
-  .if val_pr & ~0xFFFF       ;need larger prescaler ?
-         .print  "Timer period can not be achieved"
-         .fail   0
-    .endif
-.set     val_period, (val_pr + 1) * val_prescale ;compute final instructions per period
-
-.set     val_t&timer&con, 0b1010000000000000 | (val_tckps << 4)
-                 ;          -X-XXXXXX------X  unused bits
-                 ;          1---------------  enable the timer
-                 ;          --1-------------  turn off timer in idle mode
-                 ;          ---------0------  disable timer gate
-                 ;          ----------00----  prescaler select, VAL_TCKPS will be merged in
-                 ;          ------------0---  do not make part of 32 bit timer (type B only)
-                 ;          -------------0--  do not sync external clock (type A only)
-                 ;          --------------0-  clock source is intruction clock
-  .endm
-
-////////////////////////////////////////////////////////////////////////////////
-//
 //   Subroutine BAUD_SETUP30 baud
 //
 //   Compute the baud rate setup of a old style 30F UART.  These do not have the
@@ -2269,6 +2126,31 @@ _\name:
 
 ////////////////////////////////////////////////////////////////////////////////
 //
+//   Macro YIELD_CHECK
+//
+//   Check for whether the current task should yield now, and yield if so.  The
+//   check for needing to yield is fast, so this macro can be called in an
+//   inner loop.  It will only take significant time when it actually yields.
+//   When a yield is required, TASK_YIELD is called to perform the yield.  Only
+//   the registers listed in TSKSAVE will be preserved.
+//
+//   It is an error to use this macro when the yield check mechanism of the TASK
+//   module is not in use.
+//
+/macro yield_check
+  /if [not [exist "skip_nyieldnow:macro"]] then
+    /show "  YIELD_CHECK used without the yield check mechanism enabled"
+         .error  YIELD_CHECK
+         .end
+    /stop
+    /endif
+
+         skip_nyieldnow      ;don't need to yield yet ?
+         call    task_yield  ;do need to yield, do it
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
 //   Macro LOAD32 Wn, val
 //
 //   Load the value VAL into Wn+1:Wn.  Loading into W15 (the stack pointer) is a
@@ -2326,6 +2208,325 @@ _\name:
       /funcval "16#FFFFFFFF"
     /endif
   /endfunc
+
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Timer setup and manipulation.
+;
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine TIMER_SEC time
+//
+//   Computes the setup of a timer to achive TIME seconds period.  The following
+//   preprocessor variables are set, or created if they do not exist:
+//
+//     TIMER_PER (real)  -  Actual resulting period in seconds.
+//
+//     TIMER_PERCY (integer)  -  Actual resulting period in instruction cycles.
+//
+//     TIMER_TICK (real)  -  Seconds for one count of the timer.
+//
+//     TIMER_CNT (integer)  -  Period in timer counts, will be 0-65536.
+//
+//     TIMER_PRE (integer)  -  Prescaler divide value: 1, 8, 64, or 256.
+//
+//     TIMER_TCKPS (integer)  -  The prescaler selection field value in the
+//       position it is in in the TxCON timer control register.  All other bits
+//       are 0.
+//
+/subroutine timer_sec
+  /var local time real = [vnl [arg 1]] ;desired timer period, seconds
+  /var exist timer_per real
+  /var exist timer_percy integer
+  /var exist timer_tick real
+  /var exist timer_cnt integer
+  /var exist timer_pre integer
+  /var exist timer_tckps integer
+
+  //   Find TIMER_PRE and TIMER_CNT.  The lowest possible prescaler value will
+  //   be used such that the timer count fits into the available 16 bits.
+  //
+  //   TIMER_TCKPS is set to the prescaler selection field value corresponding
+  //   to the chosen TIMER_PRE value.
+  //
+  /block
+    /set timer_pre 1         ;try with prescaler of 1
+    /set timer_tckps 0
+    /set timer_cnt [rnd [/ [* freq_inst time] timer_pre]]
+    /if [<= timer_cnt 65536] then
+      /quit
+      /endif
+    /set timer_pre 8         ;try with prescaler of 8
+    /set timer_tckps 1
+    /set timer_cnt [rnd [/ [* freq_inst time] timer_pre]]
+    /if [<= timer_cnt 65536] then
+      /quit
+      /endif
+    /set timer_pre 64        ;try with prescaler of 64
+    /set timer_tckps 2
+    /set timer_cnt [rnd [/ [* freq_inst time] timer_pre]]
+    /if [<= timer_cnt 65536] then
+      /quit
+      /endif
+    /set timer_pre 256       ;try with prescaler of 256
+    /set timer_tckps 3
+    /set timer_cnt [rnd [/ [* freq_inst time] timer_pre]]
+    /if [<= timer_cnt 65536] then
+      /quit
+      /endif
+    /show "  Unable to achieve the timer period of " time " seconds."
+         .error  "  Timer period too long."
+         .end
+    /stop
+    /endblock
+  /set timer_tckps [shiftl timer_tckps 4] ;move prescaler selection field into place
+  //
+  //   The configuration has been found.  TIMER_PRE is the prescaler divide
+  //   factor, and TIMER_CNT the timer 1-65535 timer period.
+  //
+  /set timer_percy [* timer_pre timer_cnt] ;instruction cycle in timer period
+  /set timer_tick [/ timer_pre freq_inst] ;seconds for one timer count
+  /set timer_per [/ timer_percy freq_inst] ;final resulting period in seconds
+  /endsub
+
+;*******************************************************************************
+;
+;   Macro TIMER_PERIOD timer, cycles
+;
+;   *** Deprecated.  Use TIMER_SEC in new code ***
+;
+;   Compute the period setup parameters for timer TIMER so that its period comes
+;   as close as possible to CYCLES instruction cycles.  This macro only computes
+;   values and does not emit any executable code.  The parameter TIMER must be
+;   an integer indicating the number of the timer to compute the setup values
+;   for.  An error is generated if the period is out of range for the hardware
+;   to achieve.
+;
+;   The following assembly variables are set:
+;
+;     VAL_PR  -  PRn register value to achieve the desired period.
+;
+;     VAL_TCKPS  -  TCKPS field value in the TnCON control register for the
+;       timer.  This field controls the prescaler divide value.
+;
+;     VAL_PRESCALE  -  Actual presscaler divide value selected by VAL_TCKPS.
+;
+;     VAL_PERIOD  -  Actual period resulting from the computed setup in units of
+;       instruction cycles.  This may not be exactly the same as CYCLES if the
+;       prescaler divide value is greater than 1.
+;
+;     VAL_TnCON  -  Timer control register value for periodic ticks as
+;       specified.
+;
+;   The lowest possible prescaler divide value is used such that the VAL_PR is
+;   within the range of the period register.
+;
+.macro timer_period timer, cycles
+
+.set     val_prescale, 1     ;init prescaler divide value to smallest possible
+.set     val_tckps, 0        ;init prescaler select field to match divide value
+.set     val_pr, ((((\cycles * 2) / val_prescale) + 1) >> 1) - 1
+
+  .if val_pr & ~0xFFFF       ;need larger prescaler ?
+         .set    val_prescale, 8
+         .set    val_tckps, 1
+         .set    val_pr, ((((\cycles * 2) / val_prescale) + 1) >> 1) - 1
+    .endif
+  .if val_pr & ~0xFFFF       ;need larger prescaler ?
+         .set    val_prescale, 64
+         .set    val_tckps, 2
+         .set    val_pr, ((((\cycles * 2) / val_prescale) + 1) >> 1) - 1
+    .endif
+  .if val_pr & ~0xFFFF       ;need larger prescaler ?
+         .set    val_prescale, 256
+         .set    val_tckps, 3
+         .set    val_pr, ((((\cycles * 2) / val_prescale) + 1) >> 1) - 1
+    .endif
+  .if val_pr & ~0xFFFF       ;need larger prescaler ?
+         .print  "Timer period can not be achieved"
+         .fail   0
+    .endif
+.set     val_period, (val_pr + 1) * val_prescale ;compute final instructions per period
+
+.set     val_t&timer&con, 0b1010000000000000 | (val_tckps << 4)
+                 ;          -X-XXXXXX------X  unused bits
+                 ;          1---------------  enable the timer
+                 ;          --1-------------  turn off timer in idle mode
+                 ;          ---------0------  disable timer gate
+                 ;          ----------00----  prescaler select, VAL_TCKPS will be merged in
+                 ;          ------------0---  do not make part of 32 bit timer (type B only)
+                 ;          -------------0--  do not sync external clock (type A only)
+                 ;          --------------0-  clock source is intruction clock
+  .endm
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine TIMER_REGS n
+//
+//   Identify specific registers and bits used for the timer N.  The following
+//   variables are create if not previously existing, and are set:
+//
+//     TIMER_TYPE (string)  -  The overall timer type, "A", "B", or "C"
+//
+//     TIMER_IFN (integer)  -  Number of the IFSn and IECn registers containing
+//       the interrupt flag and enable bits, respsectively.
+//
+//     TIMER_IPCN (integer)  -  Number of the IPCn register containing the
+//       the interrupt priority for this timer.
+//
+//     TIMER_IPC_BIT (integer)  -  Low bit of the interrupt priority field
+//       within the IPCn register.
+//
+/subroutine timer_regs
+  /var local n integer = [vnl [arg 1]] ;1-N timer number
+
+  /var exist timer_type string //make sure the return values exist
+  /var exist timer_ifn integer
+  /var exist timer_ipcn integer
+  /var exist timer_ipc_bit integer
+
+  /pick one by n             ;which timer is it ?
+  /option 1
+    /set timer_type "A"
+    /set timer_ifn 0
+    /set timer_ipcn 0
+    /set timer_ipc_bit 12
+  /option 2
+    /set timer_type "B"
+    /set timer_ifn 0
+    /set timer_ipcn 1
+    /set timer_ipc_bit 12
+  /option 3
+    /set timer_type "C"
+    /set timer_ifn 8
+    /set timer_ipcn 2
+    /set timer_ipc_bit 0
+  /option 4
+    /set timer_type "B"
+    /set timer_ifn 11
+    /set timer_ipcn 6
+    /set timer_ipc_bit 12
+  /option 5
+    /set timer_type "C"
+    /set timer_ifn 12
+    /set timer_ipcn 7
+    /set timer_ipc_bit 0
+  /option 6
+    /set timer_type "B"
+    /set timer_ifn 2
+    /set timer_ipcn 11
+    /set timer_ipc_bit 12
+  /option 7
+    /set timer_type "C"
+    /set timer_ifn 3
+    /set timer_ipcn 12
+    /set timer_ipc_bit 0
+  /option 8
+    /set timer_type "B"
+    /set timer_ifn 3
+    /set timer_ipcn 12
+    /set timer_ipc_bit 12
+  /option 9
+    /set timer_type "C"
+    /set timer_ifn 3
+    /set timer_ipcn 13
+    /set timer_ipc_bit 0
+  /optionelse
+    /show "  Timer " n " is not supported in TIMER_REGS"
+         .error  "Timer N"
+         .end
+    /stop
+    /endpick
+  /endsub
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine TIMER_SETUP_PER n per
+//
+//   Set up timer N to trigger with a regular period of PER seconds.  The timer
+//   will be reset and started at the start of a period.  The interrupt state
+//   and flag bits associated with the timer are not altered.  If a periodic
+//   interrupt is desired, then this must be separately enabled after this
+//   subroutine.
+//
+//   The following preprocessor constants are set:
+//
+//     TIMER_PER (real)  -  Actual resulting period in seconds.
+//
+//     TIMER_PERCY (integer)  -  Actual resulting period in instruction cycles.
+//
+//     TIMER_TICK (real)  -  Seconds for one count of the timer.
+//
+//     TIMER_CNT (integer)  -  Period in timer counts, will be 0-65536.
+//
+//     TIMER_PRE (integer)  -  Prescaler divide value: 1, 8, 64, or 256.
+//
+//   The preprocessor variables created/set by TIMER_REGS (above) will also be
+//   available after a call to this subroutine.
+//
+//   W0 is trashed.
+//
+/subroutine timer_setup_per
+  /var local n integer = [vnl [arg 1]] ;1-N timer number
+  /var local per real = [vnl [arg 2]] ;desired period, seconds
+
+  /call timer_regs n         ;determine which registers used by this timer
+  /call timer_sec per        ;compute timer period configuration
+
+  /write "         ;"
+  /write "         ;   Set up timer " n " for " [eng timer_per 4] "s period and start it running."
+  /write "         ;"
+         clr     T[v n]con   ;make sure the timer is off for now
+         clr     Tmr[v n]    ;reset the timer value to 0
+         mov     #[- timer_cnt 1], w0
+         mov     w0, Pr[v n] ;set timer period
+
+  /pick one by timer_type
+  /option "A"
+         mov     #0b1000000000000000 | [v timer_tckps], w0
+                 ;  1--------------- enable the timer
+                 ;  -X-------------- unused
+                 ;  --0------------- continue in idle mode, not used
+                 ;  ---XXXXXX------- unused
+                 ;  ---------0------ not gated input mode
+                 ;  ----------XX---- prescaler, filled in from TIMER_TCKPS
+                 ;  ------------X--- unused
+                 ;  -------------0-- do not sync to clock, not used with internal clock
+                 ;  --------------0- clock source is instruction clock
+                 ;  ---------------X unused
+         mov     w0, T[v n]con ;configure and enable the timer
+  /option "B"
+         mov     #0b1000000000000000 | [v timer_tckps], w0
+                 ;  1--------------- enable the timer
+                 ;  -X-------------- unused
+                 ;  --0------------- continue in idle mode, not used
+                 ;  ---XXXXXX------- unused
+                 ;  ---------0------ not gated input mode
+                 ;  ----------XX---- prescaler, filled in from TIMER_TCKPS
+                 ;  ------------0--- not merge with next timer for 32 bits wide
+                 ;  -------------X-- unused
+                 ;  --------------0- clock source is instruction clock
+                 ;  ---------------X unused
+         mov     w0, T[v n]con ;configure and enable the timer
+  /option "C"
+         mov     #0b1000000000000000 | [v timer_tckps], w0
+                 ;  1--------------- enable the timer
+                 ;  -X-------------- unused
+                 ;  --0------------- continue in idle mode, not used
+                 ;  ---XXXXXX------- unused
+                 ;  ---------0------ not gated input mode
+                 ;  ----------XX---- prescaler, filled in from TIMER_TCKPS
+                 ;  ------------XX-- unused
+                 ;  --------------0- clock source is instruction clock
+                 ;  ---------------X unused
+         mov     w0, T[v n]con ;configure and enable the timer
+    /endpick
+
+  /write
+  /endsub
 
 
 ;*******************************************************************************
@@ -2987,6 +3188,20 @@ typedef  unsigned short machine_intptr_t;
 .macro leaverest
          leave   savedregs
   .endm
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro LEAVECHECK
+//
+//   Like LEAVEREST, but checks for needing to yield after the registers are
+//   restored from the stack.  If so, TASK_YIELD is called.  Only the registers
+//   listed in TSKSAVE are preserved.
+//
+/macro leavecheck
+         popregs \regflags
+         yield_check         ;check for time to yield and yield if so
+         return
+  /endmac
 
 ;*******************************************************************************
 ;

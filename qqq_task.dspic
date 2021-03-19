@@ -14,7 +14,7 @@
 ;   * its use.                                                    *
 ;   ***************************************************************
 ;
-;   Cooperative task manager.  The exported resources are:
+;   Cooperative task manager.  The exported subroutines are:
 ;
 ;     TASK_INIT
 ;
@@ -26,7 +26,7 @@
 ;
 ;         W13  -  Size of the new task stack in bytes, must be even.
 ;
-;         W14  -  Start address of the task for the new stack.
+;         W14  -  Start address of the stack for the new task, must be even.
 ;
 ;       The new task starts immediately after the CALL TASK_NEW instruction.  It
 ;       is intended that a GOTO be put there.  The call returns 2 instruction
@@ -56,6 +56,15 @@
 ;     TASK_YIELD_SAVE
 ;
 ;       Like TASK_YIELD, except that all registers are preserved.
+;
+;     TASK_YIELD_CHECK
+;
+;       Like TASK_YIELD_SAVE except that the yield is only performed when there
+;       is an external indication that indicates it is time for the current task
+;       to yield.
+;
+;       This routine only exists when an external task yield time mechanism has
+;       been implemented.  See the TASK_NYIELDNOW macro, below.
 ;
 ;     TASK_EXIT
 ;
@@ -119,6 +128,26 @@
 ;       Global 16 bit unsigned integer variable containing the ID of the
 ;       currently-running task.  This variable must be considered read-only by
 ;       application code.
+;
+;   This module is configured by the following preprocessor symbols and files:
+;
+;     MAXTASKS, integer
+;
+;       The maximum number of task that can simultaneously run.  Configuring for
+;       more tasks takes more static storage.  Default = 4.
+;
+;     ENDLIM, integer
+;
+;       Minimum number of bytes available to a stack before the stack error trap
+;       is taken.  A stack error trap is taken when a push leaves this many or
+;       fewer bytes available to the stack.
+;
+;     QQQ_TASK.INS.DSPIC, include file
+;
+;       This include file sets configuration state that needs to be globally
+;       known, and creates preprocessor routines that may be used outside the
+;       TASK module.  See the header comments in this file for what options are
+;       available and how they are customized.
 ;
 ;   The tasks are:
 ;

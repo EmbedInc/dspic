@@ -108,6 +108,8 @@ void task_prune (                      //kill all but the first N tasks
 
 void task_yield (void);                //let other tasks run for a while
 
+void task_yield_check (void);          //yield if time slice elapsed
+
 //******************************************************************************
 //
 //   Dynamic memory allocation and deallocation.

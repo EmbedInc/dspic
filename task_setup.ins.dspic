@@ -1,0 +1,59 @@
+//   Non-customizable part of the multi-tasking system global configuration.
+//
+//   Projects are intended to have their own customized copy of
+//   QQQ_TASK.INS.DSPIC, which is then referenced from the main project include
+//   file.  This file (TASK_SETUP.INS.DSPIC) is essentially the fixed part of
+//   QQQ_TASK.INS.DSPIC, and is referenced from the end of that file.  The code
+//   here is therefore run after the specific customizations in
+//   QQQ_TASK.INS.DSPIC have been defined.  Further configuration details are
+//   derived here from that state.
+//
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Automatically create the yield check mechanism to use a system timer if
+//   YIELD_CHECK_TIMER is defined, integer, and greater than 0.
+//
+/block
+  /if [not [exist "yield_check_timer:vcon"]] then //timer number not defined ?
+    /quit
+    /endif
+  /if [<> [sym "yield_check_timer:vcon" dtype] "INTEGER"] then //not integer ?
+    /quit
+    /endif
+  /if [<= yield_check_timer:vcon 0] then //invalid timer number ?
+    /quit
+    /endif
+
+  /const yield_check_inuse bool = true
+  /const yield_check_inuse_timer bool = true
+
+  /call timer_regs yield_check_timer //find regsters used by this timer
+  /const yield_check_tmr_ifreg = [str "IFS" timer_ifn] //make IFSn reg full name
+  //
+  //   Define YIELD_CHECK_INIT macro
+  //
+  /if [not [exist "yield_check_init:macro"]] then //not already defined ?
+    /macro yield_check_init
+      /call timer_setup_per yield_check_timer yield_check_time //init the timer
+         bclr    [chars yield_check_tmr_ifreg], #T[v yield_check_timer]IF ;init to time not elapsed
+      /endmac
+    /endif
+  //
+  //   Define YIELD_CHECK_RESET macro
+  //
+  /if [not [exist "yield_check_reset:macro"]] then //not already defined ?
+    /macro yield_check_reset
+         clr     TMR[v yield_check_timer] ;reset the timer count to 0
+         bclr    [chars yield_check_tmr_ifreg], #T[v yield_check_timer]IF ;clear the elapsed condition
+      /endmac
+    /endif
+  //
+  //   Define SKIP_NYIELDNOW macro
+  //
+  /if [not [exist "skip_nyieldnow:macro"]] then //not already defined ?
+    /macro skip_nyieldnow
+         btsc    [chars yield_check_tmr_ifreg], #T[v yield_check_timer]IF ;not time to yield yet ?
+      /endmac
+    /endif
+  /endblock
