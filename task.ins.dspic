@@ -469,32 +469,69 @@ run_this:                    ;run task at CURR_P and W0
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//   Create TASK_YIELD_CHECK if the yield check mechanism is in use.
+//   Create routines that work with time slices if the yield check mechanism is
+//   in use.
 //
-/if [exist "skip_nyieldnow:macro"] then
+/if [exist "skip_yieldnow:macro"] then
 ;*******************************************************************************
 ;
-;   Subroutine TASK_YIELD_CHECK
+;   Subroutine TASK_TIME_DONE
 ;
-;   Yield if the intended time for the current task has elapsed.  If not, this
-;   routine does nothing.  This routine only exists when the yield check
+;   Check for whether the current time slice has elapsed.  The Z flag is set if
+;   the time slice has elapsed (task should yield now), and cleared if it has
+;   not elapsed (OK to continue).
+;
+         glbsub  task_time_done
+
+         bclr    Sr, #Z      ;init to time slice not elapsed yet
+         skip_nyieldnow      ;time slice really not elapsed ?
+         bset    Sr, #Z      ;is elapsed
+
+         leaverest
+;
+;   C version of TASK_TIME_DONE
+;
+;   Return non-zero in W0 if the current time slice has elapsed, 0 otherwise.
+;
+  /if using_c then
+         glbsubc task_time_done
+
+         mov     #0, w0      ;init to time slice not done yet
+         skip_nyieldnow      ;time slice really isn't done ?
+         mov     #1, w0      ;time slice is done
+
+         leaverest
+    /endif                   ;end of using C case
+
+;*******************************************************************************
+;
+;   Subroutine TASK_YIELD_IFTIME
+;
+;   Yield if the intended time slice for the current task has elapsed.  If not,
+;   this routine does nothing.  This routine only exists when the yield check
 ;   mechanism is in use.
 ;
-         glbsub  task_yield_check
+         glbsub  task_yield_iftime
 
          skip_nyieldnow      ;don't need to yield yet ?
          call    task_yield  ;is time, do the yield
 
          leaverest
 ;
-;   C version of TASK_YIELD_CHECK
+;   C version of TASK_YIELD_IFTIME
+;
+;   Return non-zero in W0 if a yield is done, 0 otherwise.
 ;
   /if using_c then
-         glbsubc task_yield_check
+         glbsubc task_yield_iftime
 
-         skip_nyieldnow      ;don't need to yield yet ?
-         call    _task_yield ;is time, do the yield
+         mov     #0, w0      ;init to indicate didn't yield
+         skip_yieldnow       ;need to yield now ?
+         jump    ift_done    ;no, avoid yielding
+         call    _task_yield ;yes, do the yield
+         mov     #1, w0      ;indicate a yield was done
 
+ift_done:
          leaverest
     /endif                   ;end of using C case
 

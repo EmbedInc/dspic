@@ -35,10 +35,10 @@
 //
 /const   yield_check_timer integer = 0
 
-//   Macro SKIP_NYIELDNOW
+//   Macro SKIP_YIELDNOW
 //
-//   Skip the next instruction after this macro if it is not yet time for the
-//   current task to yield.  If the current task should yield now, then
+//   Skip the next instruction after this macro if it is time for the current
+//   task to yield.  If the current task does not need to yield now, then
 //   execution continues immediately after this macro.  All registers must be
 //   preserved.
 //
@@ -48,6 +48,15 @@
 //   valid timer number).  Do not define this macro here if the generic canned
 //   mechanism is desired.  Defining this macro here overrides any automatic
 //   definition of this macro later.
+//
+//macro skip_yieldnow
+  //endmac
+
+//   Macro SKIP_NYIELDNOW
+//
+//   Like SKIP_YIELDNOW, except that the sense is reversed.  The next
+//   instruction after the macro is skipped when it is NOT time to yield yet.
+//   Execution follows immediately after the macro when it is time to yield.
 //
 //macro skip_nyieldnow
   //endmac

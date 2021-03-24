@@ -57,14 +57,22 @@
 ;
 ;       Like TASK_YIELD, except that all registers are preserved.
 ;
-;     TASK_YIELD_CHECK
+;     TASK_TIME_DONE
 ;
-;       Like TASK_YIELD_SAVE except that the yield is only performed when there
-;       is an external indication that indicates it is time for the current task
-;       to yield.
+;       Set Z if the current time slice has elapses, and clears Z otherwise.
 ;
 ;       This routine only exists when an external task yield time mechanism has
-;       been implemented.  See the TASK_NYIELDNOW macro, below.
+;       been implemented.  See the description of this mechanism in
+;       QQQ_TASK.INS.DSPIC.
+;
+;     TASK_YIELD_IFTIME
+;
+;       Like TASK_YIELD except that the yield is only performed when there is an
+;       external indication that it is time for the current task to yield.
+;
+;       This routine only exists when an external task yield time mechanism has
+;       been implemented.  See the description of this mechanism in
+;       QQQ_TASK.INS.DSPIC.
 ;
 ;     TASK_EXIT
 ;

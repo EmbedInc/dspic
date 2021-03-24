@@ -106,9 +106,13 @@ task_nid (                             //get ID of task in a particular slot
 void task_prune (                      //kill all but the first N tasks
   machine_intu_t);                     //number of tasks to leave, 0 resets processor
 
+machine_intu_t                         //non-zero iff task should yield now
+task_time_done (void);                 //checks for time slice elapsed
+
 void task_yield (void);                //let other tasks run for a while
 
-void task_yield_check (void);          //yield if time slice elapsed
+machine_intu_t                         //non-zero iff did yield
+task_yield_iftime (void);              //yield if time slice elapsed
 
 //******************************************************************************
 //

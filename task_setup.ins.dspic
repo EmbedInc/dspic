@@ -49,6 +49,14 @@
       /endmac
     /endif
   //
+  //   Define SKIP_YIELDNOW macro
+  //
+  /if [not [exist "skip_yieldnow:macro"]] then //not already defined ?
+    /macro skip_yieldnow
+         btss    [chars yield_check_tmr_ifreg], #T[v yield_check_timer]IF ;time to yield now ?
+      /endmac
+    /endif
+  //
   //   Define SKIP_NYIELDNOW macro
   //
   /if [not [exist "skip_nyieldnow:macro"]] then //not already defined ?
