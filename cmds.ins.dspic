@@ -572,3 +572,13 @@ rdram_word:                  ;back here to send each new word
          setflag reconfig    ;cause the main task to do reconfiguration soon
          return
   /endif
+
+;*******************************************************************************
+;
+;   Command WAITMS ms
+;
+/if [Command cm_waitms] then
+         gcall   cmd_get8    ;get millisecond ticks to wait in W0
+         add     #1, w0
+         gjump   waitms      ;do the wait, end the command
+  /endif
