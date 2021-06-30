@@ -326,7 +326,7 @@
 //
 //   Macro PUTROOM
 //
-//   Get the number of byte that can be written to the response stream
+//   Get the number of bytes that can be written to the response stream
 //   immediately without stalling.  The number is returned in W0.
 //
 //macro pubroom
