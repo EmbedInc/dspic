@@ -192,7 +192,7 @@
 //   Write all the live values of non-volatile state to the non-volatile memory.
 //   This macro, if defined, is run from subroutine NVMEM_SAVE.  The updating of
 //   the checksum and guaranteeing of physical writes to non-volatile memory is
-//   handle by the NVMEM_SAVE subroutine outside this macro.
+//   handled by the NVMEM_SAVE subroutine outside this macro.
 //
 //   Registers W0, W1, and W2 can be trashed.  The remaining registers must be
 //   preserved.
