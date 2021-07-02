@@ -184,6 +184,30 @@
 ;       This command is only acted upon when the CFGOVR0 flag is set.  The
 ;       command always clears this flag when done.
 ;
+;       The responses of the standard SYS module to single configuration byte
+;       values are:
+;
+;         0  -  Test mode.  No other modules are configured.  The CFGRUN flag is
+;               not set, indicating not to enter normal operation.  This mode is
+;               not an error (CFGFAIL not set).
+;
+;         1  -  Normal operation.
+;
+;         8-127  -  Non-failure status condition.  The configuration value is
+;               sent as a status condition by the system module during
+;               configuration.  This can be useful for testing the sending and
+;               handling of non-failure status conditions.  Values of 8-63 let
+;               the system continue with normal operation.  Values 64-127 will
+;               continue in test mode.
+;
+;         128-248  -  Failure status condition.  The configuration value is sent
+;               as a status condition by the system module during configuration.
+;               This can be useful for testing the sending and handling of
+;               failure status conditions.
+;
+;         All remaining values are reserved for future use, and act like 0 for
+;         now.
+;
 ;       The purpose of this mechanism is to allow the host to force the system
 ;       to start in a "safe" mode.  The special DAT byte value of 0 is
 ;       guaranteed to start the system without any optional application modules

@@ -292,6 +292,7 @@ cfgg_dcfging:
 ;
          bclr    flags, #flg_ovrr ;init to not in active override
 
+         cp0     w3
          bra     nz, cfgg_n0 ;not subsystem 0 ?
          btss    flags, #flg_ovr0 ;override subsytem 0 ?
          jump    cfgg_n0     ;no
@@ -971,9 +972,9 @@ s0_stat:                     ;status code is in W1
 ;
 /if mdevbuild
   /then
-         locsub  config_sys, regf0
+         locsub  config_sys, regf0 | regf1
   /else
-         glbsub  config_sys, regf0
+         glbsub  config_sys, regf0 | regf1
   /endif
 
          mcall   config_ovr0_window ;give host a chance to override main sys config
@@ -982,18 +983,50 @@ s0_stat:                     ;status code is in W1
          clrflag cfgdone     ;init to configuration not completed yet
          clrflag cfgfail     ;init to no failure encountered during configuration
          clrflag cfgrun      ;init to system configured to test mode, not normal op
-
+;
+;   Get the configuration byte.  Abort to test mode if not exactly one byte.
+;   The single configuration byte value is left in W0.
+;
          mov     #0, w0
          mcall   config_setup ;set up for reading main system config
-         bra     z, cfgsys_done ;no configuration bytes ?
+         cp      w0, #1      ;exactly 1 configuration byte ?
+         bra     nz, cfgsys_done ;no, enter test mode
+         mcall   config_i8u  ;get the configuration byte into W0
+;
+;   Check for 1, normal operation.
+;
+         cp      w0, #1
+         bra     nz, cfgsys_nnorm
+         setflag cfgrun
+         jump    cfgsys_done
 
-         mcall   config_i8u  ;get the first config byte
-         cp0     w0
-         bra     z, cfgsys_done ;configure in test mode, no other subsystems ?
+cfgsys_nnorm:
+;
+;   Check for 8-248, send config byte as status condition.
+;
+         mov     #8, w1
+         cp      w0, w1
+         bra     ltu, cfgsys_nstat ;below range ?
+         mov     #248, w1
+         cp      w0, w1
+         bra     gtu, cfgsys_nstat ;above range ?
 
-         setflag cfgrun      ;indicate to run in normal operating mode
+         mov     w0, w1      ;pass status code
+         mov     #0, w0      ;pass subsystem ID
+         mcall   config_stat ;send the status condition
 
-cfgsys_done:
+         mov     #63, w0     ;last value that allows normal operation
+         cp      w1, w0
+         bra     gtu, cfgsys_done ;continue in test mode ?
+         setflag cfgrun      ;no, continue in normal operating mode
+         jump    cfgsys_done
+
+cfgsys_nstat:
+;
+;   None of the above configuration values.  Continue in test mode.
+;
+
+cfgsys_done:                 ;CFGRUN to indicate normal operation all set
          mcall   config_unlock ;release lock on config mechanism
          leaverest
 
