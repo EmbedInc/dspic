@@ -31,10 +31,11 @@
 ;
          glbsubc int32s_acc48s
 
-         add     w0, [w2], [w2++]
+         add     w0, [w2], [w2++] ;add into low 32 bits of ACC
          addc    w1, [w2], [w2++]
-         asr     w1, #15, w3
-         addc    w3, [w2], [w2++]
+
+         asr     w1, #15, w1 ;sign-extend to make high word to add
+         addc    w1, [w2], [w2++] ;add into high 16 bits of ACC
 
          leaverest
   /endif

@@ -67,11 +67,18 @@ dneg:                        ;done negating result
 ;   C subroutine INT32_MULSS (I1, I2, &PROD)
 ;
 ;   C interface to the 32 x 32 --> 64 bit subroutine.  I1 and I2 are two
-;   unsigned 32 bit values to multiply, and the product is returned in PROD
+;   signed 32 bit values to multiply, and the product is returned in PROD
+;
+;   Registers on entry:
+;
+;     W1:W0  -  I1
+;
+;     W3:W2  -  I2
+;
+;     W4  -  Address of PROD
 ;
          glbsubc int32_mulss
 
-         mov     w2, w4      ;save pointer to the result in W4
          mcall   int32_mulss ;do the multiply, result in W3:W2:W1:W0
          mov     w0, [w4++]
          mov     w1, [w4++]

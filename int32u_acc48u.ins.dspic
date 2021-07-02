@@ -32,10 +32,10 @@
 ;
          glbsubc int32u_acc48u
 
-         add     w0, [w2], [w2++]
+         add     w0, [w2], [w2++] ;add into low 32 bits of ACC
          addc    w1, [w2], [w2++]
-         mov     #0, w3
-         addc    w3, [w2], [w2++]
+         mov     #0, w3      ;get implicit high word to add
+         addc    w3, [w2], [w2++] ;add into high 16 bits of ACC
 
          leaverest
   /endif
