@@ -631,6 +631,51 @@ int32u_t nvmem_last (void);            //get adr of last application-usable byte
 
 //******************************************************************************
 //
+//   CAN bus sending.
+//
+#define can_frtype_stddat_k 0          //standard data frame
+#define can_frtype_extdat_k 1          //extended data frame
+#define can_frtype_stdreq_k 2          //standard remote request frame
+#define can_frtype_extreq_k 3          //extended remote request frame
+
+void can_send_dat (                    //add one data byte to CAN frame being built
+  machine_intu_t);                     //0-255 byte value in low bits
+
+void can_send_dat16 (                  //add two data bytes to CAN frame being built
+  machine_intu_t);                     //bytes, written most to least significant order
+
+void can_send_dat24 (                  //add three data bytes to CAN frame being built
+  int32u_t);                           //bytes, written most to least significant order
+
+void can_send_dat32 (                  //add four data bytes to CAN frame being built
+  int32u_t);                           //bytes, written most to least significant order
+
+void can_send (void);                  //send CAN frame, release CAN sending lock
+
+void can_send_init (                   //init for sending CAN frame, acquire sending lock
+  machine_intu_t);                     //type of frame, use CAN_FRTYPE_xxx_K
+
+//******************************************************************************
+//
+//   Interface to current outputs.
+//
+//   The constant "ncurrout_k" is the number of current outputs supported by the
+//   system.  Current outputs are numbered 0 to ncurrout_k-1.
+//
+void CurrOut_set (                     //set desired value of a current output
+  machine_intu_t,                      //0-N number of the output to set
+  int32u_t curr);                      //Amps, 3.29 unsigned fixed point format
+
+int32u_t                               //Amps, 3.29 unsigned fixed point format
+CurrOut_setting (                      //get the last setting of a current output
+  machine_intu_t);                     //0-N number of the current output
+
+int32u_t                               //Amps, 3.29 unsigned fixed point format
+CurrOut_value (                        //get the actual value of a current output
+  machine_intu_t);                     //0-N number of the current output
+
+//******************************************************************************
+//
 //   Interface to the display and buttons.
 //
 //   Event IDs are:
@@ -888,32 +933,6 @@ menu_val_float (                       //user edit a floating point value
   float,                               //min allowed value
   float,                               //max allowed value
   machine_intu_t);                     //number of digits to show right of decimal point
-
-//******************************************************************************
-//
-//   CAN bus sending.
-//
-#define can_frtype_stddat_k 0          //standard data frame
-#define can_frtype_extdat_k 1          //extended data frame
-#define can_frtype_stdreq_k 2          //standard remote request frame
-#define can_frtype_extreq_k 3          //extended remote request frame
-
-void can_send_dat (                    //add one data byte to CAN frame being built
-  machine_intu_t);                     //0-255 byte value in low bits
-
-void can_send_dat16 (                  //add two data bytes to CAN frame being built
-  machine_intu_t);                     //bytes, written most to least significant order
-
-void can_send_dat24 (                  //add three data bytes to CAN frame being built
-  int32u_t);                           //bytes, written most to least significant order
-
-void can_send_dat32 (                  //add four data bytes to CAN frame being built
-  int32u_t);                           //bytes, written most to least significant order
-
-void can_send (void);                  //send CAN frame, release CAN sending lock
-
-void can_send_init (                   //init for sending CAN frame, acquire sending lock
-  machine_intu_t);                     //type of frame, use CAN_FRTYPE_xxx_K
 
 //******************************************************************************
 //

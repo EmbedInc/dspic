@@ -39,3 +39,11 @@ interface Modbus
   desc
     Sends and receives whole Modbus packets over a UartModbus interface.
     Can be configured as master or slave.
+
+interface Relays
+  desc
+    One or more relays that can be driven on or off.
+
+interface CurrOut
+  desc
+    One or more current outputs (like 4-20 mA, for example).
