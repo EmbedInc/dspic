@@ -23,12 +23,16 @@
 ;
 ;     NAME, string
 ;
-;       Unique name for the exported symbols.  May be the empty string.  This
-;       string is immediately appended to "UART" in each exported symbol name.
-;       For example, the routine UART_PUT will be called UART1_PUT when NAME is
-;       set to "1".  This mechanism is intended for supporting multiple UARTs in
-;       a system.  This would generally be the empty string when only one UART
-;       is used.
+;       Unique name for the exported symbols.  May be the empty string.  When
+;       not the empty string, an underscore followed by the name is appended to
+;       the leading "UART" in all names exported by this module.
+;
+;       For example, when NAME is empty, the initialization routine is named
+;       UART_INIT.  When NAME is set to "xxx", then the initialization routine
+;       is named UART_XXX_INIT.
+;
+;       This mechanism is to support multiple UARTs in a system.  NAME would
+;       generally be the empty string when only one UART is used.
 ;
 ;     UN, integer
 ;

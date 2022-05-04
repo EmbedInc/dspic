@@ -59,6 +59,7 @@
 ;       FPLOAD, FPPUT, FPGET  -  32 bit fast floating point handling.
 ;       EEWORD, FPWORDS  -  Define constants in EEPROM.
 ;       WAITCY, BUSYWAIT, MINWAIT, WAITNOP  -  Short timing.
+;       WAITSEC  -  Efficient waits, assumes WAITMS routine.
 ;       ALLOC, ALLOCG  -  Allocate memory in RAM.
 ;       STRUCT_START, FIELD  -  Define data structure with named fields.
 ;       BAUD_SETUP30, BAUD_SETUP  -  UART baud rate setup.
@@ -1373,6 +1374,27 @@
          nop
          .endr
   .endm
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro WAITSEC seconds
+//
+//   Wait the indicated amount of time.  This is a convenience wrapper around
+//   the standard WAITMS subroutine in the CLOCK module.  The actual wait will
+//   be rounded to the nearest millisecond, and limited to 65.535 seconds.
+//
+//   W0 is trashed.
+//
+/macro waitsec
+  /var local sec real = [vnl [arg 1]] ;time to wait in seconds
+  /var local ms integer      ;wait time in milliseconds, 0-65535 limit
+
+  /set sec [max 0.0 [min 65.535 sec]] ;clip to valid wait range
+  /set ms [rnd [* sec 1000.0]] ;make wait time in ms
+
+         mov     #[v ms], w0 ;pass number of 1 ms ticks to wait
+         gcall   waitms      ;do the wait
+  /endmac
 
 ;*******************************************************************************
 ;

@@ -22,7 +22,8 @@
 ;
 ;   Configuration constants.
 ;
-
+/const   tskfbits integer = 7 ;number of bits to shift per task rate filter pole
+/const   tskfn   integer = 3 ;number of task rate filter poles
 ;
 ;   Derived constants.
 ;
@@ -46,6 +47,14 @@ alloc    slow0               ;register save area for slow task
 alloc    slow1
 alloc    slow2
 alloc    slow3
+
+alloc    tskcnt              ;number of task loops since last 1 ms tick
+;
+;   Filtered task loop rate.  The number of loops per ms are counted in a 16 bit
+;   word, and shifted left 5 bits.  That becomes the high word of the new value
+;   filter.  Each of the filter poles has the same format.
+;
+alloc    tskfilt, [* tskfn 4] ;all the filter poles sequentially in memory
 ;
 ;   Local state in near memory.
 ;
@@ -61,6 +70,82 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 .section .code_main, code
 ;*******************************************************************************
 ;
+;   Local subroutine TASK_FILTER
+;
+;   This routine is called once for each 1 ms clock tick.  The number of task
+;   loops in the last ms is filtered into the task rate filter.  The task loops
+;   counter is reset to start the next 1 ms counting period.
+;
+;   W0-W14 may be trashed.
+;
+         locsub  task_filter
+
+         mov     tskcnt, w1  ;get the number of task loops in the last ms
+         mov     #0, w0
+         mov     w0, tskcnt  ;clear the counter to be ready for the next ms
+         sl      w1, #5, w1  ;make count in filter format in W1:W0
+;
+;   Loop thru the filter poles to update them to the new value.  Register usage:
+;
+;     W1:W0  -  New value to update this filter pole with.
+;
+;     W2  -  Temp scratch per iteration.
+;
+;     W3  -
+;
+;     W4  -  Pointer to filter word to update.
+;
+;     W5  -  Number of filter poles left to update.
+;
+         mov     #tskfilt, w4 ;init pointer to filter state to update
+         mov     #[v tskfn], w5 ;init number of filter poles left to update
+
+filt_pole:                   ;back here each new filter pole
+         sub     w0, [w4++], w0 ;NEW - FILT --> W1:W0
+         subb    w1, [w4--], w1
+
+         lsr     w0, #[v tskfbits], w0 ;shift the result in W1:W0 right
+         sl      w1, #[- 16 tskfbits], w2
+         ior     w0, w2, w0
+         asr     w1, #[v tskfbits], w1
+
+         add     w0, [w4++], w0 ;add FILT to make final result in W1:W0
+         addc    w1, [w4--], w1
+
+         mov     w0, [w4++]  ;write result to the filter state, advance pointer
+         mov     w1, [w4++]
+
+         sub     #1, w5      ;count one less filter pole left to update
+         bra     nz, filt_pole ;back to update the next filter pole
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Command TASKRATE
+;
+;   Sends the response TASKRATE rate
+;
+;   RATE is the high 24 bits of the final filter pole.
+;
+/if [Command cm_taskrate] then
+         gcall   cmd_lock_out ;acquire lock on response stream
+
+         mov     #[v rsp_taskrate], w0 ;send the response opcode
+         gcall   cmd_put8
+
+         mov     tskfilt+[+ [* [- tskfn 1] 4] 2], w0 ;get final filter high word
+         swap    w0
+         gcall   cmd_put8    ;send high byte
+         swap    w0
+         gcall   cmd_put8    ;send middle byte
+         mov     tskfilt+[* [- tskfn 1] 4], w0 ;get final filter low word
+         swap    w0
+         gjump   cmd_put8    ;send low byte, return from command routine
+  /endif
+
+;*******************************************************************************
+;
 ;   Main operating loop entry point.  MAIN is jumped to from the INIT module
 ;   after system level initialization is complete.
 ;
@@ -70,12 +155,26 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;   loop.
 ;
          clr     flags       ;init all local flags to off
-
+         ;
+         ;   Init slow task state.
+         ;
          mov     #tbloffset(slow_start), w0 ;init slow task restart address
          mov     w0, slowadr+0
          mov     #tblpage(slow_start), w0
          and     #0x7F, w0
          mov     w0, slowadr+2
+         ;
+         ;   Init task rate state.
+         ;
+         mov     #0, w0      ;init task loops counter
+         mov     w0, tskcnt
+
+         mov     #[* tskfn 2], w1 ;init number of words left to clear
+         mov     #tskfilt, w2 ;init pointer to next word to clear
+ini_tskf:                    ;back here to init each new task rate filter word
+         mov     w0, [w2++]  ;clear this word, advance pointer
+         sub     #1, w1      ;count one less word left to clear
+         bra     nz, ini_tskf ;back to init next filter word
 
 ;********************
 ;
@@ -83,6 +182,19 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;
 loop_main:
          gcall   task_yield  ;give all other tasks a chance to run
+
+         mov     tskcnt, w0  ;count one more loop thru all tasks
+         add     #1, w0
+         mov     w0, tskcnt
+;
+;   Check for we are to reconfigure ourselves.
+;
+         skip_flag reconfig  ;need to reconfigure ?
+         jump    n_reconfig  ;no, skip this section
+
+         jump    reconfig    ;go do the reconfigure
+
+n_reconfig:                  ;skip here to not reconfigure the firmware
 ;
 ;   Handle new 1 ms clock tick.
 ;
@@ -92,6 +204,8 @@ loop_main:
          ;
          ;   New 1 ms clock tick.
          ;
+         mcall   task_filter ;update filtered task rate state
+         jump    l_tick1ms   ;back to check for another 1 ms tick
 
 d_tick1ms:                   ;done with 1 ms tick processing
 ;
