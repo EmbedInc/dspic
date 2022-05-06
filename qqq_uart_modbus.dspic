@@ -29,7 +29,7 @@
 ;     UART_MODBUS_SETUP.INS.DSPIC
 ;
 ;   The main difference between the interface to this UART and a normal (not
-;   Modbus) UART, is that the UART_GET returns a event instead of just received
+;   Modbus) UART, is that UART_GET returns an event instead of just received
 ;   UART data.  UART_GET returns a 16 bit value.  The upper byte contains flag
 ;   bits (see UART_MODBUS_SETUP.INS.DSPIC) identifying the event.  When the
 ;   event includes a received data byte, that byte is in the low 8 bits of the
@@ -48,8 +48,8 @@
 ;   string.  For example, the initialization routine is called UART_INIT when
 ;   NAME is empty, and UART_ABC_INIT when NAME is set to ABC.
 ;
-;   This module can be a MDEV or fixed.  When the CFG_UART_MODBUS constant
-;   exists and is integer, then this module is built as a MDEV.
+;   This module can be an MDEV or fixed.  When the CFG_UART_MODBUS constant
+;   exists and is integer, then this module is built as an MDEV.
 ;
 ;   Subroutines:
 ;
@@ -129,7 +129,7 @@
 ;     UART_GET
 ;
 ;       Gets the next received event into W0.  This routine waits indefinitely
-;       until a event is available.
+;       until an event is available.
 ;
 ;       The high byte of W0 will contain flag bits describing the event.  When
 ;       the event includes a data byte, it will be in the low 8 bits of W0.
@@ -156,8 +156,8 @@
 ;     UART_GET_READY
 ;
 ;       Sets Z if no received byte is immediately available, and clears it
-;       it otherwise.  When returning with Z cleared, UART_GET will return with
-;       a new event without waiting.
+;       otherwise.  When returning with Z cleared, UART_GET will return with a
+;       new event without waiting.
 ;
 ;     UART_BAUD_SET
 ;
@@ -174,9 +174,6 @@
 ;       switched off, the parity setting changed, and the UART turned on again.
 ;       Note that the FIFOs are reset to empty due to switching the uart on/off.
 ;
-;       The remaining configuration is 8 data bits, 1 stop bit.  Note that
-;       parity ONE is the same as no parity with 2 stop bits.
-;
 ;     UART_PARITY
 ;
 ;       Returns the ID of the current parity configuration in W0.  Preprocessor
@@ -187,6 +184,9 @@
 ;       UART_PARITY_ODD
 ;       UART_PARITY_ZERO
 ;       UART_PARITY_ONE
+;
+;       The remaining configuration is 8 data bits, 1 stop bit.  Note that
+;       parity ONE is the same as no parity with 2 stop bits.
 ;
 ;     UART_OFF
 ;
