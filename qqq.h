@@ -350,9 +350,6 @@ void uart_bus_set (                    //set bus configuration
 machine_intu_t                         //data in low byte + UART_EV_xxx_K flags
 uart_get (void);                       //get next event
 
-machine_intu_t                         //true/false
-uart_get_ready (void);                 //TRUE when a character is available to get
-
 machine_intu_t                         //TRUE or FALSE
 uart_get_ready (void);                 //find if event is immediately available
 
