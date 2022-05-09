@@ -684,8 +684,8 @@ put_room:
 ;   UART transmit interrupt routine.
 ;
 ;   The UART is ready to accept another output byte.  This interrupt is enabled
-;   enabled whenever a byte is written to the output FIFO.  It is disabled in
-;   this interrupt routine when the FIFO is drained to empty.
+;   whenever a byte is written to the output FIFO.  It is disabled in this
+;   interrupt routine when the FIFO is drained to empty.
 ;
 ;   If configured for transmit flow control, then the interrupt is disabled if
 ;   the RREADY input is high, which indicates that the remote system is not
