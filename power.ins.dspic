@@ -61,6 +61,11 @@
 /if [not [exist "fltpulldn:vcon"]] then
   /const fltpulldn bool = false
   /endif
+
+/const   pwcy_on_name = [str "debug_" name "_pwcy"] ;name of const to enable PWCY cmd
+/if [not [exist [str pwcy_on_name ":vcon"]]] then
+  /const [chars pwcy_on_name] bool = false
+  /endif
 ;
 ;   Compute derived configuration constants.
 ;
@@ -200,6 +205,23 @@
 /if [not debug_icd] then
          mov     #[v occon1], w0 ;set OCCON1, restart the PWM
          mov     w0, Oc[v ocn]con1
+  /endif
+
+;*******************************************************************************
+;
+;   Command <name>_PWCY cycles
+;
+;   Set the pulse width to CYCLES instruction cycles.  The PWM hardware is set
+;   to this pulse width directly.  The amount the hardware might stretch each
+;   pulse is not taken into account.  CYCLES is a 16 bit unsigned value.
+;
+/if [Command cm_[chars name]_pwcy] then
+         gcall   cmd_get16   ;get the new pulse width value
+
+  /if [chars pwcy_on_name] then ;command action is enabled ?
+         mov     w0, Oc[v ocn]r ;write it to the hardware
+    /endif
+         return
   /endif
 
          leaverest

@@ -44,6 +44,19 @@
 ;       Switches on the power supply.  Resume normal operation after call to
 ;       name_OFF.
 ;
+;   Commands:
+;
+;     <name>_PWCY cycles
+;
+;       Set the pulse width to CYCLES, which is a 16 bit unsigned integer.  The
+;       hardware duty cycle register is set directly to CYCLES with no checking
+;       or modification.  This is a low level command intended for development
+;       and debugging only.  Out of range values could cause physical failures,
+;       depending on the hardware connected to the PWM output.
+;
+;       The command parameter is read but no action taken unless the bool
+;       preprocessor constant DEBUG_<name>_PWCY exist and is set to TRUE.
+;
 /include "qq2.ins.dspic"
 
 ;*******************************************************************************
