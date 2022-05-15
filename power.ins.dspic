@@ -66,6 +66,10 @@
 /if [not [exist [str pwcy_on_name ":vcon"]]] then
   /const [chars pwcy_on_name] bool = false
   /endif
+
+/if [not [exist "init_on:vcon"]] then
+  /const init_on bool = true
+  /endif
 ;
 ;   Compute derived configuration constants.
 ;
@@ -174,8 +178,10 @@
       /endif
     /const occon1 integer = ii ;value for the OCxCON1 register
 
+    /if init_on then         ;turn on supply immediately after init ?
          mov     #[v occon1], w0 ;set OCCON1, start the PWM
          mov     w0, Oc[v ocn]con1
+      /endif
     /endblock
   /endif                     ;end of debugging with ICD case
 
@@ -206,6 +212,7 @@
          mov     #[v occon1], w0 ;set OCCON1, restart the PWM
          mov     w0, Oc[v ocn]con1
   /endif
+         leaverest
 
 ;*******************************************************************************
 ;

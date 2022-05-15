@@ -33,7 +33,7 @@
 ;     <name>_INIT
 ;
 ;       Initializes the hardware managed by this module.  Starts the power
-;       supply.  This must be the first call into this module.
+;       supply if INIT_ON is TRUE, or does not exist.
 ;
 ;     <name>_OFF
 ;
@@ -41,8 +41,7 @@
 ;
 ;     <name>_ON
 ;
-;       Switches on the power supply.  Resume normal operation after call to
-;       name_OFF.
+;       Switches on the power supply.
 ;
 ;   Commands:
 ;
@@ -68,6 +67,7 @@
 /const   dpulset real = 1.0e-6 ;desired pulse time, seconds
 /const   pstretch real = 0.0 ;amount pulse is stretched by the hardware, seconds
 /const   dperiod real = 15.0e-6 ;desired PWM period, seconds
+/const   init_on bool = true ;<name>_INIT also does implicit <name>_ON
 ;
 ;   PWM output.
 ;
