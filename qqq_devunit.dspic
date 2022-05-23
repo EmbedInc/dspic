@@ -1,0 +1,3 @@
+/include "qq2.ins.dspic"
+/include "(cog)src/dspic/devunit.ins.dspic"
+.end

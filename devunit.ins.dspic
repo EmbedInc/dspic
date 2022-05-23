@@ -1,0 +1,74 @@
+;   ***************************************************************
+;   * Copyright (C) 2022, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+
+;*******************************************************************************
+;
+;   Variables.
+;
+;   Local state.
+;
+.section .ram_devunit, bss   ;variables in normal RAM
+
+alloc    devunit             ;device unit or ID
+
+
+.section .code_devunit, code
+;*******************************************************************************
+;
+;   Subroutine DEVUNIT_CFG
+;
+;   MDEV configuration routine for this module.
+;
+         glbsub  devunit_cfg, regf0
+
+         mov     #0, w0
+         mov     w0, devunit ;init to the default of 0
+
+         gcall   config_lock ;get exclusive access to CONFIG_xxx routines
+         mov     #[v cfg_devunit], w0 ;request config data for this module
+         gcall   config_setup ;set up for reading config, N config bytes into W0
+         cp0     w0
+         bra     z, cfg_leave ;no config bytes, abort ?
+
+         gcall   config_i8u  ;get the format ID byte
+         cp0     w0
+         bra     nz, cfg_leave ;not format 0 (the only recognized format) ?
+
+         gcall   config_left ;get number of remaining config bytes
+         cp      w0, #1
+         bra     nz, cfg_leave ;not the expected number of data bytes ?
+
+         gcall   config_i8u  ;get unit ID being configured to
+         mov     w0, devunit ;save it
+
+cfg_leave:
+         gcall   config_unlock ;release lock on CONFIG routines
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine DEVUNIT_GET
+;
+;   Returns the device unit number of ID in W0.  The result is undefined if the
+;   configuration routine has not been called.  If there was no configuration
+;   data, or that data was invalid, then 0 is returned.
+;
+         glbsubd devunit_get
+
+         mov     devunit, w0
+
+         leaverest

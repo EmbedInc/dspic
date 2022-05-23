@@ -1,0 +1,25 @@
+*   MDEV configurable subsystem that maintains the unit number or ID of the
+*   specific unit.  Any part of the system can get the unit ID by calling
+*   DEVUNIT_GET.
+*
+*   Configuration data
+*
+*     Format  -  byte
+*
+*       Indicates the format of subsequent configuration data.  Formats not
+*       defined here are reserved for possible future use.  Unrecognized format
+*       must be treated the same as no configuration data supplied.  The valid
+*       format IDs and their following configuration data are:
+*
+*       0: id
+*
+*         ID is a single unsigned byte, so therefore in the 0-255 range.
+*
+module devunit
+  desc
+    Maintains the unit number or ID of this unit.
+  provides DevUnit
+  template qqq_devunit.dspic
+
+file qqq_devunit.dspic
+  requires devunit.ins.dspic

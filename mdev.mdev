@@ -47,3 +47,9 @@ interface Relays
 interface CurrOut
   desc
     One or more current outputs (like 4-20 mA, for example).
+
+interface DevUnit
+  desc
+    Maintains the configurable ID of the particular unit.  This might be
+    the "address" on a communications bus, an ID the unit responds with,
+    etc.  Exports the subroutine DEVUNIT_GET.
