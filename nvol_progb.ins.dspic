@@ -72,6 +72,10 @@
          .end
     /endif
 
+  /if [not [exist "debug_nvol_cfg:vcon"]] then
+    /const debug_nvol_cfg bool = false
+    /endif
+
   /if [not [exist "erasesz"]] then
     /const erasesz integer = 512 ;default erase block size, prog mem words
     /endif
@@ -130,7 +134,7 @@
   /if [<> [* eradr ii] startadr] then
     /show "  STARTADR of " [int startadr "base 16 usin"] "h not erase-block aligned."
     /show "  Must be multiple of " [int eradr "base 16 usin"] "h."
-         .error  STARTADR
+         .error  "STARTADR"
          .end
     /stop
     /endif
@@ -182,7 +186,7 @@
     /stop
     /endif
 
-  /if false then             ;show configuration constants for debugging
+  /if debug_nvol_cfg then    ;show configuration constants for debugging
     /call showval eraseszb "bytes in one erase block"
     /call showval eradr "erase block size, prog mem adresses"
     /call showval nerblk "erase blocks used"
