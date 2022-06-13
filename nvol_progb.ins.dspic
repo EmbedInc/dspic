@@ -835,6 +835,36 @@ wr_leave:                    ;common exit point
 
 ;*******************************************************************************
 ;
+;   Subroutine NVOL_ERASE
+;
+;   Erase the entire non-volatile memory.  All non-volatile memory bits will be
+;   physically set to 1 when this routine returns.  There will be no unwritten
+;   cached data.
+;
+         glbsub  nvol[chars uname]_erase, regf0 | regf1 | regf2
+
+         mov     #0xFF, w0   ;byte value to write
+         mov     #0, w1      ;init address to write to
+         mov     #[v nvbytes], w2 ;init number of bytes left to write
+er_byte:                     ;back here each new byte to set to the erased value
+         mcall   nvol[chars uname]_swrite ;set the value of this NV byte, advance to next
+         sub     #1, w2      ;count one less byte left to write
+         bra     nz, er_byte ;back to write next byte
+
+         mcall   nvol[chars uname]_flush ;make sure cached data physically written
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Add the generic routines that don't depend on the non-volatile memory
+;   implementation.  These are in the NVOL_COMM include file, and depend on the
+;   implementation-specific routines above.
+;
+/include "(cog)src/dspic/nvol_comm.ins.dspic"
+
+;*******************************************************************************
+;
 ;   Define preprocessor state that will be used by the macros below.
 ;
 /var new nextofs integer = 0 ;init nvol address of next nvol byte to define
