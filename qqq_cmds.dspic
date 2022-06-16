@@ -109,6 +109,11 @@
 ;       in most to least significant order.  The response stream lock must be
 ;       held when this routine is called.
 ;
+;     CMD_SENDMEM
+;
+;       Send bytes from memory to the host.  W1 is the number of bytes, and W2
+;       the address of the first byte.  W1 may be 0.
+;
 ;     CMD_LOCK_OUT
 ;
 ;       Acquires the exclusive lock on the response stream.  Whole responses

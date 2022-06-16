@@ -537,6 +537,26 @@ pbn_done:                    ;done copying all the bytes
 
 ;*******************************************************************************
 ;
+;   Subroutine CMD_SENDMEM
+;
+;   Send bytes from memory to the host.  W1 is the number of bytes to send,
+;   which may be 0.  W2 is the starting address of the bytes to send.
+;
+         glbsub  [chars cmd]_sendmem, regf0 | regf1 | regf2
+
+smem_byte:                   ;back here each new data byte to send
+         cp0     w1
+         bra     z, smem_leave ;done all data bytes ?
+         mov.b   [w2++], w0  ;get data byte from buffer, advance to next
+         gcall   cmd_put8    ;send this data byte
+         sub     #1, w1      ;count one less byte left to do
+         jump    smem_byte   ;back to do next data byte
+
+smem_leave:
+         leaverest
+
+;*******************************************************************************
+;
 ;   Subroutine CMD_START
 ;
 ;   Start the command stream processing tasks.
