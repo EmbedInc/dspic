@@ -28,6 +28,14 @@
 ;
 ;       W1:W0 * W3:W2 --> W1:W0
 ;
+;     FX3F20_SQRS  -  Square signed number, unsigned result.
+;
+;       (W1:W0)^2 --> W1:W0
+;
+;     FX3F20_SQRU  -  Square unsigned number.
+;
+;       (W1:W0)^2 --> W1:W0
+;
 ;     FX3F29_DIVU  -  Unsigned divide.
 ;
 ;       W1:W0 / W3:W2 --> W1:W0
@@ -48,6 +56,7 @@
 /include "(cog)src/dspic/fx3f29_addu.ins.dspic"
 /include "(cog)src/dspic/fx3f29_divu.ins.dspic"
 /include "(cog)src/dspic/fx3f29_mulu.ins.dspic"
+/include "(cog)src/dspic/fx3f29_sqr.ins.dspic"
 /include "(cog)src/dspic/fx3f29_subu.ins.dspic"
 ;
 ;   The firmware build script will need to grab all the files that are
@@ -59,6 +68,7 @@
 // call src_get_ins_dspic dspic fx3f29_addu
 // call src_get_ins_dspic dspic fx3f29_divu
 // call src_get_ins_dspic dspic fx3f29_mulu
+// call src_get_ins_dspic dspic fx3f29_sqr
 // call src_get_ins_dspic dspic fx3f29_subu
 
 .end

@@ -1,0 +1,65 @@
+;   ***************************************************************
+;   * Copyright (C) 2019, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fx3f29_sqr_ins:const"]] then
+  /const fx3f29_sqr_ins bool = true
+
+  /include "(cog)src/dspic/fx3f29_mulu.ins.dspic"
+
+
+.section .code_fx3f29_sqr, code
+;*******************************************************************************
+;
+;   Subroutine FX3F29_SQRU
+;
+;   Fixed point 3.29 format unsigned square.
+;
+;   (W1:W0)^2 --> W1:W0
+;
+;   The input number is unsigned, so can have a range of 0 to just under 8.
+;
+         glbsubd fx3f29_sqru, regf2 | regf3
+
+         mov.d   w0, w2      ;copy number into operand
+         gcall   fx3f29_mulu ;multiply the two copies together
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine FX3F29_SQRS
+;
+;   Fixed point 3.29 format signed square.
+;
+;   (W1:W0)^2 --> W1:W0
+;
+;   The input number is signed, so can have a range of -4 to just under +4.
+;
+         glbsubd fx3f29_sqrs, regf2 | regf3
+
+         btss    w1, #15     ;sign bit is set ?
+         jump    sqrs_pos    ;no, number is already zero or positive
+         neg     w0, w0      ;complement and increment the low word
+         com     w1, w1      ;complement high word
+         addc    #1, w1      ;propagate carry to high word
+sqrs_pos:                    ;the number in W1:W0 is zero or positive
+
+         mov.d   w0, w2      ;copy number into operand
+         gcall   fx3f29_mulu ;multiply the two copies together
+
+         leaverest
+
+  /endif                     ;end of file interlock
