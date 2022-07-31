@@ -1039,6 +1039,23 @@ act_nidle:                   ;jump here if UART is not idle
 act_leave:                   ;common exit point, Z flag already set
          leaverest
 
+/if using_xc16 then
+;*****************************
+;
+;   C function UART_ACTIVE
+;
+;   Returns TRUE if the UART is active.
+;
+         glbsubc uart[chars uname]_active
+
+         mcall   uart[chars uname]_active ;call assembly routine
+         mov     #0, w0      ;init return value to inactive
+         skip_z              ;really is inactive ?
+         mov     #1, w0      ;no, set return value to active
+
+         leaverest
+  /endif
+
 ;*******************************************************************************
 ;
 ;   Subroutine UART_OFF
