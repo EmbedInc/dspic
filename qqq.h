@@ -332,6 +332,9 @@ void int32s_acc48s (                   //add 32 bit integer into 48 bit accumula
 #define uart_parity_odd (2)            //8-O-1
 #define uart_parity_one (4)            //8-1-1, same as 8-N-2
 
+machine_intu_t                         //TRUE or FALSE
+uart_active (void);                    //check for UART active in some way
+
 int32u_t                               //actual baud rate, may differ from setting
 uart_baud (void);
 
