@@ -43,6 +43,14 @@
 ;
 ;       Switches on the power supply.
 ;
+;     <name>_DUTFR
+;
+;       Set the duty cycle fraction.  W0 is the fraction in 0.16 unsigned fixed
+;       point format (0% to 99.9985%).  The result will be rounded to the
+;       nearest number of instruction cycles.  The pulse will always be at least
+;       1 cycle long.  Use <name>_OFF to turn off pulses completely.  Only sets
+;       the duty cycle for when on.  Pulses stay off if currently off.
+;
 ;   Commands:
 ;
 ;     <name>_PWCY cycles
@@ -55,6 +63,13 @@
 ;
 ;       The command parameter is read but no action taken unless the bool
 ;       preprocessor constant DEBUG_<name>_PWCY exist and is set to TRUE.
+;
+;   Debug switches:
+;
+;     DEBUG_ICD  -  Causes PWM output to be disabled.  Single-stepping can leave
+;       the switch on for a long time, which can damage parts.
+;
+;     DEBUG_POWER  -  Enable the PWM output anyway, even with DEBUG_ICD.
 ;
 /include "qq2.ins.dspic"
 

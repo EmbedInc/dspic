@@ -62,6 +62,10 @@
   /const fltpulldn bool = false
   /endif
 
+/if [not [exist "debug_power:vcon"]] then
+  /const debug_power = false
+  /endif
+
 /const   pwcy_on_name = [str "debug_" name "_pwcy"] ;name of const to enable PWCY cmd
 /if [not [exist [str pwcy_on_name ":vcon"]]] then
   /const [chars pwcy_on_name] bool = false
@@ -78,6 +82,10 @@
   /var local r real
   /var local s string
 
+  /const enable bool = [or [not debug_icd] debug_power] ;enable the hardware
+
+  /const stretchcy integer = [rnd [* pstretch freq_inst]] ;cy pulse stretched by HW
+
   /set ii [rnd [* [- dpulset pstretch] freq_inst]] ;pulse width, cycles
   /set ii [max ii 1]         ;guarantee min value required later
   /const pulsecy integer = ii ;set final pulse width in instruction cycles
@@ -85,15 +93,15 @@
   /const percy integer = [rnd [* dperiod freq_inst]] ;period, cycles
   /const period real = [/ percy freq_inst] ;actual PWM period, seconds
 
-  /if debug_icd
+  /if enable
     /then
-      /show "  Disabled due to ICD debugging"
-    /else
       /set s ""
       /set s [str s "Pulse width " pulsecy " cycles " [eng pulset] "s"]
       /set s [str s ", stretched to " [eng [+ pulset pstretch]] "s"]
       /set s [str s ", PWM period " percy " cycles " [eng period] "s"]
       /show "  " s
+    /else
+      /show "  Disabled due to ICD debugging"
     /endif
   /endblock
 
@@ -126,7 +134,7 @@
 //   cause the input power supply to drop too low, and result in too high output
 //   voltage depending on configuration.
 //
-/if [not debug_icd] then
+/if enable then
          mov     #[chars fltpinreg], w1 ;point to register for selecting fault input pin
          mov     #[v fltpin], w0 ;get remappable fault input pin number
          mov.b   w0, [w1]    ;select RPn pin for fault input
@@ -183,7 +191,7 @@
          mov     w0, Oc[v ocn]con1
       /endif
     /endblock
-  /endif                     ;end of debugging with ICD case
+  /endif                     ;end of operation enabled case
 
          leaverest
 
@@ -195,7 +203,7 @@
 ;
          glbsub  [chars name]_off
 
-/if [not debug_icd] then
+/if enable then
          clr     Oc[v ocn]con1 ;disable the PWM module
   /endif
          leaverest
@@ -208,10 +216,43 @@
 ;
          glbsub  [chars name]_on, regf0
 
-/if [not debug_icd] then
+/if enable then
          mov     #[v occon1], w0 ;set OCCON1, restart the PWM
          mov     w0, Oc[v ocn]con1
   /endif
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine <name>_DUTFR
+;
+;   Set the duty cycle as a fraction of the pulse period.  W0 contains the duty
+;   cycle fraction in 0.16 unsigned fixed point format.  0 means 0% duty cycle
+;   and 65535 99.9985% duty cycle.  It is not possible to specify exactly 100%
+;   duty cycle.  The pulse will always be at least 1 cycle long.
+;
+         glbsub  [chars name]_dutfr, regf0 | regf1
+;
+;   Compute the pulse duration in number of cycles in W1.
+;
+         mov     #[v percy], w1 ;get cycle in whole pulse period
+         mul.uu  w0, w1, w0  ;make pulse length in cycles in W1:W0, 16 fract bits
+         btst.c  w0, #15     ;get rounding bit into C
+         addc    w1, #0, w1  ;round to nearest whole cycles
+;
+;   Remove the time the hardware will stretch the pulse, and account for the
+;   duty cycle register value being the pulse length - 1.  The register value
+;   can't be negative, so the pulse will always be at least 1 cycle.
+;
+         mov     #[+ stretchcy 1], w0 ;cycles hardware will stretch pulse
+         sub     w1, w0, w1  ;pulse cycles before stretch
+         skip_geu            ;didn't go negative ?
+         mov     #1, w1      ;did go negative, clip at 0
+;
+;   Set the hardware pulse length register.
+;
+         mov     w1, Oc[v ocn]r ;set the hardware to the new duty cycle
+
          leaverest
 
 ;*******************************************************************************
