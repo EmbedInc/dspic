@@ -582,3 +582,31 @@ rdram_word:                  ;back here to send each new word
          add     #1, w0
          gjump   waitms      ;do the wait, end the command
   /endif
+
+;*******************************************************************************
+;
+;   Command SYNC
+;
+;   Cause a large number of NOP responses to be sent.  The number of NOPs must
+;   be more than the longest continous string of bytes of the NOP opcode.
+;
+;   The preprocessor constant NSYNCNOP specifies the number of NOPs to send.
+;   The default is set below.
+;
+/if [Command cm_sync] then
+  /if [not [exist "nsyncnop:vcon"]] then
+    /const nsyncnop integer = [+ 256 8]
+    /endif
+
+  /if [> nsyncnop 0] then    ;need to send at least 1 NOP ?
+         gcall   cmd_lock_out ;acquire lock on response stream
+         mov     #[v nsyncnop], w1 ;init number of NOPs left to send
+         mov     #[v rsp_nop], w0 ;get NOP opcode ready in W0
+cm_sync_nop:                 ;back here to send each new NOP
+         gcall   cmd_put8    ;send one NOP response
+         sub     #1, w1      ;count one NOP less left to send
+         bra     nz, cm_sync_nop ;back to send more NOPs ?
+    /endif
+
+         return
+  /endif
