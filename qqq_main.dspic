@@ -198,6 +198,7 @@ n_reconfig:                  ;skip here to not reconfigure the firmware
 ;
 ;   Handle new 1 ms clock tick.
 ;
+l_tick1ms:                   ;back here to check for another 1 ms tick
          cp0     ev_1ms
          bra     z, d_tick1ms ;done with all 1 ms ticks ?
          dec     ev_1ms      ;clear the event condition
