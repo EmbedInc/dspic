@@ -248,7 +248,6 @@
 /const   bitrate real = 500e3 ;desired CAN bus baud rate, bits/second
 /const   canin_callback = "" ;routine to call when CAN frame received
 /const   canout_callback = "" ;routine to call when CAN frame sent
-/const   debug_cancfg bool = false ;no extra output during build about CAN config
 /const   ncanbuf integer = 8 ;number of DMA buffers for CAN messages
 /const   dma_canrecv integer = 0 ;DMA channel to use for receiving
 /const   dma_canxmit integer = 1 ;DMA channel to use for transmitting

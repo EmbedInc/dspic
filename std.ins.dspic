@@ -193,6 +193,20 @@
 .equiv   freq_osc, [rnd freq_osc] ;final oscillator frequency in Hz
 .equiv   freq_inst, [rnd freq_inst] ;instruction cycle frequency in Hz
 
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Subroutine DEBUG_INIT name
+//
+//   If a boolean with name "debug_<name>" does not exist, then it is created as
+//   a constant set to False.
+//
+/subroutine debug_init
+  /var local name string = [vnl [qstr [arg 1]]]
+
+  /if [not [exist [str "debug_" name ":vcon"]]] then
+    /const debug_[chars name] bool = false
+    /endif
+  /endsub
 
 ;*******************************************************************************
 ;*******************************************************************************
