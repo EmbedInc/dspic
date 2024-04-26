@@ -10,7 +10,7 @@
 *           7       6       5       4       3       2       1       0
 *       -----------------------------------------------------------------
 *       |       |       |                       |       |               |
-*       |       |       |        PARITY         | PULL  |      BUS      |
+*       |       | 7BIT  |        PARITY         | PULL  |      BUS      |
 *       |       |       |                       |       |               |
 *       -----------------------------------------------------------------
 *
@@ -29,6 +29,15 @@
 *         2  -  Odd
 *         3  -  Zero
 *         4  -  One (same as no parity, 2 stop bits)
+*
+*       7BIT
+*
+*         Specifies 7-bit data instead of the default 8-bit data.  The hardware
+*         is not capable sending only 7 bits of data, so this option must
+*         include a parity bit.  A parity bit value of One will cause the extra
+*         bit to look like a stop bit on sending, but can still cause problems
+*         receiving if the transmitter really only sends 7 bits, a stop bit, and
+*         then starts the next byte.
 *
 *     BAUD
 *

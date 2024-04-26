@@ -172,6 +172,18 @@
   /const runtime_baud bool = true
   /endif
 
+/if [not [exist "ndatbits"]] then
+  /const ndatbits integer = 8
+  /endif
+/pick one by ndatbits
+/option 7 8
+/optionelse
+  /show "  " ndatbits " is not a valid number of data bits.  Must be 7 or 8."
+         .error  "ndatbits"
+         .end
+  /stop
+  /endpick
+
 /var new s string
 /if [exist "parity"]
   /then
@@ -184,7 +196,14 @@
 /del s                       ;delete temporary string
 
 /pick one by parity
-/option "EVEN" "ODD" "ZERO" "ONE" "NONE"
+/option "EVEN" "ODD" "ZERO" "ONE"
+/option "NONE"
+  /if [<> ndatbits 8] then
+    /show "  " parity " not allowed with " ndatbits " data bits."
+         .error  "Parity"
+         .end
+    /stop
+    /endif
 /optionelse
   /show "  """ parity """ is not a valid parity selection"
          .error  "Parity"
@@ -360,16 +379,19 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
          ;
 .equiv   flg_parity_fixed, 0 ;fixed (0 or 1) parity in use
 .equiv   flg_parity_one, 1   ;fixed parity is 1, not 0
-.equiv   flg_parity_none, 3  ;no parity bit
+.equiv   flg_parity_none, 2  ;no parity bit
+.equiv   flg_parity_even, 3  ;even parity, when not fixed
 .equiv   flg_parity_hw, 4    ;parity is computed and checked in hardware
-.equiv   flg_9bit, 5         ;UART is being run in 9 bit data mode
-.equiv   flg_err, 6          ;error occurred since last received character
-.equiv   flg_perr, 7         ;parity error on char in receive interrupt
-.equiv   flg_pbrk_sent, 8    ;already sent notice of this packet start break
-.equiv   flg_received, 9     ;char received since last checked
-.equiv   flg_sent, 10        ;char sent since last checked
-.equiv   flg_master, 11      ;configured as bus master (pullup/down enabled}
-.equiv   flg_config, 12      ;MDEV configured and enabled
+.equiv   flg_err, 5          ;error occurred since last received character
+.equiv   flg_perr, 6         ;parity error on char in receive interrupt
+.equiv   flg_pbrk_sent, 7    ;already sent notice of this packet start break
+.equiv   flg_received, 8     ;char received since last checked
+.equiv   flg_sent, 9         ;char sent since last checked
+.equiv   flg_master, 10      ;configured as bus master (pullup/down enabled}
+.equiv   flg_config, 11      ;MDEV configured and enabled
+.equiv   flg_7bit, 12        ;7 data bits, not 8
+.equiv   flg_9bit, 13        ;UART is being run in 9 bit data mode
+
 
 .section .code_uart[chars uname], code
 ////////////////////////////////////////////////////////////////////////////////
@@ -430,29 +452,53 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 
          clr     flags       ;init all flags to off
 
-  /pick first by [ucase parity]
-  /option "EVEN"
-    /set ii uart_parity_even
+  /pick one by ndatbits
+  /option 8                  ;8 data bits, can use hardware parity
+    /pick one by [ucase parity]
+    /option "EVEN"
+      /set ii uart_parity_even
          bset    flags, #flg_parity_hw
-  /option "ODD"
-    /set ii uart_parity_odd
+         bset    flags, #flg_parity_even
+    /option "ODD"
+      /set ii uart_parity_odd
          bset    flags, #flg_parity_hw
-  /option "ZERO"
-    /set ii uart_parity_zero
+    /option "ZERO"
+      /set ii uart_parity_zero
          bset    flags, #flg_parity_fixed
          bset    flags, #flg_9bit
-  /option "ONE"
-    /set ii uart_parity_one
+    /option "ONE"
+      /set ii uart_parity_one
          bset    flags, #flg_parity_fixed
          bset    flags, #flg_parity_one
          bset    flags, #flg_9bit
-  /option "NONE"
-    /set ii uart_parity_none
+    /option "NONE"
+      /set ii uart_parity_none
          bset    flags, #flg_parity_none
-  /optionelse
-    /show "  Invalid PARITY setting of """ [pick] """"
+    /optionelse
+      /show "  Invalid PARITY setting of """ [pick] """"
          .error  "Parity"
-    /stop
+      /stop
+      /endpick
+  /option 7                  ;7 data bits, HW 8 bits, parity added in firmware
+         bset    flags, #flg_7bit
+    /pick one by [ucase parity]
+    /option "EVEN"
+      /set ii uart_parity_even
+         bset    flags, #flg_parity_even
+    /option "ODD"
+      /set ii uart_parity_odd
+    /option "ZERO"
+      /set ii uart_parity_zero
+         bset    flags, #flg_parity_fixed
+    /option "ONE"
+      /set ii uart_parity_one
+         bset    flags, #flg_parity_fixed
+         bset    flags, #flg_parity_one
+    /optionelse
+      /show "  Invalid PARITY setting of " [pick] " with 7 data bits."
+         .error  "Parity"
+      /stop
+      /endpick
     /endpick
          mov     #[v ii], w0 ;save ID for current parity configuration
          mov     w0, parityid
@@ -494,8 +540,8 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
 ;           ----------0----- disable auto baud rate detection
 ;           -----------0---- normal receive polarity of idle high
 ;           ------------0--- low speed baud rate mode (16x bit clock)
-;           -------------XX- init to 8 bit data, no parity, filled in below
-;           ---------------X init to 1 stop bit, filled in below
+;           -------------XX- data size and parity, filled in below
+;           ---------------X N stop bits, filled in below
   /if txdrive_rts then
     /set ii [or ii [shiftl 1 11]] ;RTS in simplex mode, not flow control
     /set ii [or ii [shiftl 2#01 8]] ;drive TX, RX, RTS, not CTS
@@ -503,20 +549,21 @@ alloc    flags               ;individual 1-bit flags, use FLG_xxx bit numbers
   /if altpins then
     /set ii [or ii [shiftl 1 10]] ;select alternate RX and TX pins
     /endif
-  /if [= parity "EVEN"] then
-    /set ii [or ii 2#010]    ;8 bit data, even parity, 1 stop bit
-    /endif
-  /if [= parity "ODD"] then
-    /set ii [or ii 2#100]    ;8 bit data, odd parity, 1 stop bit
-    /endif
-  /if [or [= parity "ZERO"] [= parity "ONE"]] then
-    /set ii [or ii 2#110]    ;9 bit data, no parity, 1 stop bit
-    /endif
-  /if [= parity "ONE"] then
-    /set ii [or ii 2#001]    ;8 bit data, no parity, 2 stop bits
-    /endif
-  /if [= parity "NONE"] then
-    /set ii [or ii 2#000]    ;8 bit data, no parity, 1 stop bits
+  /if [= ndatbits 8] then
+    /pick one by [ucase parity]
+    /option "EVEN"
+      /set ii [or ii 2#010]  ;8 bit data, even parity, 1 stop bit
+    /option "ODD"
+      /set ii [or ii 2#100]  ;8 bit data, odd parity, 1 stop bit
+    /option "ZERO"
+      /set ii [or ii 2#110]  ;9 bit data, no parity, 1 stop bit
+    /option "ONE"
+      /set ii [or ii 2#001]  ;8 bit data, no parity, 2 stop bits
+    /option "NONE"
+      /set ii [or ii 2#000]  ;8 bit data, no parity, 1 stop bits
+      /endpick
+    /else                    ;using 7 bit data
+      /set ii [or ii 2#000]  ;8 bit data, no parity, 1 stop bits
     /endif
          mov     #[v ii], w0
          mov     w0, Umode
@@ -660,9 +707,59 @@ unlock_leave:
 ;   the UART transmit interrupt routine separately.  If the software output FIFO
 ;   is full, this routine waits until it can receive another byte.
 ;
-         glbsubd uart[chars uname]_put, regf1 | regf2
-         push    w0          ;save word with data byte on the top of the stack
+         glbsubd uart[chars uname]_put, regf0 | regf1 | regf2
 
+         and     #0xFF, w0   ;mask in only the valid data bits
+;
+;   Handle special case of 7-bit data mode.  The UART can't do 7 bit data
+;   directly, so we use it in 8-bit data mode and manually set the high bit
+;   according to the parity strategy.
+;
+         btss    flags, #flg_7bit ;caller's data is 7 bits ?
+         jump    put_d7      ;no, skip this section
+         bclr    w0, #7      ;init the parity bit to 0
+
+         btss    flags, #flg_parity_fixed ;fixed parity ?
+         jump    put_parnfix ;no
+         btsc    flags, #flg_parity_one ;parity bit supposed to be 0 ?
+         bset    w0, #7      ;no, set to 1
+         jump    put_dset    ;done setting the parity bit
+put_parnfix:                 ;not fixed parity
+         ;
+         ;   The parity bit must be computed from the 7 data bits.  We
+         ;   compute the even parity by XORing the data bits.  The parity bit
+         ;   has already been initialized to 0.
+         ;
+         lsr     w0, #4, w1  ;fold into 4 bits
+         xor     w0, w1, w1
+         lsr     w1, #2, w2  ;fold into 2 bits
+         xor     w1, w2, w1
+         lsr     w1, #1, w2  ;fold into the LSB of W1
+         xor     w1, w2, w1
+         btsc    w1, #0      ;result is 0 ?
+         bset    w0, #7      ;no, set the parity bit
+         btss    flags, #flg_parity_even ;even parity, as currently set ?
+         btg     w0, #7      ;no, toggle to make odd parity
+         jump    put_dset    ;the data word is all set
+
+put_d7:                      ;skip to here when not in 7-bit mode
+;
+;   Handle the special case of the UART being run in 9-bit mode.  This is only
+;   done when 8 bit data is used with a fixed parity bit.  The parity bit has
+;   already been initialized to 0.
+;
+         btss    flags, #flg_9bit ;UART is in 9-bit mode ?
+         jump    put_d9      ;no, skip this section
+
+         btsc    flags, #flg_parity_one ;fixed parity bit is 0 ?
+         bset    w0, #8      ;no, set to 1
+put_d9:                      ;skip to here when UART not in 9-bit mode
+
+put_dset:                    ;W0 is all set for writing directly to the UART
+;
+;   Wait for room in the output FIFO.
+;
+         mov     w0, w2      ;temp save data word in W2
 put_wait:
          fifow_jump_notfull fifoo, put_room ;FIFO has room for another char ?
          gcall   task_yield_save ;no, wait a little while
@@ -671,7 +768,7 @@ put_wait:
 ;   The output FIFO has room to accept the new byte.
 ;
 put_room:
-         pop     w0          ;restore W0 to contain the word with the data byte
+         mov     w2, w0      ;get data word back into W0
          fifow_put fifoo     ;stuff the character into the FIFO
          mov     ticktxgap, w1 ;reset sending packet gap timeout
          mov     w1, ticktxwat
@@ -715,11 +812,6 @@ put_room:
 
          bclr    Utxif_reg, #Utxif_bit ;clear the interrupt condition
          fifow_get fifoo     ;get the data word into W0
-         and     #0xFF, w0   ;mask in only the data bits
-
-         btsc    flags, #flg_parity_one ;not fixed parity of 1 ?
-         bset    w0, #8      ;set the parity bit
-
          mov     w0, Utxreg  ;write the byte to the UART
          bset    flags, #flg_sent ;indicate sending activity
 
@@ -886,15 +978,50 @@ recv_derr:
          btss    flags, #flg_perr ;hardware indicated parity error ?
          jump    recv_nperr  ;no
          jump    recv_perr   ;yes
-recv_nhwpar:                 ;not using hardware parity checking
 
+recv_nhwpar:                 ;not using hardware parity checking
+         btss    flags, #flg_7bit ;7 bit data, parity in bit 7 ?
+         jump    recv_n7bit  ;not using 7 bit data word
+
+         btss    flags, #flg_parity_fixed ;fixed 1 or 0 parity ?
+         jump    recv_n7var  ;no, variable parity bit
+         btss    flags, #flg_parity_one ;using fixed parity of 1 ?
+         jump    recv_n7fx0  ;no
+         btss    w0, #7      ;recieved parity is 1 as expected ?
+         jump    recv_n7perr ;no, parity error
+         jump    recv_n7done ;yes
+recv_n7fx0:                  ;using fixed parity of 0
+         btsc    w0, #7      ;received parity is 0 as expected ?
+         jump    recv_n7perr ;no, parity error
+         jump    recv_n7done ;yes
+recv_n7var:                  ;7 bit data with variable parity
+         mov     #0x7F, w1   ;get data bits only into W1
+         and     w0, w1, w1
+         lsr     w1, #4, w2  ;compute even parity in LSB of W1
+         xor     w1, w2, w1
+         lsr     w1, #2, w2
+         xor     w1, w2, w1
+         lsr     w1, #1, w2
+         xor     w1, w2, w1
+         btss    flags, #flg_parity_even ;parity setting is even ?
+         btg     w1, #0      ;no, flip computed parity bit
+         lsr     w0, #7, w2  ;move received parity bit into LSB of W2
+         xor     w1, w2, w1  ;compare to computed parity bit
+         btss    w1, #0      ;parity error ?
+         jump    recv_n7done ;no, done checking parity
+recv_n7perr:                 ;parity error in 7 bit data mode
+         bset    w0, #umodbus_rx_perr ;indicate parity error
+recv_n7done:                 ;done checking parity with 7 bit data word
+         bclr    w0, #7      ;clear parity bit, pass on only 7 bit data
+         jump    recv_push
+
+recv_n7bit:                  ;not using 7 bit data words
          btsc    w0, #8      ;received parity is 0 ?
          jump    recv_par1   ;no, is 1
 
          btss    flags, #flg_parity_one ;supposed to be 1 ?
          jump    recv_nperr  ;no, parity is correct
          jump    recv_perr   ;yes, parity error
-
 recv_par1:                   ;the received parity bit is 1
          btss    flags, #flg_parity_one ;supposed to be 1 ?
 recv_perr:                   ;flag this character as having a parity error
@@ -902,6 +1029,8 @@ recv_perr:                   ;flag this character as having a parity error
 recv_nperr:                  ;skip to here on no parity error
          bclr    w0, #8      ;remove parity bit, if present, from data word
 
+
+recv_push:                   ;push the data word onto the recv FIFO
          fifow_put fifoi     ;stuff the word in W0 into the software recv FIFO
 
 recv_dbyte:                  ;done receiving this byte
@@ -962,7 +1091,7 @@ recv_leave:                  ;common exit point for UART receive interrupt
 ;   Return the next received UART event in W0.  If no event is pending, then
 ;   this routine waits until one occurs.
 ;
-;   The high 8 bits of the returned word are flags indicating the event.  UART
+;   The high 7 bits of the returned word are flags indicating the event.  UART
 ;   received data, if appropriate for the event, is returned in the low 8 bits.
 ;
 ;   See the UART_MODBUS_SETUP.INS.DSPIC file for definition of the event flag
@@ -970,7 +1099,7 @@ recv_leave:                  ;common exit point for UART receive interrupt
 ;
          glbsubd uart[chars uname]_get, regf1 | regf2
 
-get_wait:                    ;back here until a evebt is available from the FIFO
+get_wait:                    ;back here until a event is available from the FIFO
          fifow_jump_notempty fifoi, get_event ;event is available ?
          gcall   task_yield_save ;no, give other tasks a chance to run
          jump    get_wait
@@ -1363,7 +1492,48 @@ mast_leave:
 
          mcall   uart[chars uname]_off ;make sure hardware is off during config change
          mov     w0, parityid ;save new parity configuration ID
+         btss    flags, #flg_7bit ;7 bits/character ?
+         jump    par_8bit    ;no, 8 bits/character
+;
+;   7 bits per character.  This mode is not supported by the UART, so parity
+;   generation and checking is done in firmware.  Since the UART hardware is
+;   still sending and receiving 8 bit characters, no parity bit can not be
+;   supported.  If NONE parity is selected, ONE parity will be silently
+;   substituted.  At least that works for sending since the extra bit will just
+;   be another stop bit.
+;
+         bclr    Umode, #PDSEL1 ;8 data bits, no parity bit
+         bclr    Umode, #PDSEL0
+         bclr    Umode, #STSEL ;1 stop bit
+         bclr    flags, #flg_9bit ;UART not being run in 9-bit mode
+         bclr    flags, #flg_parity_hw ;parity not computed and checked in hardware
+         bclr    flags, #flg_parity_none ;NONE is not supported in 7 bit mode
 
+         match_const uart_parity_even, par_7even
+         match_const uart_parity_odd, par_7odd
+
+par_7one:                    ;7-1-1, same as 7-N-2 for sending
+         bset    flags, #flg_parity_fixed
+         bset    flags, #flg_parity_one
+         bclr    flags, #flg_parity_even
+         jump    par_dset
+
+par_7even:                   ;7-E-1
+         bclr    flags, #flg_parity_fixed
+         bclr    flags, #flg_parity_one
+         bset    flags, #flg_parity_even
+         jump    par_dset
+
+par_7odd:                    ;7-O-1
+         bclr    flags, #flg_parity_fixed
+         bclr    flags, #flg_parity_one
+         bclr    flags, #flg_parity_even
+         jump    par_dset
+;
+;   8 bits per character.  The UART hardware can be used to generate and check
+;   parity.
+;
+par_8bit:                    ;configured for 8 bits/character
          match_const uart_parity_even, par_even
          match_const uart_parity_odd, par_odd
          match_const uart_parity_one, par_one
@@ -1376,6 +1546,7 @@ par_none:                    ;8-N-1
          bclr    flags, #flg_parity_fixed
          bclr    flags, #flg_parity_one
          bset    flags, #flg_parity_none
+         bclr    flags, #flg_parity_even
          bclr    flags, #flg_parity_hw
          bclr    flags, #flg_9bit
          jump    par_dset
@@ -1388,6 +1559,7 @@ par_even:                    ;8-E-1
          bclr    flags, #flg_parity_fixed
          bclr    flags, #flg_parity_one
          bclr    flags, #flg_parity_none
+         bset    flags, #flg_parity_even
          bset    flags, #flg_parity_hw
          bclr    flags, #flg_9bit
          jump    par_dset
@@ -1400,6 +1572,7 @@ par_odd:                     ;8-O-1
          bclr    flags, #flg_parity_fixed
          bclr    flags, #flg_parity_one
          bclr    flags, #flg_parity_none
+         bclr    flags, #flg_parity_even
          bset    flags, #flg_parity_hw
          bclr    flags, #flg_9bit
          jump    par_dset
@@ -1412,10 +1585,11 @@ par_one:                     ;8-1-1, which is also 8-N-2
          bset    flags, #flg_parity_fixed
          bset    flags, #flg_parity_one
          bset    flags, #flg_parity_none
+         bclr    flags, #flg_parity_even
          bclr    flags, #flg_parity_hw
          bset    flags, #flg_9bit
 
-par_dset:                    ;done changing parity setting
+par_dset:                    ;done changing HW settings and local state
          mcall   uart[chars uname]_on ;turn on the hardware
 
 par_leave:
@@ -1431,6 +1605,58 @@ par_leave:
          glbsubd uart[chars uname]_parity
 
          mov     parityid, w0
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_DATBITS_SET
+;
+;   Set the number of data bits per character sent and received by the UART.
+;   The number of bits is passed in W0.  The only valid values are 7 and 8.
+;
+;   If a change is made, the UART is switched off, the change made, and then
+;   switched on again.  Switching the UART off and on resets the send and
+;   receive FIFOs to empty.
+;
+         glbsubd uart[chars uname]_datbits_set, regf0
+
+         match_const 7, datbits7
+         match_const 8, datbits8
+         jump    datbits_leave ;invalid setting, ignore
+
+datbits7:                    ;configure for 7 bits/character
+         btsc    flags, #flg_7bit ;not already set this way ?
+         jump    datbits_leave ;already set, nothing to do
+         jump    datbits_change ;cause the change to take effect
+
+datbits8:                    ;configure for 8 bits/character
+         btss    flags, #flg_7bit ;not already set this way ?
+         jump    datbits_leave ;already set, nothing to do
+;
+;   The number of bits/char needs to be changed.  Since there are only two
+;   choices, this section toggles to the other selection than is current.
+;
+datbits_change:
+         mov     parityid, w0 ;get ID for existing parity handling startegy
+         btg     flags, #flg_7bit ;toggle internal state to the other char size
+         mcall   uart[chars uname]_parity_set ;re-configure with new char size
+
+datbits_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine UART_DATBITS
+;
+;   Get the number of bits/character currently configured to.  The value is
+;   returned in W0, and will be either 7 or 8.
+;
+         glbsubd uart[chars uname]_datbits
+
+         mov     #7, w0      ;init for 7 bits/char
+         btss    flags, #flg_7bit ;really is 7 bits/char ?
+         mov     #8, w0      ;no, indicate 8 bits/char
 
          leaverest
 
@@ -1607,6 +1833,8 @@ par_leave:
          mov     parityid, w3 ;get the parity configuration ID
          sl      w3, #3, w3  ;move it into place
          ior     w0, w3, w0  ;merge it into the PROT byte
+         btsc    flags, #flg_7bit
+         bset    w0, #6
          gcall   nvol_write  ;write the PROT byte
 
          mov     ubaud+2, w0
@@ -1652,7 +1880,7 @@ save_leave:
 ;         7       6       5       4       3       2       1       0
 ;     -----------------------------------------------------------------
 ;     |       |       |                       |       |               |
-;     |       |       |        PARITY         | PULL  |      BUS      |
+;     |       | 7BIT  |        PARITY         | PULL  |      BUS      |
 ;     |       |       |                       |       |               |
 ;     -----------------------------------------------------------------
 ;
@@ -1670,6 +1898,15 @@ save_leave:
 ;       1  -  Even
 ;       2  -  Odd
 ;       4  -  One (same as no parity, 2 stop bits)
+;
+;     7BIT
+;
+;       Specifies 7-bit data instead of the default 8-bit data.  The hardware is
+;       not capable sending only 7 bits of data, so this option must include a
+;       parity bit.  A parity bit value of One will cause the extra bit to look
+;       like a stop bit on sending, but can still cause problems receiving if
+;       the transmitter really only sends 7 bits, a stop bit, and then starts
+;       the next byte.
 ;
 ;   BAUD is the unsigned 24 bit integer baud rate.  The closest realizable baud
 ;   rate to that specified by BAUD will be silently chosen.  Baud rates up to
@@ -1713,6 +1950,13 @@ save_leave:
          lsr     w2, #3, w0  ;get PARITY field into W0
          and     #0x7, w0
          mcall   uart[chars uname]_parity_set ;set the parity configuration
+;
+;   Select 7 or 8 bit data mode.
+;
+         mov     #8, w0      ;init to 8 bits/char
+         btsc    w2, #6      ;8 bits/char requested ?
+         mov     #7, w0      ;no, indicate 7 bits/char
+         mcall   uart[chars uname]_datbits_set ;set the bits/character
 ;
 ;   Set the baud rate.
 ;

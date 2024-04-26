@@ -5,9 +5,10 @@
 ;
 
 ;   Bits within the word returned by UART_GET.  The low 8 bits is the data byte,
-;   and the upper 8 bits are flags.  All flags are 0 when a data byte is
-;   received normally without any exception or unusual conditions.  The flag
-;   bits are:
+;   and the upper 7 bits are flags.  Bit 8 is used internally when running the
+;   UART in 9-bit mode, and must be kept clear by the application.  All flags
+;   are 0 when a data byte is received normally without any exception or unusual
+;   conditions.  The flag bits are:
 ;
 /const   umodbus_rx_err integer = 15 ;hard error (overrun, framing, etc) before char
 /const   umodbus_rx_perr integer = 14 ;parity error, data returned as received

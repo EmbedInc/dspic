@@ -283,6 +283,7 @@
 /const   baud    real = 19200 ;desired baud rate (19200 is Modbus default)
 /const   runtime_baud bool = false ;runtime baud changing, always on for MDEV
 /const   parity  string = "EVEN" ;EVEN, ODD, ZERO, ONE, NONE (EVEN Modbus default)
+/const   ndatbits integer = 8 ;number of data bits, 7 or 8.  7 requires parity bit.
 /const   runtime_parity bool = true ;allow changing parity at run time
 /const   altpins bool = false ;don't use alternate fixed pins
 /const   utickt  real = 100e-6 ;UART_TICK call period, seconds
