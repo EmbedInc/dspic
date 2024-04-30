@@ -1,0 +1,236 @@
+;   ***************************************************************
+;   * Copyright (C) 2024, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Subroutine STR_TO_FX32F32
+;
+;   Interpret a numeric string into a 32.32 signed fixed point value.  See the
+;   comments in QQQ_STR_TO_FX32F32 for details.
+;
+;   On entry W0 points to the start of the string, and W1 is the string length
+;   in characters (bytes).  The fixed point number is returned in W3:W2:W1:W0.
+;
+;   Algorithm
+;
+;     For each digit before the decimal point, the existing integer part is
+;     multiplied by 10 and the new digit value added.
+;
+;     For digits after the binary point, the digit value is multiplied by a
+;     particular constant for its digit position.  The result of the multiply
+;     is added to the existing fraction part of the result.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   nfracdig integer = 7 ;max number of fraction digits supported
+;
+;   Other constants.
+;
+         ;
+         ;   Flag names.  Each symbol is the bit number for its flag within the
+         ;   flags word.  The high byte of the flag word contains the flags.
+         ;   The low byte is the number of digits seen since the decimal point.
+         ;
+.equiv   flg_neg, 15         ;value is negative, not positive
+.equiv   flg_dpnt, 14        ;decimal point has been read
+
+
+.section .code_str_to_fx32f32, code
+;*******************************************************************************
+;
+;   Fraction digits multipliers table.
+;
+;   Digits after the decimal point are multiplied by a constant for that digit
+;   position, then added into the fraction part of the output value being built.
+;   This table provides multiplier constants for each supported digit position
+;   after the decimal point.
+;
+;   Each constant is 32 bits, stored in the low 16 bits of two consecutive
+;   program memory words.  The low 16 bits of the constant are stored in the
+;   first word, and the high 16 bits in the second.
+;
+fx32f32_mtable:
+/loop with dig from 1 to nfracdig ;once for each supported digit position
+  /var local m Integer       ;full mult constant for this digit
+  /var local l Integer       ;low 16 bits of mult constant
+  /var local h Integer       ;high 16 bits of mult constant
+  /var local s String        ;scratch string for writing asm statements
+
+  /set m [rnd [/ [exp 2.0 32] [exp 10.0 dig]]] ;make mult const for this digit
+  /set l [and m 16#FFFF]     ;low word
+  /set h [shiftr m 16]       ;high word
+
+  /set s ""                  ;write state for low word
+  /call tabopcode s
+  /append s ".pword"
+  /call taboperand s
+  /append s "0x" [int l "base 16 fw 4 lz usin"]
+  /call startcomm s
+  /append s "fraction digit " dig ", mult factor " m
+  /write s
+
+  /set s ""                  ;write statement for high word
+  /call tabopcode s
+  /append s ".pword"
+  /call taboperand s
+  /append s "0x" [int h "base 16 fw 4 lz usin"]
+  /write s
+  /endloop                   ;back for next digit position
+
+;*******************************************************************************
+;
+;   Subroutine STR_TO_FX32F32
+;
+         glbsub  str_to_fx32f32, regf4 | regf5 | regf6 | regf7 | regf8 | regf9 | regf10 | regf11
+;
+;   Register usage:
+;
+;     W1:W0  -  Accumulator for fraction part of resulting value.
+;     W3:W2  -  Accumulator for integer part of resulting value.
+;
+;     W4  -  Pointer to next input string byte.
+;
+;     W5  -  Number of input string bytes left to read.
+;
+;     W6  -  FLG_xxx flag bits in high byte, digits since decimal point in low.
+;
+;     W7  -  Current input character or digit value.
+;
+;     W9:W8  -  Scratch multiply result.
+;
+;     W10  -  Scratch.
+;
+;     W11  -  Scratch.
+;
+         mov     w0, w4      ;init pointer to next input char
+         mov     w1, w5      ;init number of input chars left to do
+
+         clr     w0          ;init output value accumulator
+         clr     w1
+         clr     w2
+         clr     w3
+
+         cp0     w5
+         bra     z, fx32f32_leave ;no input chars, nothing to do ?
+
+         clr     w6          ;init flags and digits since decimal point
+
+fx32f32_inchar:              ;back here each new input string character
+         ze      [w4++], w7  ;get this input char into W5
+;
+;   Handle this character if it is "+".
+;
+         mov     #'+', w8
+         cp      w7, w8
+         bra     nz, fx32f32_dplus
+
+         bclr    w6, #flg_neg
+         jump    fx32f32_nextchar
+fx32f32_dplus:               ;done checking for plus sign
+;
+;   Handle this character if it is "-".
+;
+         mov     #'-', w8
+         cp      w7, w8
+         bra     nz, fx32f32_dminus
+
+         bset    w6, #flg_neg
+         jump    fx32f32_nextchar
+fx32f32_dminus:              ;done checking for minus sign
+;
+;   Handle this character if it is ".".
+;
+         mov     #'.', w8
+         cp      w7, w8
+         bra     nz, fx32f32_dpoint
+
+         bset    w6, #flg_dpnt
+         jump    fx32f32_nextchar
+fx32f32_dpoint:              ;done checking for decimal point
+
+         mov     #'0', w8    ;make 0-9 digit value in W7
+         sub     w7, w8, w7
+         btsc    w6, #flg_dpnt ;before decimal point ?
+         jump    fx32f32_fracdig ;no, this is a fraction digit
+;
+;   Digit before the decimal point.  The digit value is in W7.
+;
+         ;
+         ;   Multiply the existing integer part by 10.
+         ;
+         mul.uu  w3, #10, w8 ;10x high word into W9:W8
+         mul.uu  w2, #10, w2 ;10x low word into W1:W0
+         add     w2, w8, w8  ;merge in result from high word
+         ;
+         ;   Add in value of this new digit.
+         ;
+         add     w2, w7, w2  ;add digit into low word
+         addc    #0, w3      ;propagate carry to high word
+
+         jump    fx32f32_nextchar ;done processing this digit
+;
+;   Digit after decimal point.  The digit value is in W7.
+;
+fx32f32_fracdig:
+         and     w6, #0x1F, w8 ;make number of fraction digits so far in W8
+         cp      w8, #[v nfracdig] ;compare to max supported
+         bra     geu, fx32f32_nextchar ;too many frac digits, ignore this one ?
+         add     #1, w6      ;update number of frac digits for next time
+
+         pgmadr  w10, fx32f32_mtable ;get start of table address into W11:W10
+         sl      w8, #2, w8  ;make table offset for this digit
+         add     w10, w8, w10 ;make table entry address
+         addc    #0, w11
+
+         mov     w11, Tblpag ;set high prog memory address bits
+         tblrdl  [w10], w8   ;get low word of mult factor into W8
+         add     #2, w10     ;update address for next part of table entry
+         addc    #0, w11
+         mov     w11, Tblpag ;set high prog memory address bits
+         tblrdl  [w10], w11  ;get high word of mult factor into W11
+         ;
+         ;   The 0-9 digit value is int W7, the low word of the mult factor for
+         ;   this digit in W8, and the high word in W11.
+         ;
+         mul.uu  w7, w8, w8  ;mult by low word of mult factor, into W9:W8
+         add     w0, w8, w0  ;add low word contribution into accumulator
+         addc    w1, w9, w1
+
+         mul.uu  w7, w11, w8 ;mult by high word of mult factor, into W9:W8
+         add     w1, w8, w1  ;add high word contribution into accumulator
+
+fx32f32_nextchar:            ;done with this input character, on to next
+         sub     #1, w5      ;count one less character left to do
+         bra     nz, fx32f32_inchar ;back to process the next input char ?
+;
+;   Done processing all the input characters.
+;
+;   Negate the result if this is indicated.
+;
+         btss    w6, #flg_neg ;need to negate result ?
+         jump    fx32f32_dneg ;no, skip this section
+         neg     w0, w0      ;do word 0, set C
+         com     w1, w1      ;do word 1
+         addc    #0, w1
+         com     w2, w2      ;do word 2
+         addc    #0, w2
+         com     w3, w3      ;do word 3
+         addc    #0, w3
+fx32f32_dneg:                ;done negating the result
+
+fx32f32_leave:               ;common exit point, result in W3:W2:W1:W0
+         leaverest
