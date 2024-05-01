@@ -35,7 +35,7 @@
 ;       characters must be decimal digits 0-9, which can include up to one
 ;       decimal point before, within, or after the digits.  The digits before
 ;       the decimal point must not overflow a signed 32 bit value (9 digits
-;       safe, 10 possible).  Only the first 7 digits after the decimal point
+;       safe, 10 possible).  Only the first 8 digits after the decimal point
 ;       will be used.  Additional fraction digits are ignored.
 ;
 ;       The output is undefined when the input string does not conform to the

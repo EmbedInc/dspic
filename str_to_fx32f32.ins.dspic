@@ -36,7 +36,7 @@
 ;
 ;   Configuration constants.
 ;
-/const   nfracdig integer = 7 ;max number of fraction digits supported
+/const   nfracdig integer = 8 ;max number of fraction digits supported
 ;
 ;   Other constants.
 ;
@@ -173,8 +173,8 @@ fx32f32_dpoint:              ;done checking for decimal point
          ;   Multiply the existing integer part by 10.
          ;
          mul.uu  w3, #10, w8 ;10x high word into W9:W8
-         mul.uu  w2, #10, w2 ;10x low word into W1:W0
-         add     w2, w8, w8  ;merge in result from high word
+         mul.uu  w2, #10, w2 ;10x low word into W3:W2
+         add     w3, w8, w3  ;merge in result from high word
          ;
          ;   Add in value of this new digit.
          ;
