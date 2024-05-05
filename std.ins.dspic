@@ -4294,6 +4294,30 @@ alloc    fifow_[arg 1]_buf, [* fifow_[arg 1]_bufsz 2]
   /show "  " nam " " val desc
   /endsub
 
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Function CHARS_WORD16 str
+//
+//   Return the 16 bit word containing the first two characters of the string
+//   STR.  The first character will be in the low byte, and the second in the
+//   high byte.  If STR is less than 2 characters in length, then bytes for the
+//   missing characters will be set to 0.
+//
+/function chars_word16
+  /var local str string = [vnl [arg 1]] //input string
+  /var local w integer //word value being built
+
+  /if [>= [slen str] 1] then //first char exists ?
+    /set w [ccode [sindx 1 str]]
+    /endif
+
+  /if [>= [slen str] 2] then //second char exists ?
+    /set w [or w [shiftl [ccode [sindx 2 str]] 8]]
+    /endif
+
+  /funcval w
+  /endfunc
+
 ;*******************************************************************************
 ;*******************************************************************************
 ;

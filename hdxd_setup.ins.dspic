@@ -1,0 +1,36 @@
+;   ***************************************************************
+;   * Copyright (C) 2024, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Symbols that need to be globally known to use the HDXD subsystem.  The HDXD
+;   subsystem provides a procedural interface to a bus of Heise DXD pressure
+;   sensors.
+;
+
+;   Bit numbers for flags that indicate the result of a read.
+;
+/const   hdxd_rdflg_herr integer = 0 ;hard error, like bad packet, bad parity, etc
+/const   hdxd_rdflg_tout integer = 1 ;full response not received within timeout
+/const   hdxd_rdflg_nack integer = 2 ;device replied with explicit NACK
+/const   hdxd_rdflg_short integer = 3 ;response too short to interpret value
+/const   hdxd_rdflg_ncmd integer = 4 ;response not for the expected command
+/const   hdxd_rdflg_fmt integer = 5 ;response not formatted as expected
+
+.equiv   hdxd_rdflg_herr, [v hdxd_rdflg_herr]
+.equiv   hdxd_rdflg_tout, [v hdxd_rdflg_tout]
+.equiv   hdxd_rdflg_nack, [v hdxd_rdflg_nack]
+.equiv   hdxd_rdflg_short, [v hdxd_rdflg_short]
+.equiv   hdxd_rdflg_ncmd, [v hdxd_rdflg_ncmd]
+.equiv   hdxd_rdflg_fmt, [v hdxd_rdflg_fmt]

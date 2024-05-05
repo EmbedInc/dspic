@@ -1,0 +1,617 @@
+;   ***************************************************************
+;   * Copyright (C) 2024, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Procedural interface to a bus of Heise DXD pressure sensors.
+;
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   buflen  integer = 32 ;size of input buffer, bytes
+/const   toutms  integer = 45 ;timeout for response not received, ms
+;
+;   Other constants.
+;
+.equiv   cr_k,   13          ;carriage return character
+.equiv   lf_k,   10          ;line feed character
+.equiv   ack_k,  6           ;ACK character
+.equiv   nack_k, 21          ;NACK character
+.equiv   bcast_k, [chars_word16 "**"] ;two character broadcast address in one word
+
+;*******************************************************************************
+;
+;   Derived constants.
+;
+/if [not [exist "uname:vcon"]] then
+  /const uname String = ""
+  /endif
+;
+;   Make UN, which is the string to add immediately after "UART" in the UART
+;   subroutine names.
+;
+/if [= uname ""]
+  /then                      ;no special name added to UART routines
+    /const un String = ""
+  /else                      ;UNAME added as special name to UART routines
+    /const un String = [str "_" uname]
+  /endif
+
+/block
+  /var local ii Integer
+  /set ii [div [+ buflen 1] 2]
+  /const buflenw Integer = ii ;input buffer size in whole words
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+.section .ram_hdxd, bss      ;variables in normal RAM
+
+;*******************
+;
+;   Global state.
+;
+
+;*******************
+;
+;   Local state in normal RAM.
+;
+alloc    nlock               ;number of levels into mutex lock, 0 = not locked
+alloc    locktask            ;ID of task holding lock
+alloc    inbuf   [* buflenw 2] ;input buffer
+alloc    nbuf                ;number of bytes in the input buffer
+
+;*******************
+;
+;   Local state in near RAM.
+;
+.section .near_hdxd, bss, near ;varibles in near RAM
+
+alloc    flags               ;individual local flag bits
+         ;
+         ;   Flag bit names.  Each symbol is the 0-15 bit number of its flag.
+         ;
+.equiv   flg_nack, 0         ;device replied with NACK
+.equiv   flg_tout, 1         ;timed out before valid packet received
+.equiv   flg_herr, 2         ;hard error, parity, bad packet, etc
+
+
+.section .code_hdxd, code
+;*******************************************************************************
+;
+;   Subroutine HDXD_INIT
+;
+;   Initialize the state managed by this module.  This must be the first call
+;   into this module.
+;
+         glbsub  hdxd_init, regf0
+
+         mov     #0, w0
+         mov     w0, nlock   ;init to these routines not locked by a task
+         mov     w0, flags   ;init all flags to off
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine LOCK
+;
+;   Acquire the exclusive lock on the HDXD routines for this task.  This routine
+;   waits indefinitely for the lock to be available.  Other tasks run normally
+;   during the wait.
+;
+;   If the current task is already holding the lock, then no wait is performed
+;   but the lock level increased by one.  The task must eventually call UNLOCK
+;   once for each lock level to release the lock.
+;
+         locsub  lock, regf0 | regf1
+
+         mov     currtask, w1 ;get the ID of this task
+
+lock_check:                  ;back here to check the lock again
+         mov     nlock, w0   ;get lock counter
+         cp0     w0
+         bra     z, lock_grab ;not locked, go grab the lock ?
+
+         mov     locktask, w0 ;get ID of the task holding the lock
+         cp      w0, w1
+         bra     z, lock_inc ;this task is already holding the lock ?
+         gcall   task_yield_save ;no, give all other tasks a chance to run
+         jump    lock_check  ;back to check the lock state again
+;
+;   Currently not locked.  Lock it to this task.
+;
+lock_grab:
+         mov     #1, w0
+         mov     w0, nlock
+         mov     w1, locktask ;indicate which task is holding the lock
+
+         gcall   uart[chars un]_lock ;acquire exclusive lock on the UART
+         jump    lock_leave
+;
+;   This task is already holding the lock.  Increment the lock counter.
+;
+lock_inc:
+         mov     nlock, w0   ;increment the lock counter
+         add     #1, w0
+         mov     w0, nlock
+
+lock_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine UNLOCK
+;
+;   Release the exlusive lock on the HDXD routines by one level.  Only the task
+;   holding the lock can release it.  Nothing is done if the lock is not held by
+;   this task.  To fully release the lock so that it is available to other
+;   tasks, it must be released one level for every time it was locked (number of
+;   times UNLOCK is called must match number of times LOCK is called).
+;
+         locsub  unlock, regf0 | regf1
+
+         mov     currtask, w1 ;get ID of this task
+         mov     locktask, w0 ;get ID of task holding lock, if any
+         cp      w1, w0
+         bra     nz, unlock_leave ;this task isn't holding lock, nothing to do ?
+         mov     nlock, w0
+         cp0     w0
+         bra     z, unlock_leave ;the lock isn't held at all ?
+;
+;   We are holding the lock.  W0 is the current lock count, which is not 0.
+;
+         sub     #1, w0      ;make new lock count
+         cp0     w0
+         mov     w0, nlock   ;update the lock count
+         bra     nz, unlock_leave ;didn't just fully release lock ?
+         ;
+         ;   The lock is being fully released.
+         ;
+         gcall   uart[chars un]_unlock ;release lock on the UART
+
+unlock_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine FLUSH
+;
+;   Drain the stream from the DXD bus until no event is immediately available.
+;
+         locsub  flush, regf0
+
+flush_loop:                  ;back here to check for another event again
+         gcall   uart[chars un]_get_ready ;set Z according to event available
+         bra     z, flush_leave ;no event available, all done ?
+         gcall   uart[chars un]_get ;get the event into W0
+         gcall   task_yield_save ;give all other tasks a chance to run
+         jump    flush_loop  ;back to check for another event
+
+flush_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine MAKE_ADDRESS
+;
+;   Create the ASCII address string from the address in W0.  The resulting
+;   two-character address string is returned in W2.  W0 must be 1-99 to indicate
+;   a particular DXD address, or 0 to indicate the broadcast address.  Results
+;   are undefined when W0 is outside the 0-99 valid range.
+;
+         locsub  make_address, regf0 | regf1 | regf3
+
+         cp0     w0
+         bra     z, mkadr_broad ;broadcast address ?
+;
+;   Not the broadcast address.  Compute the two digits and convert them to
+;   ASCII.
+;
+         mov     #10, w3     ;get value to divide by
+         repeat  #17
+         div.u   w0, w3      ;quotient into W0, remainder into W1
+
+         mov     #'0', w2    ;get ASCII value for 0 digit
+         add     w2, w0, w2  ;make first ASCII digit character
+
+         mov     #'0', w3    ;get ASCII value for 0 digit
+         add     w3, w1, w3  ;make second ASCII digit character
+         sl      w3, #8, w3  ;move it into position
+
+         ior     w2, w3, w2  ;merge both digit characters into W2
+         jump    mkadr_leave
+;
+;   The broadcast address is specified.  This is a fixed value.
+;
+mkadr_broad:
+         mov     #bcast_k, w2 ;get two-char broadcast address into W2
+
+mkadr_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine HDXD_READ_SEND
+;
+;   Send a read command out the DXD bus.
+;
+;   All received data is flushed before the command is sent so that future
+;   received data is hopefully in response to this command.
+;
+;   W0 contains the 1-99 address to send the command to, or 0 to use the
+;   broadcast address.  Result are undefined when W0 is not in the 0 to 99
+;   range.
+;
+;   W1 contains the two-character command to send.  The first character is in
+;   the low byte, and the second in the high byte.
+;
+;   A full read command packet is sent, in particular it is:
+;
+;     # adr cmd CR
+;
+;   "#" is the attention character that start all command sequences.  ADR will
+;   be the decimal address "01" to "99", or the special broadcast address "**".
+;   CR is the required carriage return for ending packets.
+;
+         locsub  hdxd_read_send, regf0 | regf2 | regf3
+
+         mcall   flush       ;clear any existing received events
+
+         mcall   make_address ;make 2 char address string in W2
+
+         mov     #'#', w0    ;send attention char
+         gcall   uart[chars un]_put
+
+         mov     w2, w0      ;send first address char
+         gcall   uart[chars un]_put
+         lsr     w0, #8, w0  ;send second address char
+         gcall   uart[chars un]_put
+
+         mov     w1, w0      ;send first command char
+         gcall   uart[chars un]_put
+         lsr     w0, #8, w0  ;send second command char
+         gcall   uart[chars un]_put
+
+         mov     #cr_k, w0   ;send carriage return to end the packet
+         gcall   uart[chars un]_put
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine GETPACK
+;
+;   Read a packet from the DXD bus into the input buffer INBUF.  NBUF is set to
+;   the number of characters received.  When there is no error, this is the
+;   number of characters in the buffer minus the mandatory ACK, CR, LF at the
+;   end.
+;
+;   The following flags are set according to what happened:
+;
+;     NACK  -  A full packet was received, but it contained explicit NACK.
+;
+;     TOUT  -  A full packet was not received within the timeout.
+;
+;     HERR  -  A hard error was encountered, like overrun, parity, etc.
+;
+         locsub  getpack, regf0 | regf1 | regf2 | regf3 | regf4
+;
+;   Register usage:
+;
+;     W0  -  UART event.
+;
+;     W1  -  Number of 1 ms clock ticks left before timeout.
+;
+;     W2  -  Last 1 ms clock tick value updated to.
+;
+;     W3  -  Pointer to where to write the next byte in the buffer.
+;
+;     W4  -  Scratch.
+;
+         bclr    flags, #flg_nack ;init to received ACK, not deliberate NACK
+         bclr    flags, #flg_tout ;init to not timed out
+         bclr    flags, #flg_herr ;init to no hard error
+
+         mov     #[v toutms], w1 ;init number of ms left before timeout
+         mov     tick1ms, w2 ;init clock value up to date with
+         mov     #inbuf, w3  ;init pointer to where to save the next character
+
+         mov     #0, w0
+         mov     w0, nbuf    ;init the input buffer to empty
+;
+;   Wait for a new event to be available.  Check for timeout.
+;
+gpack_wev:                   ;wait to receive the bus event
+         gcall   uart[chars un]_get_ready ;set Z according to an event is available
+         bra     nz, gpack_event ;a new event is available to read
+         ;
+         ;   No event is immediately available.  Check for timeout elapsed.  If
+         ;   so, abort to GPACK_TOUT.
+         ;
+         mov     tick1ms, w4 ;get the current clock value
+         exch    w2, w4      ;new clock into W2, old clock into W4
+         sub     w2, w4, w4  ;make new clock ticks in W4
+         cp      w4, w1      ;compare to ticks remaining until timeout
+         bra     geu, gpack_tout ;timeout expired ?
+         sub     w1, w4, w1  ;update ticks left until timeout
+
+         gcall   task_yield_save ;give other tasks a chance to run
+         jump    gpack_wev   ;back to check for event again
+;
+;   The timeout elapsed before a full packet was received.
+;
+gpack_tout:
+         bset    flags, #flg_tout ;indicate timed out
+         jump    gpack_leave
+;
+;   The UART has a new event available.
+;
+gpack_event:                 ;a new event is available from the UART
+         gcall   uart[chars un]_get ;get the event into W0
+         btsc    w0, #umodbus_rx_pack ;event is not time gap ?
+         jump    gpack_wev   ;is time gap, ignore, back for next event
+
+         lsr     w0, #9, w4  ;get only the flag bits into W4
+         cp0     w4
+         bra     z, gpack_char ;got a character, not special event ?
+         ;
+         ;   An error was detected.  This could be due to the UART indicating an
+         ;   error or a mal-formed packet.
+         ;
+gpack_err:
+         bset    flags, #flg_herr ;indicate hard error
+         jump    gpack_leave
+;
+;   The received event is a new character, in W0.
+;
+gpack_char:
+         mov.b   w0, [w3++]  ;stuff char into buffer, advance pointer to next
+
+         mov     nbuf, w4    ;count one more byte in the buffer
+         add     #1, w4
+         mov     w4, nbuf
+         ;
+         ;   Check for this character ends a full packet.  That means this
+         ;   character is a line feed, and the previous character is a carriage
+         ;   return.  This latest character is in W0, and the number of
+         ;   characters in the buffer is in W4.
+         ;
+         sub     #2, w4      ;compare to min required chars for packet end
+         bra     ltu, gpack_nend ;too few bytes for full packet ?
+
+         mov     #lf_k, w4   ;get LF character
+         cp      w0, w4
+         bra     nz, gpack_nend ;wrong char for packet end ?
+
+         sub     w3, #2, w4  ;get pointer to previous character
+         ze      [w4], w0    ;get the previous character into W0
+         mov     #cr_k, w4   ;get CR character
+         cp      w0, w4
+         bra     z, gpack_end ;wrong previous char for packet end ?
+         ;
+         ;   This character does not end the packet.
+         ;
+gpack_nend:
+         mov     nbuf, w4    ;get number of chars now in buffer
+         sub     #[v buflen], w4
+         bra     geu, gpack_err ;buffer full, but packet not ended ?
+         jump    gpack_wev   ;back to get the next UART event
+;
+;   The packet has ended.
+;
+gpack_end:
+         mov     nbuf, w4    ;get number of characters in the buffer
+         sub     #3, w4      ;truncate what should be ACK, CR, LF
+         bra     ltu, gpack_err ;packet too short ?
+         mov     w4, nbuf    ;update buffer length with packet end stripped
+
+         sub     #3, w3      ;point to ACK/NACK character
+         ze      [w3], w0    ;get the ACK/NCAK character into W0
+         mov     #ack_k, w4  ;get ACK character code
+         cp      w0, w4
+         bra     z, gpack_leave ;is ACK, got full proper packet ?
+
+         mov     #nack_k, w4 ;get NACK character code
+         cp      w0, w4
+         bra     nz, gpack_err ;ACK/NACK isn't NACK either ?
+         ;
+         ;   Device responded with NACK.
+         ;
+         bset    flags, #flg_nack ;indicate device sent NACK
+;
+;   Common exit point.  The buffer and the flags are all set.
+;
+gpack_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Local subroutine HDXD_READ
+;
+;   Send a read command to a particular DXD and get the response.  Parameters on
+;   entry:
+;
+;     W0  -  Address of the DXD to send the command to.  1-99 are valid DXD
+;            addresses.  The special value of 0 causes the broadcast address to
+;            be sent.  This should only be used when there is a single DXD on
+;            the bus.  Results are undefined when W0 is outside the 0-99 range.
+;
+;     W1  -  The two-character command name.  The first character is in the low
+;            byte, and the second in the high byte.  The two characters are sent
+;            as supplied without any validity check.
+;
+;   Returned state:
+;
+;     INBUF  -  The response packet from the DXD.  This is only defined when
+;            there is no error or timeout.
+;
+;     NBUF  -  The number of bytes in INBUF.  This does not include the
+;            mandatory ACK/NACK, CR, and LF bytes at the end of the packet if
+;            there was otherwise no error in receiving the packet.
+;
+;     Flag HERR  -  A hard error occurred.  A hard error includes a mal-formed
+;            packet, parity error, etc.
+;
+;     Flag TOUT  -  Timeout.  A full packet was not received within the maximum
+;            time that a valid response should be receive by.  This can happen,
+;            for example, if a non-existant device is addressed.
+;
+;     Flag NACK  -  A valid response was received, but that response
+;            specifically indicated not-acknowledge.  This can happen, for
+;            example, when the command is invalid.
+;
+;     When all the above flags are cleared, then a valid full response was
+;     received and is in the input buffer INBUF.
+;
+         locsub  hdxd_read
+         mcall   lock        ;start single threaded code
+
+         mcall   hdxd_read_send ;send the command packet
+         mcall   getpack     ;get the response packet, set state accordingly
+
+         mcall   unlock      ;end single threaded code
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine HDXD_READ_VAL
+;
+;   Send a read command and get the numeric value returned by that command.
+;
+;   The input parameters are:
+;
+;     W0
+;
+;       1-99 address, or 0 for the broadcast address.
+;
+;     W1
+;
+;       Two character read command name.
+;
+;     See the HDXD_READ routine description for more details on these input
+;     parameters.
+;
+;   The returned parameters are:
+;
+;     W3:W2:W1:W0
+;
+;       32.32 signed fixed point value returned by the device.  This value is
+;       undefined on any error (W4 is non-zero).
+;
+;     W4
+;
+;       Error flags.  If any bit is set, then an error occurred.  The following
+;       constants are the bit numbers for the individual flags:
+;
+;         HDXD_RDFLG_HERR  -  Hard error, like bad packet, bad parity, etc
+;
+;         HDXD_RDFLG_TOUT  -  Timeout.  Full packet not received within time.
+;
+;         HDXD_RDFLG_NACK  -  Device responded with explicity NACK.
+;
+;         HDXD_RDFLG_SHORT  -  Response too short to contain a value.
+;
+;         HDXD_RDFLG_NCMD  -  The response was not for the sent command.
+;
+;         HDXD_RDLFG_FMT  -  The response was not formatted as expected.
+;
+         glbsub  hdxd_read_val
+         mcall   lock        ;start single threaded code
+
+         mcall   hdxd_read   ;send command, get response into INBUF
+;
+;   Gather the error flags into W4 and abort on any error.
+;
+         mov     #0, w4      ;init all returned error flags to off
+         btsc    flags, #flg_nack ;set any error flags
+         bset    w4, #hdxd_rdflg_nack
+         btsc    flags, #flg_tout
+         bset    w4, #hdxd_rdflg_tout
+         btsc    flags, #flg_herr
+         bset    w4, #hdxd_rdflg_herr
+
+         cp0     w4
+         bra     nz, rdval_leave ;error, abort ?
+;
+;   There were no errors getting the response to the read command.
+;
+;   Try to validate the response.  Abort with error if something doesn't look
+;   right.
+;
+         mov     #[shiftl 1 hdxd_rdflg_short], w4 ;get error flag ready
+         mov     nbuf, w0    ;get number of characters in response
+         cp      w0, #4      ;compare to min number with value "XX=Y"
+         bra     ltu, rdval_leave ;packet too short ?
+
+         mov     #[shiftl 1 hdxd_rdflg_ncmd], w4 ;get error flag ready
+         mov     inbuf, w0   ;get first two response characters into W0
+         cp      w0, w1      ;compare against command name that was sent
+         bra     nz, rdval_leave ;response not for the expected command ?
+
+         mov     #[shiftl 1 hdxd_rdflg_fmt], w4 ;get error flag ready
+         mov     #inbuf+2, w1 ;get pointer to third response char
+         ze      [w1], w0    ;get third response char into W0
+         mov     #'=', w1    ;get expected character into W1
+         cp      w0, w1
+         bra     nz, rdval_leave ;third char not "=" as expected ?
+;
+;   The response seems valid.  It should be "CC=XXX" where CC is the command
+;   name, and XXX a decimal value.  The length of XXX can vary depending on the
+;   command.  We have already verified that CC is the command we sent, the
+;   next character is "=", and the response is long enough to be at least
+;   "CC=X".
+;
+;   Interpret the remainder of the packet after "CC=" as a decimal numeric value
+;   and return it in W3:W2:W1:W0.
+;
+         mov     #inbuf+3, w0 ;pass pointer to start of numeric string
+         mov     nbuf, w1    ;pass number of characters in the string
+         sub     #3, w1
+         gcall   str_to_fx32f32 ;interpret string to number in W3:W2:W1:W0
+
+         mov     #0, w4      ;indicate no errors
+
+rdval_leave:
+         mcall   unlock      ;end single threaded code
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine HDXD_READ_PSI
+;
+;   Read the pressure from the the DXD device at the address in W0.  W0 must be
+;   1-99 to address a specific device, or 0 to indicate the broadcast address.
+;
+;   The pressure in PSI is returned in W1:W0 with 16 fraction bits.  This value
+;   is undefined on any error.
+;
+;   W2 is returned a set of error flags.  An error has occurred when W2 is not
+;   0.  See the description of the HDXD_RDFLG_xxx constants in
+;   HDXD_SETUP.INS.DSPIC for a description of the possible error flags.
+;
+         glbsub  hdxd_read_psi, regf3 | regf4
+
+         mov     #[chars_word16 "PS"], w1 ;set command name
+         mcall   hdxd_read_val ;send cmd, value to W3:W2:W1:W0, flags to W4
+
+         mov     w1, w0      ;get 16.16 part of result into W1:W0
+         mov     w2, w1
+         mov     w4, w2      ;return error flags in W2
+
+         leaverest

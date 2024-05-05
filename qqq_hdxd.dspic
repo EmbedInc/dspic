@@ -1,0 +1,95 @@
+;   ***************************************************************
+;   * Copyright (C) 2024, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Procedural interface to a bus of Heise DXD pressure sensor.
+;
+;   This module requires the pressure sensors to be connected to a serial port
+;   managed by the UART_MODBUS module.  The serial port must be configured to
+;   match how the DXDs are configured.  The DXD factory default is 19.2 kBaud,
+;   7 data bits, 1 parity bit, 1 stop bit, and RS-485 4-wire electrical
+;   interface.  There may be multiple DXDs on the RS-485 bus, but each must
+;   be configured to a unique 1-99 address.
+;
+;   Exported subroutines:
+;
+;     HDXD_INIT
+;
+;       Must be the first call into this module.
+;
+;     HDXD_READ_VAL
+;
+;       Send read command, get the response, and return its numeric value.
+;
+;       On entry:
+;
+;         W0
+;
+;           1-99 address, or 0 to indicate the broadcast address.
+;
+;         W1
+;
+;           The read command.  Command names are two characters long.  The
+;           first character is in the low byte, and the second in the high byte.
+;
+;       Return parameters:
+;
+;         W3:W2:W1:W0
+;
+;           The numeric value in the response to the read command.  The format
+;           is signed 64 bit fixed point with 32 fraction bits.  Only valid on
+;           no error (W4 = 0).
+;
+;         W4
+;
+;           Error flags.  Each flag is in a separate bit.  The bit numbers are
+;           defined by HDXD_RDFLG_xxx constants in HDXD_SETUP.INS.DSPIC.  The
+;           possible returned flags are:
+;
+;             HDXD_RDFLG_HERR - Hard error, bad packet, bad parity, etc.
+;
+;             HDXD_RDFLG_TOUT - Timeout.  Full response not received.
+;
+;             HDXD_RDFLG_NACK - Got full response, device replied NACK.
+;
+;             HDXD_RDFLG_SHORT - Response too short to contain numeric value.
+;
+;             HDXD_RDFLG_NCMD - Command name in response not match sent command.
+;
+;             HDXD_RDFLG_FMT - Unexpected response format, uninterpretable.
+;
+;     HDXD_READ_PSI
+;
+;       Read the pressure in PSI from a DXD device on the bus.  W0 is the 1-99
+;       address of the device to inquire pressure from, or 0 to indicate the
+;       broadcast address.
+;
+;       W1:W0 is returned the pressure in PSI, in 16.16 fixed point format.
+;       this value is undefined on any error.
+;
+;       W2 is returned the set of error flags.  Anything other than a value of 0
+;       indicates an error.  The format is the same as W4 returned by routine
+;       HDXD_READ_VAL.  See above.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   uname   String = "" ;unique name of UART_MODBUS module routines
+
+/include "(cog)src/dspic/hdxd.ins.dspic"
+         .end
