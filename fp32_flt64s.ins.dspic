@@ -1,0 +1,109 @@
+;   ***************************************************************
+;   * Copyright (C) 2024, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+/if [not [exist "fp32_flt64s_ins"]] then
+  /const fp32_flt64s_ins bool = true
+
+  /include "(cog)src/dspic/fp32_flt48u.ins.dspic"
+
+.section .code_fp32_flt64s, code
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro ADJUST48
+//
+//   Adjust the fixed point number in W3:W2:W1:W0 with W4 fraction bits to fit
+//   into only the 48 bits in W2:W1:W0 with W3 fraction bits.
+//
+//   The input and output numbers are unsigned.
+//
+  /macro adjust48
+         cp0     w3
+         bra     z, [lab d48] ;number already fits in 48 bits
+         ;
+         ;   There are some bits in the high word.  Shift the 64 bit number
+         ;   right so that it fits in 48 bits, and adjust the number fraction
+         ;   bit accordingly.
+         ;
+         sub     #16, w4     ;there will be one word fewer fraction bits
+         btst.c  w0, #15     ;save rounding bit in C
+         mov     w1, w0      ;shift one word right
+         mov     w2, w1
+         mov     w3, w2
+
+         addc    #0, w0      ;add rounding bit
+         addc    #0, w1
+         addc    #0, w2
+
+         bra     nc, [lab d48] ;no overflow from rounding ?
+         rrc     w2, w2      ;shift one bit right to include overflowed bit
+         rrc     w1, w1
+         rrc     w0, w0
+         sub     #1, w4      ;now one less fraction bit
+[lab d48]:                   ;done adjusting to 48 bits in W2:W1:W0
+         mov     w4, w3      ;number of fraction bits in the 48 bits value
+    /endmac
+
+;*******************************************************************************
+;
+;   Subroutine FP32_FLT64S
+;
+;   Convert a 64 bit signed fixed point value to IEEE 32 bit floating point.
+;
+;   On entry:
+;
+;     W3:W2:W1:W0
+;
+;       Fixed point input value.
+;
+;     W4
+;
+;       Number of fraction bits in the input value.  This can be negative to
+;       indicate the binary point is some bits right of the LSB of the fixed
+;       point value.
+;
+;   On return:
+;
+;     W1:W0
+;
+;       IEEE 32 bit floating point value.
+;
+         glbsub  fp32_flt64s, regf2 | regf3 | regf4
+
+         btsc    w3, #15     ;input value is positive or zero ?
+         jump    flt64s_neg  ;no, negative
+;
+;   The input value is positive.
+;
+         adjust48            ;adjust for all data in low 48 bits
+
+         gcall   fp32_flt48u ;convert W2:W1:W0 to floating point
+         jump    flt64s_leave
+;
+;   The input value is negative.
+;
+flt64s_neg:
+         subr    w0, #0, w0  ;flip the sign of the input value
+         subbr   w1, #0, w1
+         subbr   w2, #0, w2
+         subbr   w3, #0, w3
+         adjust48            ;adjust for all data in low 48 bits
+
+         gcall   fp32_flt48u ;convert the positive value to floating point
+         bset    w1, #15     ;set the sign of the result to negative
+
+flt64s_leave:
+         leaverest
+  /endif

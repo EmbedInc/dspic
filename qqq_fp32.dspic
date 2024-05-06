@@ -31,6 +31,7 @@
 /include "(cog)src/dspic/fp32_flt32s.ins.dspic"
 /include "(cog)src/dspic/fp32_flt48u.ins.dspic"
 /include "(cog)src/dspic/fp32_flt48s.ins.dspic"
+/include "(cog)src/dspic/fp32_flt64s.ins.dspic"
 ;
 ;   The firmware build script will need to grab all the files that are
 ;   ultimately used, including from any implicit dependencies.  The commands to
@@ -38,14 +39,12 @@
 ;   script.  No harm is done if unused files are grabbed.  These will not be
 ;   included in the build unless actually referenced.
 ;
-/if false then
+; call src_get_ins_dspic dspic fp32_fixu
+; call src_get_ins_dspic dspic fp32_fixs
+; call src_get_ins_dspic dspic fp32_flt32u
+; call src_get_ins_dspic dspic fp32_flt32s
+; call src_get_ins_dspic dspic fp32_flt48u
+; call src_get_ins_dspic dspic fp32_flt48s
+; call src_get_ins_dspic dspic fp32_flt64s
 
-call     src_get_ins_dspic dspic fp32_fixu
-call     src_get_ins_dspic dspic fp32_fixs
-call     src_get_ins_dspic dspic fp32_flt32u
-call     src_get_ins_dspic dspic fp32_flt32s
-call     src_get_ins_dspic dspic fp32_flt48u
-call     src_get_ins_dspic dspic fp32_flt48s
-
-  /endif
          .end

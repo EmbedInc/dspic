@@ -615,3 +615,87 @@ rdval_leave:
          mov     w4, w2      ;return error flags in W2
 
          leaverest
+
+;*******************************************************************************
+;
+;   C Function HDXD_READ_CMD_FP (ADR, CMD, VAL*)
+;
+;   Send a read command, get the response, and return the value in that response
+;   in 32 bit floating point.
+;
+;   Input parameters:
+;
+;     W0  -  1-99 DXD address, or 0 for broadcast.
+;
+;     W1  -  Two-character command.  First char in low byte.
+;
+;     W2  -  Pointer to where to write the 32 bit floating point result value.
+;
+;   Output parameters:
+;
+;     W0  -  Error bits.  All bits 0 for no error.
+;
+;   W1-W7 may be trashed.
+;
+         glbsubc hdxd_read_cmd_fp
+
+         mov     w2, w5      ;save pointer to where to write result value
+         mcall   hdxd_read_val ;send cmd, value into W3:W2:W1:W0, errstat in W4
+         cp0     w4
+         bra     z, rdfp_noerr ;no error, have valid value ?
+;
+;   An error occurred.
+;
+         mov     w4, w0      ;return the error status
+         jump    rdfp_leave
+;
+;   No error, the value in W3:W2:W1:W0 is valid.
+;
+rdfp_noerr:
+         gcall   fp32_flt64s ;convert 32.32 fixed point to FP in W1:W0
+         mov     w0, [w5++]  ;write FP value to caller's variable
+         mov     w1, [w5++]
+         mov     #0, w0      ;indicate no error
+
+rdfp_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   C Function HDXD_READ_PSI (ADR, VAL*)
+;
+;   Read pressure, return the result in 16.16 fixed point PSI.
+;
+;   Input parameters:
+;
+;     W0  -  1-99 DXD address, or 0 for broadcast.
+;
+;     W1  -  Pointer to where to write the 16.16 fixed point result.
+;
+;   Output parameters:
+;
+;     W0  -  Error bits.  All bits 0 for no error.
+;
+;   W1-W7 may be trashed.
+;
+         glbsubc hdxd_read_psi
+         mov     w1, w3      ;save pointer where to write result value to
+
+         mcall   hdxd_read_psi ;PSI into W1:W0 16.16 format, errstat in W2
+         cp0     w2
+         bra     z, rdpsi_noerr ;no error, have valid value ?
+;
+;   An error occurred.
+;
+         mov     w2, w0      ;return the error status
+         jump    rdpsi_leave
+;
+;   No error, the value in W1:W0 is valid.
+;
+rdpsi_noerr:
+         mov     w0, [w3++]  ;write result value to caller's variable
+         mov     w1, [w3++]
+         mov     #0, w0      ;indicate no error
+
+rdpsi_leave:
+         leaverest

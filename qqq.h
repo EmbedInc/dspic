@@ -267,6 +267,11 @@ fp32_flt48u (                          //48 bit unsigned fixed point to floating
   int48u_t,                            //48 bit unsigned fixed point value
   machine_ints_t);                     //number of fraction bits, may be negative
 
+float                                  //resulting floating point value
+fp32_flt64s (                          //64 bit signed fixed point to floating point
+  int64s_t,                            //64 bit signed fixed point value
+  machine_ints_t);                     //number of fraction bits, may be negative
+
 int32u_t                               //resulting 3.29 unsigned fixed point quotient
 fx3f29_divu (                          //3.29 unsigned fixed point divide
   int32u_t,                            //3.29 unsigned fixed point numerator
@@ -501,6 +506,7 @@ void cmd_put24u (int32u_t);
 void cmd_put24s (int32s_t);
 void cmd_put32u (int32u_t);
 void cmd_put32s (int32s_t);
+void cmd_putfp32 (float);
 
 //   DEBUGn responses with IDs 0-127 are always sent.  DEBUGn response with IDs
 //   128-255 are only sent when these are globally enabled with the DEBUG
@@ -673,6 +679,30 @@ CurrOut_setting (                      //get the last setting of a current outpu
 int32u_t                               //Amps, 3.29 unsigned fixed point format
 CurrOut_value (                        //get the actual value of a current output
   machine_intu_t);                     //0-N number of the current output
+
+//******************************************************************************
+//
+//   Interface to a series of Heise DXD pressure sensors on an RS-485 bus.
+//
+//   Masks for each possible error in the error status word.
+//
+#define hdxd_rdflg_herr_k (0x0001)     //hard error, bad packet, bad parity, etc
+#define hdxd_rdflg_tout_k (0x0002)     //full response not received within timeout
+#define hdxd_rdflg_nack_k (0x0004)     //device replied with explicity NACK
+#define hdxd_rdflg_short_k (0x0008)    //response too short to contain value
+#define hdxd_rdflg_ncmd_k (0x0010)     //response not for the expected command
+#define hdxd_rdflg_fmt_k (0x0020)      //unexpected format, can't interpret value
+
+machine_intu_t                         //error status, 0 = no error
+hdxd_read_cmd_fp (                     //send read command, FP result value
+  machine_intu_t,                      //1-99 DXD address, 0 = broadcast
+  int16u_t,                            //command name, first char in low byte
+  float *);                            //returned value, invalid on error
+
+machine_intu_t                         //error status, 0 = no error
+hdxd_read_psi (                        //read pressure in PSI
+  machine_intu_t,                      //1-99 DXD address, 0 = broadcast
+  int32s_t *);                         //returned PSI pressure, 16 fraction bits
 
 //******************************************************************************
 //
@@ -939,7 +969,6 @@ menu_val_float (                       //user edit a floating point value
 //   Interfaces specific to this system, not general library modules.
 //
 #define inactive_k (5 * 60 * evwaithz_k) //standard inactivity timeout, EVENT_WAIT units
-
 
 //
 //   Menus.  These all have a common naming scheme and interface.  The menus

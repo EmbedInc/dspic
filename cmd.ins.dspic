@@ -468,6 +468,7 @@ lckn_no:                     ;there is insufficient room
 /if using_xc16 then
          glbent  _[chars cmd]_put32u
          glbent  _[chars cmd]_put32s
+         glbent  _[chars cmd]_putfp32
   /endif
 
          glbsub  [chars cmd]_put32
