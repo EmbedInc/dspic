@@ -652,6 +652,7 @@ rdval_leave:
 ;   No error, the value in W3:W2:W1:W0 is valid.
 ;
 rdfp_noerr:
+         mov     #32, w4     ;indicate number of fraction bits W3:W2:W1:W0
          gcall   fp32_flt64s ;convert 32.32 fixed point to FP in W1:W0
          mov     w0, [w5++]  ;write FP value to caller's variable
          mov     w1, [w5++]
