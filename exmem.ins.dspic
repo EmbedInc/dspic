@@ -128,7 +128,7 @@ alloc    freeadr 4           ;address of first free byte, always word-aligned
 ;
 ;   Reset the dynamic memory state to all memory unallocated.
 ;
-         glbsub  xmem_alloc_reset, regf0
+         glbsub  exmem_alloc_reset, regf0
 
          mov     0x8000, w0  ;next alloc at start of extended mem
          mov     w0, freeadr+0
@@ -147,9 +147,9 @@ alloc    freeadr 4           ;address of first free byte, always word-aligned
 
          load32  w0, free0   ;get alloc address for no mem left
 
-         mov     alloc+0, w2 ;subtract current allocation address
+         mov     freeadr+0, w2 ;subtract current allocation address
          sub     w0, w2, w0
-         mov     alloc+2, w2
+         mov     freeadr+2, w2
          subb    w1, w2, w1
 
          leaverest
@@ -392,7 +392,7 @@ put32_byte:                  ;target is not word-aligned
          bra     z, putbuf_lastbyte ;buffer is only a single byte long ?
 
          btsc    w2, #0      ;word aligned ?
-         jump    put32_odd   ;no, handle unaligned access
+         jump    putbuf_odd  ;no, handle unaligned access
 ;
 ;   The buffers are word-aligned.  The whole aligned 16 bits words are copied
 ;   first, possibly followed by one remaining byte.  The number of whole words
@@ -744,7 +744,7 @@ get32_badadr:
          bra     z, putbuf_lastbyte ;buffer is only a single byte long ?
 
          btsc    w2, #0      ;word aligned ?
-         jump    put32_odd   ;no, handle unaligned access
+         jump    getbuf_odd  ;no, handle unaligned access
 ;
 ;   The buffers are word-aligned.  The whole aligned 16 bits words are copied
 ;   first, possibly followed by one remaining byte.  The number of whole words
