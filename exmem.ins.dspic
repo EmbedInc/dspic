@@ -270,12 +270,12 @@ put16_leave:
 ;   The target address is not word-aligned.
 ;
 put16_byte:                  ;target is not word-aligned
-         push    w0          ;save original data word
-         mov     w2, w4      ;make corruptable copy of write pointer
-         mov.b   w0, [w4++]  ;write low byte
-         lsr     w0, #8, w0  ;move high byte into position
-         mov.b   w0, [w4++]  ;write high byte
-         pop     w0          ;restore original data word
+         mov.b   w0, [w4++]  ;write byte 0
+
+         swap    w0          ;write byte 1
+         mov.b   w0, [w4++]
+         swap    w0          ;restore original W0
+
          jump    put16_dwrite ;done with the actual write
 
 ;*******************************************************************************
@@ -311,11 +311,14 @@ put24_leave:
 ;   The target address is not word-aligned.
 ;
 put24_byte:                  ;target is not word-aligned
-         push    w0          ;save original data word
-         mov.b   w0, [w4++]  ;write low byte
-         lsr     w0, #8, w0  ;move high byte into position
-         mov.b   w0, [w4]    ;write high byte
-         pop     w0          ;restore original data word
+         mov.b   w0, [w4++]  ;write byte 0
+
+         swap    w0          ;write byte 1
+         mov.b   w0, [w4++]
+         swap    w0          ;restore original W0
+
+         mov.b   w1, [w4]    ;write byte 2
+
          jump    put24_dwrite ;done with the actual write
 
 ;*******************************************************************************
@@ -351,16 +354,18 @@ put32_leave:
 ;   The target address is not word-aligned.
 ;
 put32_byte:                  ;target is not word-aligned
-         push    w0          ;save original data word
-
          mov.b   w0, [w4++]  ;write byte 0
-         lsr     w0, #8, w0  ;write byte 1
-         mov.b   w0, [w4++]
-         mov.b   w1, [w4++]  ;write byte 2
-         lsr     w1, #8, w0  ;write byte 3
-         mov.b   w0, [w4]
 
-         pop     w0          ;restore original data word
+         swap    w0          ;write byte 1
+         mov.b   w0, [w4++]
+         swap    w0          ;restore original W0
+
+         mov.b   w1, [w4++]  ;write byte 2
+
+         swap    w1          ;write byte 3
+         mov.b   w1, [w4]
+         swap    w1          ;restore original W1
+
          jump    put32_dwrite ;done with the actual write
 
 ;*******************************************************************************
@@ -401,16 +406,15 @@ put32_byte:                  ;target is not word-aligned
          btsc    w5, #0      ;both buffers have same alignment ?
          jump    putbuf_misaln ;no, handle special case of different alignments
 
-         lsr     w1, #1, w5  ;make number of whole words to copy
-         bra     z, putbuf_lastbyte ;buffer is only a single byte long ?
-
          btsc    w2, #0      ;word aligned ?
          jump    putbuf_odd  ;no, handle unaligned access
 ;
 ;   The buffers are word-aligned.  The whole aligned 16 bits words are copied
-;   first, possibly followed by one remaining byte.  The number of whole words
-;   to copy is in W5 and is at least 1.
+;   first, possibly followed by one remaining byte.
 ;
+         lsr     w1, #1, w5  ;make number of whole words to copy
+         bra     z, putbuf_lastbyte ;buffer is only a single byte long ?
+
          sub     #1, w5      ;make value for REPEAT instruction
          repeat  w5          ;run next instruction W5+1 times
          mov     [w0++], [w4++] ;copy all the whole words of the buffer
@@ -442,7 +446,8 @@ putbuf_odd:
          ;
          ;   Copy the whole aligned 16 bit words, if any.
          ;
-         cp0     w5
+         sub     w1, #1, w5  ;remaining number of bytes to copy
+         lsr     w5, #1, w5  ;number of whole words that can be copied
          bra     z, putbuf_dbwhole ;no whole words to copy ?
 
          sub     #1, w5      ;make value for REPEAT instruction
@@ -610,8 +615,7 @@ get24u_byte:
 ;   The extended memory address is invalid.
 ;
 get24u_badadr:
-         mov     #0, w0      ;return 0
-         mov     #0, w1
+         mul.uu  w0, #0, w0  ;return 0 in W1:W0
          jump    get24u_leave
 
 ;*******************************************************************************
@@ -658,8 +662,7 @@ get24s_byte:
 ;   The extended memory address is invalid.
 ;
 get24s_badadr:
-         mov     #0, w0      ;return 0
-         mov     #0, w1
+         mul.uu  w0, #0, w0  ;return 0 in W1:W0
          jump    get24s_leave
 
 ;*******************************************************************************
@@ -711,8 +714,7 @@ get32_byte:
 ;   The extended memory address is invalid.
 ;
 get32_badadr:
-         mov     #0, w0      ;return 0
-         mov     #0, w1
+         mul.uu  w0, #0, w0  ;return 0 in W1:W0
          jump    get32_leave
 
 ;*******************************************************************************
@@ -753,16 +755,15 @@ get32_badadr:
          btsc    w5, #0      ;both buffers have same alignment ?
          jump    getbuf_misaln ;no, handle special case of different alignments
 
-         lsr     w1, #1, w5  ;make number of whole words to copy
-         bra     z, putbuf_lastbyte ;buffer is only a single byte long ?
-
          btsc    w2, #0      ;word aligned ?
          jump    getbuf_odd  ;no, handle unaligned access
 ;
 ;   The buffers are word-aligned.  The whole aligned 16 bits words are copied
-;   first, possibly followed by one remaining byte.  The number of whole words
-;   to copy is in W5 and is at least 1.
+;   first, possibly followed by one remaining byte.
 ;
+         lsr     w1, #1, w5  ;make number of whole words to copy
+         bra     z, putbuf_lastbyte ;buffer is only a single byte long ?
+
          sub     #1, w5      ;make value for REPEAT instruction
          repeat  w5          ;run next instruction W5+1 times
          mov     [w4++], [w0++] ;copy all the whole words of the buffer
@@ -794,12 +795,14 @@ getbuf_odd:
          ;
          ;   Copy the whole aligned 16 bit words, if any.
          ;
-         cp0     w5
+         sub     w1, #1, w5  ;remaining number of bytes to copy
+         lsr     w5, #1, w5  ;number of whole words that can be copied
          bra     z, getbuf_dbwhole ;no whole words to copy ?
 
          sub     #1, w5      ;make value for REPEAT instruction
          repeat  w5          ;run next instruction W5+1 times
          mov     [w4++], [w0++] ;copy all the whole words of the buffer
+
 getbuf_dbwhole:              ;done copying the whole aligned words
          ;
          ;   Check for possible single remaining byte to copy.  Since the buffer
