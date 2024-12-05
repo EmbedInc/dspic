@@ -21,7 +21,7 @@
   /var local r real
   /var local s string
 
-  /if [not [exist exmem_last:vcon]] then
+  /if [not [exist "exmem_last:vcon"]] then
     /const exmem_last integer = 16#FFFF
     /endif
 
@@ -36,6 +36,19 @@
   /set ii [+ ii 2]           ;first FREEADR adr with 0 space left
   /const free0 integer = ii  ;start of free memory adr for exactly 0 mem left
 
+  /set ii [+ exmem_last 1]   ;total addressable data mem range
+  /set ii [- ii 4096]        ;minus special function register space
+  /set s ""
+  /append s ii " bytes"
+  /set ii [div ii 1024]
+  /append s " (" ii "k) total data RAM"
+  /set ii [- ii 28]
+  /set ii [div [+ ii 31] 32]
+  /append s " using " ii " extended memory window"
+  /if [<> ii 1] then
+    /append s "s"
+    /endif
+  /show "  " s
   /endblock
 
 ;*******************************************************************************
