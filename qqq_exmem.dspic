@@ -1,0 +1,166 @@
+;   ***************************************************************
+;   * Copyright (C) 2024, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Extended data memory management and access.
+;
+;   This module provides access to the extended data memory of some dsPICs.
+;   These processors have more RAM than the base 32 kbytes that can be directly
+;   accessed.  A 32 kbyte window of extended RAM is mapped to the high 32 kbytes
+;   of the 16 bit RAM address space.  Once mapped, that section of extended
+;   memory is accessed with 16 bit addresses as usual.  The low 15 bits are the
+;   low 15 bits of the extended memory address, and the high bit is 1 to
+;   indicate the access is into the mappable window.
+;
+;   Routines in this module present a uniform interface to extended memory
+;   with the particular hardware details of the current machine handled as
+;   needed.  All of base and extended memory is presented as one linear address
+;   space.
+;
+;   The dsPIC architecture supports up to 4 Mbyte of extended memory.  General
+;   extended memory addresses presented here are therefore 24 bits wide.
+;
+;   Many dsPICs have 64 kbytes or less of total data memory, so all data memory
+;   can be addressed with only 16 bits.  Optimized routines with only 16 bit
+;   addresses are provided here to support such processors more efficiently.  On
+;   processors with more than 64 kbytes of data memory, these optimized routines
+;   only access the first 64 kbytes.
+;
+;   The 16 bit "short" address routines are named EXMEMS_xxx, whereas the
+;   general 24 bit address routines are names EXMEM_xxx.  Not all EXMEM_xxx
+;   routines have corresponding EXMEMS_xxx versions.  These are usually those
+;   routines that are unlikely to be speed-critical nor expected to be used in
+;   tight loops.
+;
+;   Although full addresses are only 24 bits, they are transferred in 32 bits
+;   with the upper unused bits ignored.
+;
+;   Exported routines:
+;
+;     EXMEM_INIT
+;
+;       One-time module initialization.  Must be first call into this module.
+;
+;     EXMEM_ALLOC_PERM
+;
+;       Permanently (until EXMEM_INIT or EXMEM_ALLOC_RESET are called) allocate
+;       a block of extended memory.  On entry, W1:W0 is the number of bytes to
+;       allocate.  On return, W1:W0 is the started address of the new region.
+;       The Z flag is cleared on success and set when a region of the requested
+;       size is not available.  In that case, W1:W0 is returned 0.
+;
+;       The new block will always start on a word boundary (low bit of W0 is
+;       always returned 0).
+;
+;       The allocated block can not be individually deallocated.  Future
+;       allocations are guaranteed not to return a region that includes any part
+;       of a previously allocated block.
+;
+;     EXMEM_ALLOC_AVAIL
+;
+;       Returns the total amount of extended memory currently available to be
+;       allocated.  The number of bytes available to be allocated are returned
+;       in W1:W0.  The next call to EXMEM_ALLOC_PERM will succeed if this amount
+;       of memory or less is requested, and will fail if more than the returned
+;       amount is requested.  Each successful allocation request decreases the
+;       amount of memory available for new requests.
+;
+;     EXMEM_ALLOC_RESET
+;
+;       Reset all dynamically allocated memory to unallocated.  Put another way,
+;       all dynamically allocated memory is deallocated.
+;
+;     EXMEM_PUT8
+;
+;       Write the low byte of W0 to the extended memory byte addressed by W3:W2.
+;       W3:W2 is incremented by 1.
+;
+;     EXMEM_PUT16
+;
+;       Write the the contents of W0 to the extended memory word at W3:W2. W3:W2
+;       is incremented by 2.
+;
+;     EXMEM_PUT24
+;
+;       Write the low 24 bits of W1:W0 to the extended memory starting at W3:W2.
+;       W3:W2 is incremented by 3.
+;
+;     EXMEM_PUT32
+;
+;       Write the contents of W1:W0 to the extended memory starting at W3:W2.
+;       W3:W2 is incremented by 4.
+;
+;     EXMEM_PUTBUF
+;
+;       Copy a sequence of bytes from regular data memory to extended data
+;       memory.  W0 contains the start address of the regular memory buffer, and
+;       W1 its length in bytes.  W3:W2 is the address of the destination buffer
+;       in extended memory.  W0 and  W3:W2 are each incremented by the number of
+;       bytes copied.
+;
+;     EXMEM_GET8U
+;
+;       Zero-extend the byte of extended memory at W3:W2 into W0.  W3:W2 is
+;       incremented by 1.
+;
+;     EXMEM_GET8S
+;
+;       Sign-extend the byte of extended memory at W3:W2 into W0.  W3:W2 is
+;       incremented by 1.
+;
+;     EXMEM_GET16
+;
+;       Get the 16-bit word of extended memory at W3:W2 into W0.  W3:W2 is
+;       incremented by 2.
+;
+;     EXMEM_GET24U
+;
+;       Zero-extend the 24 extended memory bits at W3:W2 into W1:W0.  W3:W2 is
+;       incremented by 3.
+;
+;     EXMEM_GET24S
+;
+;       Sign-extend the 24 extended memory bits at W3:W2 into W1:W0.  W3:W2 is
+;       incremented by 3.
+;
+;     EXMEM_GET32
+;
+;       Get the 32 bits of extended memory at W3:W2 into W1:W0.  W4:W2 is
+;       incremented by 4.
+;
+;     EXMEM_GETBUF
+;
+;       Copy a sequence of bytes from extended data memory to regular data
+;       memory.   W0 contains the start address of the regular memory buffer, and
+;       W1 its length in bytes.  W3:W2 is the address of the source buffer in
+;       extended memory.  W0 and  W3:W2 are each incremented by the number of
+;       bytes copied.
+;
+;   Preprocessor configuration constants:
+;
+;     EXMEM_LAST - Integer.
+;
+;       Last valid extended memory address of this processor.
+;
+/include "qq2.ins.dspic"
+
+;*******************************************************************************
+;
+;   Configuration constants.
+;
+/const   exmem_last integer = 16#FFFF ;last valid extended memory address
+
+/include "(cog)src/dspic/exmem.ins.dspic"
+         .end

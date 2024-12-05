@@ -71,23 +71,113 @@
 ;       START_TASK, YIELD_CHECK  -  Embed multi-tasking helpers.
 ;       LOAD32  -  Load 32-bit constant into W register pair.
 ;       FX3F29U  -  Convert constant to 3.29 fixed point.
+;       LOWW  -  Low 16-bit word.
+;       HIGHW  -  High 16-bit word.
 ;
 ;     Timer setup and manipulation.
 ;
+;       TIMER_SEC  -  Computes timer setup to achieve a specific period.
+;       TIMER_SETUP_PER  -  Set up a timer to achieve a specific period.
+;
 ;     Global 1-bit named flags.
+;
+;       SETFLAG  -  Set global flag.
+;       CLRFLAG  -  Clear global flag.
+;       SKIP_FLAG  -  Skip if global flag set.
+;       SKIP_NFLAG  -  Skip if global flag not set.
+;       FLAGS_DEFINE  -  Define storage for all the global flags.
+;       FLAGS_CLEAR  -  Clear all global flags.
+;       GET_FLAG_DATA  -  Get detailed info on a flag and where stored.
 ;
 ;     Writing ASM state to .H files.
 ;
+;       WRITE_C_FLAGS  -  Export global flags to C.
+;       WRITE_C_MACHINE  -  Export machine-dependent data types to C.
+;       WRITE_C_CONST  -  Export preprocessor constant to C.
+;       WRITE_C_CONSTS  -  Export all preprocessor constants to C.
+;       WRITE_C_CONSTS_PREF_INT  -  Export constant with name start pattern to C.
+;       WRITE_C_IOPINS  -  Export I/O pin definitions to C.
+;
 ;     Subroutine linkage and gloabl entry points.
+;
+;       PUSHREGS  -  Push set of registers onto stack.
+;       POPREGS  -  Pop set of registers from stack.
+;       ENTER  -  Enter subroutine, push set of registers.
+;       SAVEREGS  -  Push set of registers, remember set in SAVEDREGS.
+;       POPSAVED  -  Pop set of registers indicated by SAVEDREGS.
+;       LEAVE  -  Return from subroutine, pop set of registers.
+;       LEAVEREST  -  Return from subroutine, pop regs saved on entry.
+;       LEAVECHECK  -  LEAVEREST plus TASK_YIELD if time slice elapsed.
+;       GLBSUB  -  Start global subroutine, asm name only.
+;       GLBSUBC  -  Start global subroutine, C name only.
+;       GLBSUBD  -  Start global subroutine, asm and C names.
+;       LOCSUB  -  Start local subroutine.
+;       LOCENT  -  Define local label, debugger anti-skid in debug mode.
+;       GLBLAB  -  Define global label, no debugger anti-skid.
+;       GLBENT  -  Define global label, debugger anti-skid in debug mode.
+;       GLBLABD  -  GLBLAB with both asm and C names.
+;       GLBENTD  -  GLBENT with both asm and C names.
+;       GCALL  -  Call global subroutine outside current module.
+;       GJUMP  -  Jump to global entry point outside current module.
+;       MCALL  -  Call subroutine in current module.
+;       JUMP  -  Jump to label in current module.
 ;
 ;     I/O port configuration.
 ;
+;       GET_PORT_DATA  -  Get detailed data on an I/O pin.
+;
 ;     FIFOs.
+;
+;       FIFOs with 8-bit data words.
+;
+;         FIFOB_DEFINE  -  Define FIFO.
+;         FIFOB_INIT  -  Init FIFO.
+;         FIFOB_Z_EMPTY  -  Set Z if FIFO empty.
+;         FIFOB_EMPTY_N  -  Get number of unused slots in FIFO.
+;         FIFOB_Z_FULL  -  Set Z if FIFO full.
+;         FIFOB_FULL_N  -  Get number words in FIFO.
+;         FIFOB_PUT  -  Push one word onto FIFO.
+;         FIFOB_GET  -  Get one work from FIFO.
+;
+;      FIFOs with 16-bit data words.
+;
+;         FIFOW_DEFINE  -  Define FIFO.
+;         FIFOW_INIT  -  Init FIFO.
+;         FIFOW_Z_EMPTY  -  Set Z if FIFO empty.
+;         FIFOW_JUMP_EMPTY  -  Jump if FIFO empty.
+;         FIFOW_JUMP_NOTEMPTY  -  Jump if FIFO not empty.
+;         FIFOW_JUMP_FULL  -  Jump if FIFO full.
+;         FIFOW_JUMP_NOTFULL  -  Jump if FIFO not full.
+;         FIFOW_FULL_N  -  Get number words in FIFO.
+;         FIFOW_EMPTY_N  -  Get number of unused slots in FIFO.
+;         FIFOW_PUT  -  Push one word onto FIFO.
+;         FIFOW_GET  -  Get one work from FIFO.
 ;
 ;     Preprocessor string parsing and manipulation.
 ;
+;       TABTO  -  Add blanks to string to "tab" to particular column.
+;       TABOPCODE  -  Tab string to standard opcode column.
+;       TABOPERAND  -  Tab string to standard operand column.
+;       STARTCOMM  -  Start asm comment in string.
+;       STRING_TOKEN  -  Parse next token from string, blank delimiters.
+;       SHOWVAL  -  Show preprocessor symbol value, optional description.
+;       SHOWHEX  -  SHOWVAL, integer value in HEX.
+;       SHOWBIN  -  SHOWVAL, integer value in binary.
+;
 ;     Defining constants in program memory.
 ;
+;       PBYTE_START  -  Init for defining bytes in program memory.
+;       PWORD  -  Define 24-bit program memory word, 6 digit HEX, optional comment
+;       PB_HERE  -  Define label for next byte of prog mem to write.
+;       PBYTE  -  Define next 8-bit byte of prog mem.
+;       PBYTE_FINISH  -  Finish defining data in a section of prog mem.
+;       PB_WORD16  -  Define next 2 bytes of prog mem as 16-bit word.
+;       PB_WORD24  -  Define next 3 bytes of prog mem as 24-bit word.
+;       PB_WORD32  -  Define next 4 bytes of prog mem as 32-bit word.
+;       PB_FP32F  -  Define next 4 bytes as Embed fast floating point value.
+;       FP28P  -  Define next 6 bytes as Embed 48 bit floating point value.
+;       RAWSTRING  -  Write string as sequence of bytes.
+;       PGSTRING  -  Write string, starts with length byte.
 
 
 ;*******************************************************************************
@@ -2193,7 +2283,7 @@ _\name:
 //   error.
 //
 /macro load32
-  /var local val integer = [arg 2]
+  /var local val integer = [vnl [arg 2]]
   /var local wn integer
   /var local s string
 
@@ -2243,6 +2333,30 @@ _\name:
     /else
       /funcval "16#FFFFFFFF"
     /endif
+  /endfunc
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Function LOWW val
+//
+//   Returns the low 16 bits of the value VAL.
+//
+/function loww
+  /var local val integer = [vnl [arg 1]] //input value
+
+  /funcval [and val 16#FFFF]
+  /endfunc
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Function HIGHW val
+//
+//   Returns the low 16 bits of the value VAL.
+//
+/function highw
+  /var local val integer = [vnl [arg 1]] //input value
+
+  /funcval [and [shiftr val 16] 16#FFFF]
   /endfunc
 
 
@@ -2403,7 +2517,7 @@ _\name:
 //   Subroutine TIMER_REGS n
 //
 //   Identify specific registers and bits used for the timer N.  The following
-//   variables are create if not previously existing, and are set:
+//   variables are created if not previously existing, and are set:
 //
 //     TIMER_TYPE (string)  -  The overall timer type, "A", "B", or "C"
 //

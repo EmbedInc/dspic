@@ -1,0 +1,809 @@
+;   ***************************************************************
+;   * Copyright (C) 2024, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Extended data memory management and access.
+;
+/block
+  /var local ii integer
+  /var local r real
+  /var local s string
+
+  /if [not [exist exmem_last:vcon]] then
+    /const exmem_last integer = 16#FFFF
+    /endif
+
+  /const win1 bool = [<= exmem_last 16#FFFF] ;there is only a single extended RAM window ?
+
+  /set ii [- exmem_last 16#7FFF] ;make raw size of extended memory
+  /set ii [max ii 0]         ;clip negative values to 0
+  /const exmem_size integer = ii ;size of extended part of overall data memory
+
+  /set ii [- exmem_last 1]   ;last address with 2 bytes left
+  /set ii [and ii [~ 1]]     ;make sure to start at word boundary
+  /set ii [+ ii 2]           ;first FREEADR adr with 0 space left
+  /const free0 integer = ii  ;start of free memory adr for exactly 0 mem left
+
+  /endblock
+
+;*******************************************************************************
+;
+;   Variables.
+;
+.section .ram_exmem, bss     ;variables in normal RAM
+
+alloc    freeadr 4           ;address of first free byte, always word-aligned
+
+
+.section .code_exmem, code
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro SET_EXREAD scrreg, erradr
+//
+//   Set up the hardware for reading the extended memory at W3:W2.
+//
+//   SCRREG is the name of a register that can be used as scratch.  This
+//   register will be trashed.  It must not be W2, W3, or W15.  The parameter is
+//   the name of a register directly, like "w5", not a string.
+//
+//   ERRADR is an address or name of a label to jump to on error.  It is the
+//   label directly, not a string.
+//
+//   The DSRPAG register will be set up so that an indirect read thru W2 will
+//   get the data at the extended memory address W3:W2.
+//
+/macro set_exread
+         ;
+         ;   Set up for reading from extended memory at W3:W2.
+         ;
+         mov     #0x007F, [arg 1] ;get mask for largest allowed address
+         cp      w3, [arg 1] ;compare requested address to max allowed
+         bra     gtu, [arg 2] ;invalid extended memory address ?
+
+         rlc     w2, [arg 1] ;get adr bit 15 into C
+         mov     w3, [arg 1] ;get unshifted high address bits
+         rlc     [arg 1], [arg 1] ;make high address bits starting at 15
+         mov     [arg 1], Dsrpag ;set extended memory window to read from
+  /write
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro SET_EXWRITE scrreg, erradr
+//
+//   Set up the hardware for writing to the extended memory at W3:W2.
+//
+//   SCRREG is the name of a register that can be used as scratch.  This
+//   register will be trashed.  It must not be W2, W3, or W15.  The parameter is
+//   the name of a register directly, like "w5", not a string.
+//
+//   ERRADR is an address or name of a label to jump to on error.  It is the
+//   label directly, not a string.
+//
+//   The DSWPAG register will be set up so that an indirect write thru W2 will
+//   write to the extended memory address W3:W2.
+//
+/macro set_exwrite
+         ;
+         ;   Set up for writing to extended memory at W3:W2.
+         ;
+         mov     #0x007F, [arg 1] ;get mask for largest allowed address
+         cp      w3, [arg 1] ;compare requested address to max allowed
+         bra     gtu, [arg 2] ;invalid extended memory address ?
+
+         rlc     w2, [arg 1] ;get adr bit 15 into C
+         mov     w3, [arg 1] ;get unshifted high address bits
+         rlc     [arg 1], [arg 1] ;make high address bits starting at 15
+         mov     [arg 1], Dswpag ;set extended memory window to read from
+  /write
+  /endmac
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_INIT
+;
+;   Initialize the hardware and software state managed by this module.
+;
+         glbsub  exmem_init
+
+         mcall   exmem_alloc_reset ;reset all dynamic memory to unallocated
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_ALLOC_RESET
+;
+;   Reset the dynamic memory state to all memory unallocated.
+;
+         glbsub  xmem_alloc_reset, regf0
+
+         mov     0x8000, w0  ;next alloc at start of extended mem
+         mov     w0, freeadr+0
+         mov     0x0000, w0
+         mov     w0, freeadr+2
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_ALLOC_AVAIL
+;
+;   Return the remaining amount of allocatable memory in W1:W0.
+;
+         glbsub  exmem_alloc_avail, regf2
+
+         load32  w0, free0   ;get alloc address for no mem left
+
+         mov     alloc+0, w2 ;subtract current allocation address
+         sub     w0, w2, w0
+         mov     alloc+2, w2
+         subb    w1, w2, w1
+
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_ALLOC_PERM
+;
+;   Allocate a block of extended data memory.  On entry, W1:W0 is the number of
+;   bytes to allocate.  On success, W1:W0 is returned the starting address of
+;   the new block and the Z flag is cleared.  On failure, the Z flag is set and
+;   W1:W0 will be 0.  The only cause for failure is insufficient unallocated
+;   memory available.
+;
+         glbsub  exmem_alloc_perm, regf2 | regf3 | regf4
+
+         add     w0, #1, w0  ;round requested size up to whole words
+         addc    w1, #0, w1
+         bclr    w0, #0
+;
+;   Make updated free region start address in W3:W2.  Abort with error if this
+;   would be past FREE0.
+;
+         mov     freeadr+0, w2 ;get the existing free address
+         mov     freeadr+2, w3
+         add     w2, w0, w2  ;add requested size to make new free address
+         addc    w3, w1, w3
+
+         mov     #[loww free0], w4
+         cp      w4, w2
+         mov     #[highw free0], w4
+         cpb     w4, w3
+         bra     ltu, allperm_err ;new free pointer would be too far ?
+;
+;   The requested amount of memory is available.  W3:W2 contains the free
+;   pointer after the newly allocated region.
+;
+         mov     freeadr+0, w0 ;return pointer to new region
+         mov     freeadr+2, w1
+
+         mov     w2, freeadr+0 ;update free pointer to after new region
+         mov     w3, freeadr+2
+
+         bclr    Sr, #Z      ;indicate success
+
+allperm_leave:
+         leaverest
+;
+;   The requested amount of memory exceeds the available unallocated memory.
+;
+allperm_err:
+         mov     #0, w0      ;return 0 starting address
+         mov     #0, w1
+         bset    Sr, #Z      ;indicate failure
+         jump    allperm_leave
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_PUT8
+;
+;   Write the low 8 bits of W0 to the extended memory byte at W3:W2.  W3:W2 is
+;   updated to immediately after the written data.  Nothing is done if the
+;   address in W3:W2 is invalid.
+;
+         glbsub  exmem_put8, regf4
+
+         set_exwrite w4, put8_leave ;set up extended memory write window
+
+         mov.b   w0, [w2]    ;do the write
+
+         add     w2, #1, w2  ;increment the address
+         addc    w3, #0, w3
+
+put8_leave:
+         leaverest
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_PUT16
+;
+;   Write the contents of W0 to the extended memory at W3:W2.  W3:W2 is updated
+;   to immediately after the written data.  Nothing is done if the address in
+;   W3:W2 is invalid.
+;
+         glbsub  exmem_put16, regf4
+
+         set_exwrite w4, put16_leave ;set up extended memory write window
+
+         btsc    w2, #0      ;word aligned ?
+         jump    put16_byte  ;no, handle unaligned access
+;
+;   The target address is word-aligned.
+;
+         mov     w0, [w2]    ;do the write
+;
+;   Done with the write.  Increment the caller's address and leave.
+;
+put16_dwrite:
+         add     w2, #2, w2  ;increment the address
+         addc    w3, #0, w3
+
+put16_leave:
+         leaverest
+;
+;   The target address is not word-aligned.
+;
+put16_byte:                  ;target is not word-aligned
+         push    w0          ;save original data word
+         mov     w2, w4      ;make corruptable copy of write pointer
+         mov.b   w0, [w4++]  ;write low byte
+         lsr     w0, #8, w0  ;move high byte into position
+         mov.b   w0, [w4++]  ;write high byte
+         pop     w0          ;restore original data word
+         jump    put16_dwrite ;done with the actual write
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_PUT24
+;
+;   Write the low 24 bits of W1:W0 to the extended memory at W3:W2.  W3:W2 is
+;   updated to immediately after the written data.  Nothing is done if the
+;   address in W3:W2 is invalid.
+;
+         glbsub  exmem_put24, regf4
+
+         set_exwrite w4, put24_leave ;set up extended memory write window
+         mov     w2, w4      ;make corruptable copy of target address
+
+         btsc    w2, #0      ;word aligned ?
+         jump    put24_byte  ;no, handle unaligned access
+;
+;   The target address is word-aligned.
+;
+         mov     w0, [w4++]  ;write low 16 bits
+         mov.b   w1, [w4]    ;write high 8 bits
+;
+;   Done with the write.  Increment the caller's address and leave.
+;
+put24_dwrite:
+         add     w2, #3, w2  ;increment the address
+         addc    w3, #0, w3
+
+put24_leave:
+         leaverest
+;
+;   The target address is not word-aligned.
+;
+put24_byte:                  ;target is not word-aligned
+         push    w0          ;save original data word
+         mov.b   w0, [w4++]  ;write low byte
+         lsr     w0, #8, w0  ;move high byte into position
+         mov.b   w0, [w4]    ;write high byte
+         pop     w0          ;restore original data word
+         jump    put24_dwrite ;done with the actual write
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_PUT32
+;
+;   Write the contents of W1:W0 to the extended memory at W3:W2.  W3:W2 is
+;   updated to immediately after the written data.  Nothing is done if the
+;   address in W3:W2 is invalid.
+;
+         glbsub  exmem_put32, regf4
+
+         set_exwrite w4, put32_leave ;set up extended memory write window
+         mov     w2, w4      ;make corruptable copy of target address
+
+         btsc    w2, #0      ;word aligned ?
+         jump    put32_byte  ;no, handle unaligned access
+;
+;   The target address is word-aligned.
+;
+         mov     w0, [w4++]  ;write low 16 bits
+         mov     w1, [w4]    ;write high 16 bits
+;
+;   Done with the write.  Increment the caller's address and leave.
+;
+put32_dwrite:
+         add     w2, #4, w2  ;increment the address
+         addc    w3, #0, w3
+
+put32_leave:
+         leaverest
+;
+;   The target address is not word-aligned.
+;
+put32_byte:                  ;target is not word-aligned
+         push    w0          ;save original data word
+
+         mov.b   w0, [w4++]  ;write byte 0
+         lsr     w0, #8, w0  ;write byte 1
+         mov.b   w0, [w4++]
+         mov.b   w1, [w4++]  ;write byte 2
+         lsr     w1, #8, w0  ;write byte 3
+         mov.b   w0, [w4]
+
+         pop     w0          ;restore original data word
+         jump    put32_dwrite ;done with the actual write
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_PUTBUF
+;
+;   Copy a sequence of bytes from regular data memory to extended data memory.
+;   W0 contains the start address of the regular memory buffer, and W1 its
+;   length in bytes.  W3:W2 is the address of the destination buffer in extended
+;   memory.  W0 and  W3:W2 are each incremented by the number of bytes copied.
+;
+;   Nothing is done if the address in W3:W2 is invalid.  No data is copied and
+;   the addresses are not incremented.
+;
+         glbsub  exmem_putbuf, regf4 | regf5
+;
+;   Register usage:
+;
+;     W0  -  Regular memory word or byte address.  Original saved on stack
+;            during copy.
+;
+;     W1  -  Buffer size in bytes.
+;
+;     W3:W2  -  Extended memory buffer start address.
+;
+;     W4  -  Current index into extended memory window.
+;
+;     W5  -  Number of whole aligned 16 bits words to copy.
+;
+         cp0     w1
+         bra     z, putbuf_leave ;empty buffer, nothing to do ?
+
+         set_exwrite w4, putbuf_leave ;set up extended memory write window
+         mov     w2, w4      ;make corruptable copy of extended mem index
+         push    w0          ;save original regular mem pointer
+
+         xor     w0, w2, w5
+         btsc    w5, #0      ;both buffers have same alignment ?
+         jump    putbuf_misaln ;no, handle special case of different alignments
+
+         lsr     w1, #1, w5  ;make number of whole words to copy
+         bra     z, putbuf_lastbyte ;buffer is only a single byte long ?
+
+         btsc    w2, #0      ;word aligned ?
+         jump    put32_odd   ;no, handle unaligned access
+;
+;   The buffers are word-aligned.  The whole aligned 16 bits words are copied
+;   first, possibly followed by one remaining byte.  The number of whole words
+;   to copy is in W5 and is at least 1.
+;
+         sub     #1, w5      ;make value for REPEAT instruction
+         repeat  w5          ;run next instruction W5+1 times
+         mov     [w0++], [w4++] ;copy all the whole words of the buffer
+
+         btss    w1, #0      ;buffer is odd number of bytes long ?
+         jump    putbuf_dwrite ;no, the whole write has been completed
+
+putbuf_lastbyte:             ;there is one remaining single byte to copy
+         mov.b   [w0], [w4]  ;copy the last byte
+;
+;   Done with the write.  Increment the caller's addresses and leave.  The
+;   original regular memory pointer is saved on the stack.
+;
+putbuf_dwrite:
+         pop     w0          ;restore original regular memory pointer
+         add     w0, w1, w0  ;update regular memory pointer
+
+         add     w2, w1, w2  ;update extended memory pointer
+         addc    w3, #0, w3
+
+putbuf_leave:
+         leaverest
+;
+;   The buffers are not word aligned.  The single unaligned byte is copied, then
+;   the whole aligned words, then possibly a remaining single byte.
+;
+putbuf_odd:
+         mov.b   [w0++], [w4++] ;copy the first (at odd address) byte
+         ;
+         ;   Copy the whole aligned 16 bit words, if any.
+         ;
+         cp0     w5
+         bra     z, putbuf_dbwhole ;no whole words to copy ?
+
+         sub     #1, w5      ;make value for REPEAT instruction
+         repeat  w5          ;run next instruction W5+1 times
+         mov     [w0++], [w4++] ;copy all the whole words of the buffer
+putbuf_dbwhole:              ;done copying the whole aligned words
+         ;
+         ;   Check for possible single remaining byte to copy.  Since the buffer
+         ;   started at an odd address, this is the case if the buffer length is
+         ;   even.
+         ;
+         btsc    w1, #0      ;buffer even bytes long, so ends with odd byte ?
+         jump    putbuf_dwrite ;no remaining odd byte, done with copy
+         jump    putbuf_lastbyte ;ends with odd byte, go copy it
+;
+;   The two buffers have different alignments.  One is word-aligned, but the
+;   other is not.  This means direct word transfers can't be used because either
+;   the source or destination of each word would be unaligned.  We give up and
+;   copy each byte individually.
+;
+putbuf_misaln:
+         sub     w1, #1, w5  ;make value for the REPEAT instruction
+         repeat  w5          ;run next instruction W5+1 number of times
+         mov.b   [w0++], [w4++] ;copy all the buffer bytes
+         jump    putbuf_dwrite ;done copying the whole buffer
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_GET8U
+;
+;   Read the unsigned byte at the extended memory address in W3:W2 into W0.
+;   W3:W2 is updated to immediately after the data that is read.  When the
+;   address is invalid, 0 is returned and W3:W2 not altered.
+;
+         glbsub  exmem_get8u
+
+         set_exread w0, get8u_badadr ;set up extended memory read window
+
+         ze      [w2], w0    ;do the read
+
+         add     w2, #1, w2  ;increment the address
+         addc    w3, #0, w3
+
+get8u_leave:
+         leaverest
+;
+;   The extended memory address is invalid.
+;
+get8u_badadr:
+         mov     #0, w0      ;return 0
+         jump    get8u_leave
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_GET8S
+;
+;   Read the signed byte at the extended memory address in W3:W2 into W0.  W3:W2
+;   is updated to immediately after the data that is read.  When the address is
+;   invalid, 0 is returned and W3:W2 not altered.
+;
+         glbsub  exmem_get8s
+
+         set_exread w0, get8s_badadr ;set up extended memory read window
+
+         se      [w2], w0    ;do the read
+
+         add     w2, #1, w2  ;increment the address
+         addc    w3, #0, w3
+
+get8s_leave:
+         leaverest
+;
+;   The extended memory address is invalid.
+;
+get8s_badadr:
+         mov     #0, w0      ;return 0
+         jump    get8s_leave
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_GET16
+;
+;   Read the 16-bit word at the extended memory address in W3:W2 into W0.
+;   W3:W2 is updated to immediately after the data that is read.  When the
+;   address is invalid, 0 is returned and W3:W2 not altered.
+;
+         glbsub  exmem_get16
+
+         set_exread w0, get16_badadr ;set up extended memory read window
+
+         btsc    w2, #0      ;word aligned ?
+         jump    get16_byte  ;no, handle unaligned access
+;
+;   The extended memory address is word-aligned.
+;
+         mov     [w2], w0    ;do the read
+;
+;   Done with the read.
+;
+get16_dread:
+         add     w2, #2, w2  ;increment the address
+         addc    w3, #0, w3
+
+get16_leave:
+         leaverest
+;
+;   The extended memory address is not word-aligned.
+;
+get16_byte:
+         push    w2          ;save original read pointer
+         mov.b   [w2++], w0  ;read the low byte
+         swap    w0          ;temp save in high byte
+         mov.b   [w2], w0    ;read the high byte
+         swap    w0          ;reassemble word with correct byte order
+         pop     w2          ;restore original read pointer
+         jump    get16_dread ;done with the actual read
+;
+;   The extended memory address is invalid.
+;
+get16_badadr:
+         mov     #0, w0      ;return 0
+         jump    get16_leave
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_GET24U
+;
+;   Read the 24-bit unsigned word at the extended memory address in W3:W2 into
+;   W1:W0.  W3:W2 is updated to immediately after the data that is read.  When
+;   the address is invalid, 0 is returned and W3:W2 not altered.
+;
+         glbsub  exmem_get24u
+
+         set_exread w0, get24u_badadr ;set up extended memory read window
+         push    w2          ;save original read pointer
+
+         btsc    w2, #0      ;word aligned ?
+         jump    get24u_byte ;no, handle unaligned access
+;
+;   The extended memory address is word-aligned.
+;
+         mov     [w2++], w0  ;read the low word
+         ze      [w2], w1    ;read the high byte
+;
+;   Done with the read.
+;
+get24u_dread:
+         pop     w2          ;restore original read pointer
+         add     w2, #3, w2  ;increment the address
+         addc    w3, #0, w3
+
+get24u_leave:
+         leaverest
+;
+;   The extended memory address is not word-aligned.
+;
+get24u_byte:
+         mov.b   [w2++], w0  ;read byte 0
+         swap    w0          ;temp save in high byte
+         mov.b   [w2++], w0  ;read byte 1
+         swap    w0          ;assemble final low word
+         ze      [w2], w1    ;read byte 2
+         jump    get24u_dread ;done with the actual read
+;
+;   The extended memory address is invalid.
+;
+get24u_badadr:
+         mov     #0, w0      ;return 0
+         mov     #0, w1
+         jump    get24u_leave
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_GET24S
+;
+;   Read the 24-bit signed word at the extended memory address in W3:W2 into
+;   W1:W0.  W3:W2 is updated to immediately after the data that is read.  When
+;   the address is invalid, 0 is returned and W3:W2 not altered.
+;
+         glbsub  exmem_get24s
+
+         set_exread w0, get24s_badadr ;set up extended memory read window
+         push    w2          ;save original read pointer
+
+         btsc    w2, #0      ;word aligned ?
+         jump    get24s_byte ;no, handle unaligned access
+;
+;   The extended memory address is word-aligned.
+;
+         mov     [w2++], w0  ;read the low word
+         se      [w2], w1    ;read the high byte
+;
+;   Done with the read.
+;
+get24s_dread:
+         pop     w2          ;restore original read pointer
+         add     w2, #3, w2  ;increment the address
+         addc    w3, #0, w3
+
+get24s_leave:
+         leaverest
+;
+;   The extended memory address is not word-aligned.
+;
+get24s_byte:
+         mov.b   [w2++], w0  ;read byte 0
+         swap    w0          ;temp save in high byte
+         mov.b   [w2++], w0  ;read byte 1
+         swap    w0          ;assemble final low word
+         se      [w2], w1    ;read byte 2
+         jump    get24s_dread ;done with the actual read
+;
+;   The extended memory address is invalid.
+;
+get24s_badadr:
+         mov     #0, w0      ;return 0
+         mov     #0, w1
+         jump    get24s_leave
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_GET32
+;
+;   Read the 32-bit word at the extended memory address in W3:W2 into W1:W0.
+;   W3:W2 is updated to immediately after the data that is read.  When the
+;   address is invalid, 0 is returned and W3:W2 not altered.
+;
+         glbsub  exmem_get32
+
+         set_exread w0, get32_badadr ;set up extended memory read window
+         push    w2          ;save original read pointer
+
+         btsc    w2, #0      ;word aligned ?
+         jump    get32_byte  ;no, handle unaligned access
+;
+;   The extended memory address is word-aligned.
+;
+         mov     [w2++], w0  ;read the low word
+         mov     [w2], w1    ;read the high word
+;
+;   Done with the read.
+;
+get32_dread:
+         pop     w2          ;restore original read pointer
+         add     w2, #4, w2  ;increment the address
+         addc    w3, #0, w3
+
+get32_leave:
+         leaverest
+;
+;   The extended memory address is not word-aligned.
+;
+get32_byte:
+         mov.b   [w2++], w0  ;read byte 0
+         swap    w0          ;temp save in high byte
+         mov.b   [w2++], w0  ;read byte 1
+         swap    w0          ;assemble final low word
+
+         mov.b   [w2++], w1  ;read byte 2
+         swap    w1          ;temp save in high byte
+         mov.b   [w2], w1    ;read byte 3
+         swap    w1          ;assemble final high word
+
+         jump    get32_dread ;done with the actual read
+;
+;   The extended memory address is invalid.
+;
+get32_badadr:
+         mov     #0, w0      ;return 0
+         mov     #0, w1
+         jump    get32_leave
+
+;*******************************************************************************
+;
+;   Subroutine EXMEM_GETBUF
+;
+;   Copy a sequence of bytes from extended data memory to regular data memory.
+;   W0 contains the start address of the regular memory buffer, and W1 its
+;   length in bytes.  W3:W2 is the address of the source buffer in extended
+;   memory.  W0 and  W3:W2 are each incremented by the number of bytes copied.
+;
+;   Nothing is done if the address in W3:W2 is invalid.  No data is copied and
+;   the addresses are not incremented.
+;
+         glbsub  exmem_getbuf, regf4 | regf5
+;
+;   Register usage:
+;
+;     W0  -  Regular memory word or byte address.  Original saved on stack
+;            during copy.
+;
+;     W1  -  Buffer size in bytes.
+;
+;     W3:W2  -  Extended memory buffer start address.
+;
+;     W4  -  Current index into extended memory window.
+;
+;     W5  -  Number of whole aligned 16 bits words to copy.
+;
+         cp0     w1
+         bra     z, getbuf_leave ;empty buffer, nothing to do ?
+
+         set_exread w4, getbuf_leave ;set up extended memory read window
+         mov     w2, w4      ;make corruptable copy of extended mem index
+         push    w0          ;save original regular mem pointer
+
+         xor     w0, w2, w5
+         btsc    w5, #0      ;both buffers have same alignment ?
+         jump    getbuf_misaln ;no, handle special case of different alignments
+
+         lsr     w1, #1, w5  ;make number of whole words to copy
+         bra     z, putbuf_lastbyte ;buffer is only a single byte long ?
+
+         btsc    w2, #0      ;word aligned ?
+         jump    put32_odd   ;no, handle unaligned access
+;
+;   The buffers are word-aligned.  The whole aligned 16 bits words are copied
+;   first, possibly followed by one remaining byte.  The number of whole words
+;   to copy is in W5 and is at least 1.
+;
+         sub     #1, w5      ;make value for REPEAT instruction
+         repeat  w5          ;run next instruction W5+1 times
+         mov     [w4++], [w0++] ;copy all the whole words of the buffer
+
+         btss    w1, #0      ;buffer is odd number of bytes long ?
+         jump    getbuf_dwrite ;no, the whole write has been completed
+
+getbuf_lastbyte:             ;there is one remaining single byte to copy
+         mov.b   [w4], [w0]  ;copy the last byte
+;
+;   Done with the write.  Increment the caller's addresses and leave.  The
+;   original regular memory pointer is saved on the stack.
+;
+getbuf_dwrite:
+         pop     w0          ;restore original regular memory pointer
+         add     w0, w1, w0  ;update regular memory pointer
+
+         add     w2, w1, w2  ;update extended memory pointer
+         addc    w3, #0, w3
+
+getbuf_leave:
+         leaverest
+;
+;   The buffers are not word aligned.  The single unaligned byte is copied, then
+;   the whole aligned words, then possibly a remaining single byte.
+;
+getbuf_odd:
+         mov.b   [w4++], [w0++] ;copy the first (at odd address) byte
+         ;
+         ;   Copy the whole aligned 16 bit words, if any.
+         ;
+         cp0     w5
+         bra     z, getbuf_dbwhole ;no whole words to copy ?
+
+         sub     #1, w5      ;make value for REPEAT instruction
+         repeat  w5          ;run next instruction W5+1 times
+         mov     [w4++], [w0++] ;copy all the whole words of the buffer
+getbuf_dbwhole:              ;done copying the whole aligned words
+         ;
+         ;   Check for possible single remaining byte to copy.  Since the buffer
+         ;   started at an odd address, this is the case if the buffer length is
+         ;   even.
+         ;
+         btsc    w1, #0      ;buffer even bytes long, so ends with odd byte ?
+         jump    getbuf_dwrite ;no remaining odd byte, done with copy
+         jump    getbuf_lastbyte ;ends with odd byte, go copy it
+;
+;   The two buffers have different alignments.  One is word-aligned, but the
+;   other is not.  This means direct word transfers can't be used because either
+;   the source or destination of each word would be unaligned.  We give up and
+;   copy each byte individually.
+;
+getbuf_misaln:
+         sub     w1, #1, w5  ;make value for the REPEAT instruction
+         repeat  w5          ;run next instruction W5+1 number of times
+         mov.b   [w4++], [w0++] ;copy all the buffer bytes
+         jump    getbuf_dwrite ;done copying the whole buffer
