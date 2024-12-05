@@ -762,7 +762,7 @@ get32_badadr:
 ;   first, possibly followed by one remaining byte.
 ;
          lsr     w1, #1, w5  ;make number of whole words to copy
-         bra     z, putbuf_lastbyte ;buffer is only a single byte long ?
+         bra     z, getbuf_lastbyte ;buffer is only a single byte long ?
 
          sub     #1, w5      ;make value for REPEAT instruction
          repeat  w5          ;run next instruction W5+1 times
