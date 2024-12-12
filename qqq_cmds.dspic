@@ -135,6 +135,10 @@
 ;       is just a waste of cycles since no other task has the opportunity to
 ;       acquire the lock while it is available.
 ;
+;     CMD_BUFSIZE
+;
+;       Returns the size of the commands scratch buffer in bytes in W0.
+;
 ;     CMD_PUTBUF
 ;
 ;       Writes the low 8 bits of W0 as the next sequential byte into the command

@@ -77,6 +77,9 @@ alloc    freeadr 4           ;address of first free byte, always word-aligned
 //   The DSRPAG register will be set up so that an indirect read thru W2 will
 //   get the data at the extended memory address W3:W2.
 //
+//   On success (not jump to ERRADR), the original contents of the DSRPAG
+//   register is pushed onto the stack.
+//
 /macro set_exread
          ;
          ;   Set up for reading from extended memory at W3:W2.
@@ -84,6 +87,9 @@ alloc    freeadr 4           ;address of first free byte, always word-aligned
          mov     #0x007F, [arg 1] ;get mask for largest allowed address
          cp      w3, [arg 1] ;compare requested address to max allowed
          bra     gtu, [arg 2] ;invalid extended memory address ?
+
+         mov     Dsrpag, [arg 1] ;save original DSRPAG on the stack
+         push    [arg 1]
 
          rlc     w2, [arg 1] ;get adr bit 15 into C
          mov     w3, [arg 1] ;get unshifted high address bits
@@ -143,9 +149,9 @@ alloc    freeadr 4           ;address of first free byte, always word-aligned
 ;
          glbsub  exmem_alloc_reset, regf0
 
-         mov     0x8000, w0  ;next alloc at start of extended mem
+         mov     #0x8000, w0 ;next alloc at start of extended mem
          mov     w0, freeadr+0
-         mov     0x0000, w0
+         mov     #0x0000, w0
          mov     w0, freeadr+2
 
          leaverest
@@ -231,6 +237,7 @@ allperm_err:
 
          set_exwrite w4, put8_leave ;set up extended memory write window
 
+         nop                 ;leave time after DSWPAG change
          mov.b   w0, [w2]    ;do the write
 
          add     w2, #1, w2  ;increment the address
@@ -482,14 +489,18 @@ putbuf_misaln:
 ;   W3:W2 is updated to immediately after the data that is read.  When the
 ;   address is invalid, 0 is returned and W3:W2 not altered.
 ;
-         glbsub  exmem_get8u
+         glbsub  exmem_get8u, regf4
 
-         set_exread w0, get8u_badadr ;set up extended memory read window
+         set_exread w4, get8u_badadr ;save DSRPAG, set up ext mem read window
 
+         nop                 ;leave time after DSRPAG change
          ze      [w2], w0    ;do the read
 
          add     w2, #1, w2  ;increment the address
          addc    w3, #0, w3
+
+         pop     w4          ;restore the original DSRPAG contents
+         mov     w4, Dsrpag
 
 get8u_leave:
          leaverest
@@ -508,14 +519,18 @@ get8u_badadr:
 ;   is updated to immediately after the data that is read.  When the address is
 ;   invalid, 0 is returned and W3:W2 not altered.
 ;
-         glbsub  exmem_get8s
+         glbsub  exmem_get8s, regf4
 
-         set_exread w0, get8s_badadr ;set up extended memory read window
+         set_exread w4, get8s_badadr ;save DSRPAG, set up ext mem read window
 
+         nop                 ;leave time after DSRPAG change
          se      [w2], w0    ;do the read
 
          add     w2, #1, w2  ;increment the address
          addc    w3, #0, w3
+
+         pop     w4          ;restore the original DSRPAG contents
+         mov     w4, Dsrpag
 
 get8s_leave:
          leaverest
@@ -534,9 +549,9 @@ get8s_badadr:
 ;   W3:W2 is updated to immediately after the data that is read.  When the
 ;   address is invalid, 0 is returned and W3:W2 not altered.
 ;
-         glbsub  exmem_get16
+         glbsub  exmem_get16, regf4
 
-         set_exread w0, get16_badadr ;set up extended memory read window
+         set_exread w4, get16_badadr ;save DSRPAG, set up ext mem read window
 
          btsc    w2, #0      ;word aligned ?
          jump    get16_byte  ;no, handle unaligned access
@@ -550,6 +565,9 @@ get8s_badadr:
 get16_dread:
          add     w2, #2, w2  ;increment the address
          addc    w3, #0, w3
+
+         pop     w4          ;restore the original DSRPAG contents
+         mov     w4, Dsrpag
 
 get16_leave:
          leaverest
@@ -581,7 +599,7 @@ get16_badadr:
 ;
          glbsub  exmem_get24u
 
-         set_exread w0, get24u_badadr ;set up extended memory read window
+         set_exread w0, get24u_badadr ;save DSRPAG, set up ext mem read window
          push    w2          ;save original read pointer
 
          btsc    w2, #0      ;word aligned ?
@@ -595,9 +613,14 @@ get16_badadr:
 ;   Done with the read.
 ;
 get24u_dread:
+         mov     [w15-4], w2 ;restore original DSRPAG contents
+         mov     w2, Dsrpag
+
          pop     w2          ;restore original read pointer
          add     w2, #3, w2  ;increment the address
          addc    w3, #0, w3
+
+         sub     #2, w15     ;remove saved DSRPAG from stack
 
 get24u_leave:
          leaverest
@@ -628,7 +651,7 @@ get24u_badadr:
 ;
          glbsub  exmem_get24s
 
-         set_exread w0, get24s_badadr ;set up extended memory read window
+         set_exread w0, get24s_badadr ;save DSRPAG, set up ext mem read window
          push    w2          ;save original read pointer
 
          btsc    w2, #0      ;word aligned ?
@@ -642,9 +665,14 @@ get24u_badadr:
 ;   Done with the read.
 ;
 get24s_dread:
+         mov     [w15-4], w2 ;restore original DSRPAG contents
+         mov     w2, Dsrpag
+
          pop     w2          ;restore original read pointer
          add     w2, #3, w2  ;increment the address
          addc    w3, #0, w3
+
+         sub     #2, w15     ;remove saved DSRPAG from stack
 
 get24s_leave:
          leaverest
@@ -675,7 +703,7 @@ get24s_badadr:
 ;
          glbsub  exmem_get32
 
-         set_exread w0, get32_badadr ;set up extended memory read window
+         set_exread w0, get32_badadr ;save DSRPAG, set up ext mem read window
          push    w2          ;save original read pointer
 
          btsc    w2, #0      ;word aligned ?
@@ -689,9 +717,14 @@ get24s_badadr:
 ;   Done with the read.
 ;
 get32_dread:
+         mov     [w15-4], w2 ;restore original DSRPAG contents
+         mov     w2, Dsrpag
+
          pop     w2          ;restore original read pointer
          add     w2, #4, w2  ;increment the address
          addc    w3, #0, w3
+
+         sub     #2, w15     ;remove saved DSRPAG from stack
 
 get32_leave:
          leaverest
@@ -747,7 +780,7 @@ get32_badadr:
          cp0     w1
          bra     z, getbuf_leave ;empty buffer, nothing to do ?
 
-         set_exread w4, getbuf_leave ;set up extended memory read window
+         set_exread w4, getbuf_leave ;save DSRPAG, set up ext mem read window
          mov     w2, w4      ;make corruptable copy of extended mem index
          push    w0          ;save original regular mem pointer
 
@@ -780,6 +813,9 @@ getbuf_lastbyte:             ;there is one remaining single byte to copy
 getbuf_dwrite:
          pop     w0          ;restore original regular memory pointer
          add     w0, w1, w0  ;update regular memory pointer
+
+         pop     w4          ;restore original DSRPAG contents
+         mov     w4, Dsrpag
 
          add     w2, w1, w2  ;update extended memory pointer
          addc    w3, #0, w3
@@ -823,3 +859,540 @@ getbuf_misaln:
          repeat  w5          ;run next instruction W5+1 number of times
          mov.b   [w4++], [w0++] ;copy all the buffer bytes
          jump    getbuf_dwrite ;done copying the whole buffer
+
+;*******************************************************************************
+;*******************************************************************************
+;
+;   Test routines.
+;
+;   These routines are intended for testing and verifying the above operational
+;   routines.  These test routines are not included in the code unless
+;   specifically enabled with preprocessor constants in the client firmware.
+;
+;   Most test routines are written as commands of a command/response scheme.
+;   The code for a command is only included when a constant "cmd_<name>" has
+;   been defined.  This is usually done in the XXX_CMDRSP.INS.DSPIC file of the
+;   client firmware.
+;
+;   The table below lists the available commands with any responses required to
+;   be defined by those commands:
+;
+;     Command        |  Response       |  Description
+;     --------------------------------------------------------------------------
+;     EXMEM_RESET    |                 |  Reset to all exmem to unallocated.
+;                    |                 |
+;     EXMEM_ALLOC    |  EXMEM_ALLOC    |  Allocate exmem region.
+;                    |                 |
+;     EXMEM_AVAIL    |  EXMEM_AVAIL    |  Get amount of exmem avail to allocate.
+;                    |                 |
+;     EXMEM_PUTREG   |  EXMEM_ADR      |  Write to exmem from register.
+;                    |                 |
+;     EXMEM_PUTBUFE  |  EXMEM_ADR2     |  Write from even-aligned buffer of data
+;                    |                 |  to exmem.
+;                    |                 |
+;     EXMEM_PUTBUFO  |  EXMEM_ADR2     |  Write from odd-aligned buffer of data
+;                    |                 |  to exmem.
+;                    |                 |
+;     EXMEM_GETREG   |  EXMEM_REGDAT   |  Read 4 bytes of exmem into registers
+;                    |                 |  in various formats.
+;                    |                 |
+;     EXMEM_GETBUFE  |  EXMEM_BUFDAT   |  Read exmem into even-aligned buffer
+;                    |                 |
+;     EXMEM_GETBUFO  |  EXMEM_BUFDAT   |  Read exmem into odd-aligned buffer
+;                    |                 |
+;
+
+;*******************************************************************************
+;
+;   Command EXMEM_RESET
+;
+;   Reset all extended data memory to unallocated.
+;
+/if [Command cm_exmem_reset] then
+         mcall   exmem_alloc_reset
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command EXMEM_ALLOC size
+;
+;   Attempt to allocate SIZE bytes of extended data memory.  SIZE is 32 bits.
+;   Sends response:
+;
+;     EXMEM_ALLOC: flags adr
+;
+;       FLAGS is a collection of individual bits.  Bit 0 is set on failure to
+;       allocate the memory, and cleared on success.  The remaining bits are
+;       reserved for future use and are 0 for now.
+;
+;       ADR is the 32 bit starting address of the new region on success, and 0
+;       on failure.
+;
+/if [Command cm_exmem_alloc] then
+         gcall   cmd_get32   ;get amount of memory to request into W1:W0
+
+         mcall   exmem_alloc_perm ;try to allocate the memory, adr in W1:W0
+         mov     #0, w2      ;save Z flag in W2 bit 0
+         skip_nz
+         bset    w2, #0
+         mov     w0, w3      ;returned address now saved in W1:W3
+
+         gcall   cmd_lock_out ;acquire lock on response stream
+         mov     #[v rsp_exmem_alloc], w0
+         gcall   cmd_put8    ;send EXMEM_ALLOC response opcode
+         mov     w2, w0
+         gcall   cmd_put8    ;send FLAGS
+         mov     w3, w0
+         gcall   cmd_put32   ;send ADR
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command EXMEM_AVAIL
+;
+;   Sends the response:
+;
+;     EXMEM_AVAIL: size
+;
+;       Size the 32 bit amount of extended memory currently available for
+;       allocation.
+;
+/if [Command cm_exmem_avail] then
+         gcall   cmd_lock_out ;acquire lock on response stream
+         mov     #[v rsp_exmem_avail], w0
+         gcall   cmd_put8    ;send EXMEM_AVAIL response opcode
+
+         mcall   exmem_alloc_avail ;get available memory into W1:W0
+         gcall   cmd_put32   ;send SIZE
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command EXMEM_PUTREG adr n dat
+;
+;   Tests one of the EXMEM_PUTx routines.  ADR is the 32 bit address to write
+;   to.  N is the number of bytes to write, and must be 1-4.  DAT is the 32 bit
+;   value to write.
+;
+;   Only the low N bytes of DAT are written, using the routine for that many
+;   bytes.  For example, when N is 2, the write is done by calling EXMEM_PUT16.
+;   DAT is always 4 bytes and is always passed in W1:W0 regardless of how many
+;   of those bytes are used.
+;
+;   Response:
+;
+;     EXMEM_ADR: adr
+;
+;       The new updated 32 bit address returned from the EXMEM_PUTx routine.
+;
+;   Nothing is done when N is not 1-4.
+;
+/if [Command cm_exmem_putreg] then
+         gcall   cmd_get32   ;get the address into W3:W2
+         mov.d   w0, w2
+         gcall   cmd_get8    ;get the number of bytes to write into W4
+         mov     w0, w4
+         gcall   cmd_get32   ;get the data to write into W1:W0
+;
+;   Register contents:
+;
+;     W1:W0  -  Data to write.
+;
+;     W3:W2  -  Extended data memory address to write to.
+;
+;     W4  -  Number of bytes to write.  Only 1-4 supported.
+;
+         ;
+         ;   Validate N.
+         ;
+         cp      w4, #1      ;check against lower limit
+         skip_geu
+         return
+
+         cp      w4, #4      ;check against upper limit
+         skip_leu
+         return
+         ;
+         ;   Jump to separate code for each number of bytes to write.
+         ;
+         sub     #1, w4      ;make 0-3 jump offset
+         bra     w4          ;index into next 4 instructions by W4
+         bra     preg1
+         bra     preg2
+         bra     preg3
+         bra     preg4
+;
+;   Jump targets.  Each PREGn target is for writing N bytes from W1:W0.
+;
+preg1:
+         mcall   exmem_put8
+         jump    preg_adr
+preg2:
+         mcall   exmem_put16
+         jump    preg_adr
+preg3:
+         mcall   exmem_put24
+         jump    preg_adr
+preg4:
+         mcall   exmem_put32
+;
+;   The write has been done.  Send an EXMEM_ADR response with the updated
+;   address in W3:W2.
+;
+preg_adr:
+         gcall   cmd_lock_out ;acquire lock on response stream
+         mov     #[v rsp_exmem_adr], w0
+         gcall   cmd_put8    ;send EXMEM_ADR response opcode
+
+         mov.d   w2, w0      ;send the 32 bit address
+         gcall   cmd_put32
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command EXMEM_PUTBUFE adr n dat ... dat
+;
+;   Tests EXMEM_PUTBUF with an even-aligned source buffer.  ADR is the 32 bit
+;   extended data memory address to write to, N is the number of bytes to write
+;   - 1, and DAT are the data bytes.  Exactly N+1 DAT bytes must follow N.
+;
+;   The following response is sent:
+;
+;   Response:
+;
+;     EXMEM_ADR2: adr1 adr2 adrex
+;
+;       The updated addresses returned by EXMEM_PUTBUF.  ADR1 is the 16 bit
+;       regular memory source buffer address, and ADR2 is the updated version
+;       returned by EXMEM_PUTBUF.  ADREX is the updated 32 bit extended data
+;       memory address returned by EXMEM_PUTBUF.
+;
+;   The DAT bytes are read into the commands scratch buffer, which is then
+;   passed to EXMEM_PUTBUF.  While all N+1 bytes will be read, those that do not
+;   fit into the scratch buffer will be discarded.  Check the client firmware
+;   implementation to find the size of the commands scratch buffer.
+;
+/if [Command cm_exmem_putbufe] then
+         gcall   cmd_get32   ;get extended memory address into W3:W2
+         mov.d   w0, w2
+         gcall   cmd_get8    ;get number of data bytes into W0
+         add     #1, w0
+         gcall   cmd_putbufn ;get the data bytes into the commands scratch buffer
+
+         mov     #cmdbuf, w0 ;pass source buffer address in W0
+         mov     ncmdbuf, w1 ;pass number of bytes to copy in W1
+         mcall   exmem_putbuf ;copy the buffer, addresses in W0, W3:W2 updated
+
+         gcall   cmd_lock_out ;acquire exclusive lock on response stream
+         mov     w0, w1      ;save updated regular mem buffer adr in W1
+         mov     #[v rsp_exmem_adr2], w0 ;send EXMEM_ADR2 response opcode
+         gcall   cmd_put8
+         mov     #cmdbuf, w0 ;send regular mem buffer start address
+         gcall   cmd_put16
+         mov     w1, w0      ;send updated regular memory address
+         gcall   cmd_put16
+         mov.d   w2, w0      ;send updated extended memory address
+         gcall   cmd_put32
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command EXMEM_PUTBUFO adr n dat ... dat
+;
+;   Same as EXMEM_PUTBUFE except that the source buffer will start on an odd
+;   address.  The data bytes are read into the commands scratch buffer, except
+;   that the first byte is not used so that the first data byte will be at an
+;   odd address.  The maximum number of supported data bytes is therefore the
+;   commands scratch buffer length - 1.  All DAT bytes are read, but only those
+;   that fit into the scratch buffer are used.
+;
+;   A EXMEM_ADR2 response is sent.
+;
+/if [Command cm_exmem_putbufo] then
+         gcall   cmd_get32   ;get extended memory address into W3:W2
+         mov.d   w0, w2
+         gcall   cmd_putbuf  ;dummy byte into buffer, next will be at odd address
+         gcall   cmd_get8    ;get number of data bytes into W0
+         add     #1, w0
+         gcall   cmd_putbufn ;get the data bytes into the commands scratch buffer
+
+         mov     #(cmdbuf+1), w0 ;pass source buffer address in W0
+         mov     ncmdbuf, w1 ;pass number of bytes to copy in W1
+         sub     #1, w1
+         mcall   exmem_putbuf ;copy the buffer, addresses in W0, W3:W2 updated
+
+         gcall   cmd_lock_out ;acquire exclusive lock on response stream
+         mov     w0, w1      ;save updated regular mem buffer adr in W1
+         mov     #[v rsp_exmem_adr2], w0 ;send EXMEM_ADR2 response opcode
+         gcall   cmd_put8
+         mov     #(cmdbuf+1), w0 ;send regular mem buffer start address
+         gcall   cmd_put16
+         mov     w1, w0      ;send updated regular memory address
+         gcall   cmd_put16
+         mov.d   w2, w0      ;send updated extended memory address
+         gcall   cmd_put32
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command EXMEM_GETREG adr n
+;
+;   Read a word of extended memory into registers.  ADR is the 32 bit extended
+;   memory address to read from.  N is the number of bytes to read in the low
+;   7 bits, with the valid range being 1-4.  The high bit of N is 0 to read the
+;   word as unsigned, and 1 for signed.
+;
+;   The following response is sent:
+;
+;     EXMEM_REGDAT: adr n dat
+;
+;       ADR is the updated address returned from the EXMEM_GETx routine.  N is
+;       the number of bytes in the word, and whether it was signed or unsigned.
+;       N has the same format a N in the command.  DAT is the full 32 bits in
+;       W1:W0 on return from the EXMEM_GETx routine.  The data word is zero or
+;       sign extended into the low 16 bits of dat when only 1 byte was read,
+;       and extended into all 32 bits when 3 bytes were read.  The high 16 bits
+;       are unused when 1 or 2 bytes were read.
+;
+/if [Command cm_exmem_getreg] then
+         gcall   cmd_get32   ;get the extended memory address into W3:W2
+         mov.d   w0, w2
+         gcall   cmd_get8    ;get N into W0
+         mov     w0, w4      ;save N parameter in W4
+;
+;   Jump to separate code for the number of data bytes and whether the word is
+;   signed or unsigned.
+;
+         and     #0x7F, w0   ;mask in only the number of data bytes
+         cp      w0, #1      ;compare against low limit
+         skip_geu
+         return
+         cp      w0, #4      ;compare against high limit
+         skip_leu
+         return
+         sub     #1, w0      ;make 0-3 offset for 1-4 bytes
+
+         lsr     w4, #5, w5  ;get signed/unsigned into bit 2
+         and     #0x04, w5   ;mask in only the signed/unsigned bit
+         ior     w0, w5, w0  ;make 0-7 offset for number of bytes and signed
+         bra     w0          ;index into jump table by W0
+         bra     greg1u      ;1 byte, unsigned
+         bra     greg2u      ;2 bytes, unsigned
+         bra     greg3u      ;3 bytes, unsigned
+         bra     greg4u      ;4 bytes, unsigned
+         bra     greg1s      ;1 byte, signed
+         bra     greg2s      ;2 bytes, signed
+         bra     greg3s      ;3 bytes, signed
+         bra     greg4s      ;4 bytes, signed
+;
+;   Individual routines jumped to from the jump table above.
+;
+greg1u:
+         mcall   exmem_get8u
+         jump    greg_rsp
+greg2u:
+         mcall   exmem_get16
+         jump    greg_rsp
+greg3u:
+         mcall   exmem_get24u
+         jump    greg_rsp
+greg4u:
+         mcall   exmem_get32
+         jump    greg_rsp
+greg1s:
+         mcall   exmem_get8s
+         jump    greg_rsp
+greg2s:
+         mcall   exmem_get16
+         jump    greg_rsp
+greg3s:
+         mcall   exmem_get24s
+         jump    greg_rsp
+greg4s:
+         mcall   exmem_get32
+;
+;   The extended memory read has been done.  The result is in W1:W0, the updated
+;   address in W3:W2, and the original command N parameter in W4.
+;
+;   Now send the EXMEM_REGDAT response.
+;
+greg_rsp:
+         mov.d   w0, w6      ;save the returned data word in W7:W6
+         gcall   cmd_lock_out ;acquire exclusive lock on the response stream
+         mov     #[v rsp_exmem_regdat], w0 ;send EXMEM_REGDAT response opcode
+         gcall   cmd_put8
+
+         mov.d   w2, w0      ;send the updated extended memory address
+         gcall   cmd_put32
+
+         mov     w4, w0      ;send the original N parameter
+         gcall   cmd_put8
+
+         mov.d   w6, w0      ;send the data value
+         gcall   cmd_put32
+         return
+  /endif
+
+;*******************************************************************************
+;
+;   Command EXMEM_GETBUFE adr n
+;
+;   Read extended memory bytes into a even-aligned regular memory buffer.  ADR
+;   is the 32 bit extended memory address to start reading from.  N is the
+;   number of bytes to read.
+;
+;   The data is read into the commands scratch buffer.  The number of bytes read
+;   is limited to the size of that buffer.
+;
+;   The following response is sent:
+;
+;     EXMEM_BUFDAT: adrex adr n dat ... dat
+;
+;       ADR is the 32 bit extended memory address returned by EXMEM_GETBUF.  It
+;       should be the first address after the bytes that were read.  ADR is the
+;       updated address of the destination buffer in regular memory.  N is the
+;       number of bytes that were read from extended memory, and could be 0.
+;       DAT are the data bytes.  There are exactly N DAT bytes.
+;
+/if [Command cm_exmem_getbufe] then
+         gcall   cmd_get32   ;get ADR into W3:W2
+         mov.d   w0, w2
+         gcall   cmd_get8    ;get N into w1
+         mov     w0, w1
+;
+;   Clip N to the size of the commands scratch buffer.
+;
+         gcall   cmd_bufsize ;get scratch buffer size in W0
+         cp      w1, w0
+         skip_leu            ;existing N is within the buffer size ?
+         mov     w0, w1      ;no, set N to the buffer size
+
+         mov     #cmdbuf, w0 ;set start address of where to write the bytes
+         ;
+         ;   If the number of bytes to read is 0, skip the read and go straight
+         ;   to sending the response.
+         ;
+         cp0     w1
+         bra     z, gbufe_rsp ;no bytes to read from extended memory ?
+;
+;   Do the read from extended memory.
+;
+         mcall   exmem_getbuf ;read buffer from extended memory
+;
+;   Send the EXMEM_BUFDAT response.  The registers currently contain:
+;
+;     W0  -  Updated regular memory destination buffer address.
+;
+;     W1  -  Number of bytes in the read.
+;
+;     W3:W2  -  Updated extended memory source buffer address.
+;
+gbufe_rsp:
+         mov     w0, w4      ;save regular mem buffer address in W4
+         mov     w1, w5      ;save number of bytes read in W5
+
+         gcall   cmd_lock_out ;acquire exclusive lock on the response stream
+         mov     #[v rsp_exmem_bufdat], w0 ;send EXMEM_BUFDAT response opcode
+         gcall   cmd_put8
+
+         mov.d   w2, w0      ;send updated extended memory address
+         gcall   cmd_put32
+
+         mov     w4, w0      ;send updated regular memory address
+         gcall   cmd_put16
+
+         mov     w5, w0      ;send number of data bytes
+         gcall   cmd_put8
+
+         mov     #cmdbuf, w6 ;init pointer to first data byte
+gbufe_byte:                  ;back here to send each new data byte
+         cp0     w5
+         skip_nz             ;still something left to send ?
+         return              ;no, all done
+         mov.b   [w6++], w0  ;get this data byte
+         gcall   cmd_put8    ;send it
+         sub     #1, w5      ;count one less byte left to do
+         jump    gbufe_byte  ;back to do next byte
+  /endif
+
+;*******************************************************************************
+;
+;   Command EXMEM_GETBUFO adr n
+;
+;   Like EXMEM_GETBUFE except that the data is read into an odd-aligned buffer.
+;
+;   The maximum bytes that can be read is the size of the commands scratch
+;   buffer - 1.
+;
+/if [Command cm_exmem_getbufo] then
+         gcall   cmd_get32   ;get ADR into W3:W2
+         mov.d   w0, w2
+         gcall   cmd_get8    ;get N into w1
+         mov     w0, w1
+;
+;   Clip N to the size of the commands scratch buffer - 1.
+;
+         gcall   cmd_bufsize ;get scratch buffer size in W0
+         cp0     w0
+         skip_z              ;already zero ?
+         sub     #1, w0      ;account for unused even byte at start of buffer
+
+         cp      w1, w0
+         skip_leu            ;existing N is within the buffer size ?
+         mov     w0, w1      ;no, set N to the buffer size
+
+         mov     #cmdbuf, w0 ;set start address of where to write the bytes
+         add     #1, w0      ;skip over first byte to start on odd byte
+         ;
+         ;   If the number of bytes to read is 0, skip the read and go straight
+         ;   to sending the response.
+         ;
+         cp0     w1
+         bra     z, gbufo_rsp ;no bytes to read from extended memory ?
+;
+;   Do the read from extended memory.
+;
+         mcall   exmem_getbuf ;read buffer from extended memory
+;
+;   Send the EXMEM_BUFDAT response.  The registers currently contain:
+;
+;     W0  -  Updated regular memory destination buffer address.
+;
+;     W1  -  Number of bytes in the read.
+;
+;     W3:W2  -  Updated extended memory source buffer address.
+;
+gbufo_rsp:
+         mov     w0, w4      ;save regular mem buffer address in W4
+         mov     w1, w5      ;save number of bytes read in W5
+
+         gcall   cmd_lock_out ;acquire exclusive lock on the response stream
+         mov     #[v rsp_exmem_bufdat], w0 ;send EXMEM_BUFDAT response opcode
+         gcall   cmd_put8
+
+         mov.d   w2, w0      ;send updated extended memory address
+         gcall   cmd_put32
+
+         mov     w4, w0      ;send updated regular memory address
+         gcall   cmd_put16
+
+         mov     w5, w0      ;send number of data bytes
+         gcall   cmd_put8
+
+         mov     #cmdbuf, w6 ;init pointer to first data byte
+         add     #1, w6      ;skip over unused byte at even address
+gbufo_byte:                  ;back here to send each new data byte
+         cp0     w5
+         skip_nz             ;still something left to send ?
+         return              ;no, all done
+         mov.b   [w6++], w0  ;get this data byte
+         gcall   cmd_put8    ;send it
+         sub     #1, w5      ;count one less byte left to do
+         jump    gbufo_byte  ;back to do next byte
+  /endif

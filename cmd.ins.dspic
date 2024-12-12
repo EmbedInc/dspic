@@ -482,6 +482,18 @@ lckn_no:                     ;there is insufficient room
 
 ;*******************************************************************************
 ;
+;   Subroutine CMD_BUFSIZE
+;
+;   Get the size of the commands scratch buffer into W0, units of bytes.
+;
+         glbsub  cmd_bufsize
+
+         mov     #[v bufsize], w0
+
+         leaverest
+
+;*******************************************************************************
+;
 ;   Subroutine CMD_PUTBUF
 ;
 ;   Write the low 8 bits of W0 as the next byte into the commands scratch
