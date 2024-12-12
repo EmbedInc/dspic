@@ -37,6 +37,7 @@
 //     machine_intu_t  -  Unsigned native machine word integer
 //     machine_ints_t  -  Signed native machine word integer
 //     machine_intptr_t  -  Unsigned integer that can hold a pointer
+//     exmem_adr_t  -  Address into extended data memory
 //
 //   Pre-defined constants:
 //
@@ -128,6 +129,100 @@ dymem_alloc_temp (                     //allocate new mem from heap, can dealloc
 
 void dymem_dealloc (                   //deallocate temporarily allocated memory
   void *);                             //pointer to anywhere in region to dealloc
+
+//******************************************************************************
+//
+//   Extended data memory access.
+//
+void exmem_alloc_reset (void);         //reset all extended data mem to unallocated
+
+int32u_t exmem_alloc_avail (void);     //get amount of ext mem available to allocate
+
+exmem_adr_t                            //adr of new mem, always even, 0 on failure
+exmem_alloc_perm (                     //allocate buffer of extended data memory
+  int32u_t);                           //number of bytes to allocate
+
+int8u_t
+exmem_get8u (                          //read 8-bit unsigned integer from ext mem
+  exmem_adr_t);                        //ext mem address to read from
+
+int8s_t
+exmem_get8s (                          //read 8-bit signed integer from ext mem
+  exmem_adr_t);                        //ext mem address to read from
+
+int16u_t
+exmem_get16u (                         //read 16-bit unsigned integer from ext mem
+  exmem_adr_t);                        //ext mem address to read from
+
+int16s_t
+exmem_get16s (                         //read 16-bit signed integer from ext mem
+  exmem_adr_t);                        //ext mem address to read from
+
+int32u_t
+exmem_get24u (                         //read 24-bit unsigned integer from ext mem
+  exmem_adr_t);                        //ext mem address to read from
+
+int32s_t
+exmem_get24s (                         //read 24-bit signed integer from ext mem
+  exmem_adr_t);                        //ext mem address to read from
+
+int32u_t
+exmem_get32u (                         //read 32-bit unsigned integer from ext mem
+  exmem_adr_t);                        //ext mem address to read from
+
+int32s_t
+exmem_get32s (                         //read 32-bit signed integer from ext mem
+  exmem_adr_t);                        //ext mem address to read from
+
+float
+exmem_getfp32 (                        //read 32-bit floating point from ext mem
+  exmem_adr_t);                        //ext mem address to read from
+
+void exmem_getbuf (                    //read buffer of bytes from extended data memory
+  void *,                              //pointer to destination buffer in regular memory
+  int16u_t,                            //number of bytes to write
+  exmem_adr_t);                        //ext mem address to read from
+
+void exmem_put8u (                     //write 8-bit unsigned integer to ext mem
+  int8u_t,                             //the value to write
+  exmem_adr_t);                        //ext mem address to write to
+
+void exmem_put8s (                     //write 8-bit signed integer to ext mem
+  int8s_t,                             //the value to write
+  exmem_adr_t);                        //ext mem address to write to
+
+void exmem_put16u (                    //write 16-bit unsigned integer to ext mem
+  int16u_t,                            //the value to write
+  exmem_adr_t);                        //ext mem address to write to
+
+void exmem_put16s (                    //write 16-bit signed integer to ext mem
+  int16s_t,                            //the value to write
+  exmem_adr_t);                        //ext mem address to write to
+
+void exmem_put24u (                    //write 24-bit unsigned integer to ext mem
+  int32u_t,                            //the value to write in low 24 bits
+  exmem_adr_t);                        //ext mem address to write to
+
+void exmem_put24s (                    //write 24-bit signed integer to ext mem
+  int32s_t,                            //the value to write in low 24 bits
+  exmem_adr_t);                        //ext mem address to write to
+
+void exmem_put32u (                    //write 32-bit unsigned integer to ext mem
+  int32u_t,                            //the value to write
+  exmem_adr_t);                        //ext mem address to write to
+
+void exmem_put32s (                    //write 32-bit signed integer to ext mem
+  int32s_t,                            //the value to write
+  exmem_adr_t);                        //ext mem address to write to
+
+void exmem_putfp32 (                   //write 32-bit floating point to ext mem
+  float,                               //the value to write
+  exmem_adr_t);                        //ext mem address to write to
+
+void exmem_putbuf (                    //write buffer of bytes to extended data memory
+  void *,                              //pointer to source buffer in regular memory
+  int16u_t,                            //number of bytes to write
+  exmem_adr_t);                        //ext mem address to write to
 
 //******************************************************************************
 //

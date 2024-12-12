@@ -18,7 +18,6 @@
 ;
 /block
   /var local ii integer
-  /var local r real
   /var local s string
 
   /if [not [exist "exmem_last:vcon"]] then
@@ -147,7 +146,7 @@ alloc    freeadr 4           ;address of first free byte, always word-aligned
 ;
 ;   Reset the dynamic memory state to all memory unallocated.
 ;
-         glbsub  exmem_alloc_reset, regf0
+         glbsubd exmem_alloc_reset, regf0
 
          mov     #0x8000, w0 ;next alloc at start of extended mem
          mov     w0, freeadr+0
@@ -162,7 +161,7 @@ alloc    freeadr 4           ;address of first free byte, always word-aligned
 ;
 ;   Return the remaining amount of allocatable memory in W1:W0.
 ;
-         glbsub  exmem_alloc_avail, regf2
+         glbsubd exmem_alloc_avail, regf2
 
          load32  w0, free0   ;get alloc address for no mem left
 
@@ -183,7 +182,7 @@ alloc    freeadr 4           ;address of first free byte, always word-aligned
 ;   W1:W0 will be 0.  The only cause for failure is insufficient unallocated
 ;   memory available.
 ;
-         glbsub  exmem_alloc_perm, regf2 | regf3 | regf4
+         glbsubd exmem_alloc_perm, regf2 | regf3 | regf4
 
          add     w0, #1, w0  ;round requested size up to whole words
          addc    w1, #0, w1
@@ -233,6 +232,11 @@ allperm_err:
 ;   updated to immediately after the written data.  Nothing is done if the
 ;   address in W3:W2 is invalid.
 ;
+_exmem_put8u glblab          ;C version entry points
+_exmem_put8s glblab
+;
+;   Assembler version.
+;
          glbsub  exmem_put8, regf4
 
          set_exwrite w4, put8_leave ;set up extended memory write window
@@ -253,6 +257,11 @@ put8_leave:
 ;   Write the contents of W0 to the extended memory at W3:W2.  W3:W2 is updated
 ;   to immediately after the written data.  Nothing is done if the address in
 ;   W3:W2 is invalid.
+;
+_exmem_put16u glblab         ;C version entry points
+_exmem_put16s glblab
+;
+;   Assembler version.
 ;
          glbsub  exmem_put16, regf4
 
@@ -292,6 +301,11 @@ put16_byte:                  ;target is not word-aligned
 ;   Write the low 24 bits of W1:W0 to the extended memory at W3:W2.  W3:W2 is
 ;   updated to immediately after the written data.  Nothing is done if the
 ;   address in W3:W2 is invalid.
+;
+_exmem_put24u glblab         ;C version entry points
+_exmem_put24s glblab
+;
+;   Assembler version.
 ;
          glbsub  exmem_put24, regf4
 
@@ -335,6 +349,12 @@ put24_byte:                  ;target is not word-aligned
 ;   Write the contents of W1:W0 to the extended memory at W3:W2.  W3:W2 is
 ;   updated to immediately after the written data.  Nothing is done if the
 ;   address in W3:W2 is invalid.
+;
+_exmem_put32u glblab         ;C version entry points
+_exmem_put32s glblab
+_exmem_putfp32 glblab
+;
+;   Assembler version.
 ;
          glbsub  exmem_put32, regf4
 
@@ -387,7 +407,7 @@ put32_byte:                  ;target is not word-aligned
 ;   Nothing is done if the address in W3:W2 is invalid.  No data is copied and
 ;   the addresses are not incremented.
 ;
-         glbsub  exmem_putbuf, regf4 | regf5
+         glbsubd exmem_putbuf, regf4 | regf5
 ;
 ;   Register usage:
 ;
@@ -489,6 +509,11 @@ putbuf_misaln:
 ;   W3:W2 is updated to immediately after the data that is read.  When the
 ;   address is invalid, 0 is returned and W3:W2 not altered.
 ;
+_exmem_get8u glblab          ;C version entry point
+         mov.d   w0, w2      ;move address into W3:W2
+;
+;   Assembler version.
+;
          glbsub  exmem_get8u, regf4
 
          set_exread w4, get8u_badadr ;save DSRPAG, set up ext mem read window
@@ -519,6 +544,11 @@ get8u_badadr:
 ;   is updated to immediately after the data that is read.  When the address is
 ;   invalid, 0 is returned and W3:W2 not altered.
 ;
+_exmem_get8s glblab          ;C version entry point
+         mov.d   w0, w2      ;move address into W3:W2
+;
+;   Assembler version.
+;
          glbsub  exmem_get8s, regf4
 
          set_exread w4, get8s_badadr ;save DSRPAG, set up ext mem read window
@@ -548,6 +578,12 @@ get8s_badadr:
 ;   Read the 16-bit word at the extended memory address in W3:W2 into W0.
 ;   W3:W2 is updated to immediately after the data that is read.  When the
 ;   address is invalid, 0 is returned and W3:W2 not altered.
+;
+_exmem_get16u glblab         ;C version entry points
+_exmem_get16s glblab
+         mov.d   w0, w2      ;move address into W3:W2
+;
+;   Assembler version.
 ;
          glbsub  exmem_get16, regf4
 
@@ -596,6 +632,11 @@ get16_badadr:
 ;   Read the 24-bit unsigned word at the extended memory address in W3:W2 into
 ;   W1:W0.  W3:W2 is updated to immediately after the data that is read.  When
 ;   the address is invalid, 0 is returned and W3:W2 not altered.
+;
+_exmem_get24u glblab         ;C version entry point
+         mov.d   w0, w2      ;move address into W3:W2
+;
+;   Assembler version.
 ;
          glbsub  exmem_get24u
 
@@ -649,6 +690,11 @@ get24u_badadr:
 ;   W1:W0.  W3:W2 is updated to immediately after the data that is read.  When
 ;   the address is invalid, 0 is returned and W3:W2 not altered.
 ;
+_exmem_get24s glblab         ;C version entry point
+         mov.d   w0, w2      ;move address into W3:W2
+;
+;   Assembler version.
+;
          glbsub  exmem_get24s
 
          set_exread w0, get24s_badadr ;save DSRPAG, set up ext mem read window
@@ -700,6 +746,13 @@ get24s_badadr:
 ;   Read the 32-bit word at the extended memory address in W3:W2 into W1:W0.
 ;   W3:W2 is updated to immediately after the data that is read.  When the
 ;   address is invalid, 0 is returned and W3:W2 not altered.
+;
+_exmem_get32u glblab         ;C version entry points
+_exmem_get32s glblab
+_exmem_getfp32 glblab
+         mov.d   w0, w2      ;move address into W3:W2
+;
+;   Assembler version.
 ;
          glbsub  exmem_get32
 
@@ -762,7 +815,7 @@ get32_badadr:
 ;   Nothing is done if the address in W3:W2 is invalid.  No data is copied and
 ;   the addresses are not incremented.
 ;
-         glbsub  exmem_getbuf, regf4 | regf5
+         glbsubd exmem_getbuf, regf4 | regf5
 ;
 ;   Register usage:
 ;
