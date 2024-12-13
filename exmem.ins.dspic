@@ -16,6 +16,8 @@
 ;
 ;   Extended data memory management and access.
 ;
+/const   exmstart integer = 16#8000 ;extended memory start address
+
 /block
   /var local ii integer
   /var local s string
@@ -148,9 +150,9 @@ alloc    freeadr 4           ;address of first free byte, always word-aligned
 ;
          glbsubd exmem_alloc_reset, regf0
 
-         mov     #0x8000, w0 ;next alloc at start of extended mem
+         mov     #[loww exmstart], w0 ;next alloc at start of extended mem
          mov     w0, freeadr+0
-         mov     #0x0000, w0
+         mov     #[highw exmstart], w0
          mov     w0, freeadr+2
 
          leaverest
@@ -916,22 +918,20 @@ getbuf_misaln:
 ;*******************************************************************************
 ;*******************************************************************************
 ;
-;   Test routines.
+;   Commands.
 ;
-;   These routines are intended for testing and verifying the above operational
-;   routines.  These test routines are not included in the code unless
-;   specifically enabled with preprocessor constants in the client firmware.
-;
-;   Most test routines are written as commands of a command/response scheme.
-;   The code for a command is only included when a constant "cmd_<name>" has
-;   been defined.  This is usually done in the XXX_CMDRSP.INS.DSPIC file of the
-;   client firmware.
+;   These commands are not included in the code unless specifically enabled with
+;   preprocessor constants in the client firmware.  The code for a command is
+;   only included when a constant "cmd_<name>" has been defined.  This is
+;   usually done in the xxx_CMDRSP.INS.DSPIC file of the client firmware.
 ;
 ;   The table below lists the available commands with any responses required to
 ;   be defined by those commands:
 ;
 ;     Command        |  Response       |  Description
 ;     --------------------------------------------------------------------------
+;     EXMEM          |  EXMEM          |  Exmem configuration and curr status
+;                    |                 |
 ;     EXMEM_RESET    |                 |  Reset to all exmem to unallocated.
 ;                    |                 |
 ;     EXMEM_ALLOC    |  EXMEM_ALLOC    |  Allocate exmem region.
@@ -954,6 +954,46 @@ getbuf_misaln:
 ;     EXMEM_GETBUFO  |  EXMEM_BUFDAT   |  Read exmem into odd-aligned buffer
 ;                    |                 |
 ;
+
+;*******************************************************************************
+;
+;   Command EXMEM
+;
+;   Causes the EXMEM response to be sent, which provides information and current
+;   status of the extended data memory system:
+;
+;     EXMEM: lastadr orig left
+;
+;       LASTADR is the 32 bit address of the last byte of extended memory in
+;       this processor.
+;
+;       ORIG is the 32 bit original amount of allocatable extended memory, in
+;       bytes.  This is the amount available at system startup or after a
+;       EXMEM_RESET command.
+;
+;       LEFT is the 32 bit amount of allocatable extended memory currently
+;       available, in bytes.  This is the same as ORIG at startup and after a
+;       EXMEM_RESET command, and is decreased after each successful allocation.
+;
+/if [Command cm_exmem] then
+         gcall   cmd_lock_out ;acquire lock on response stream
+         mov     #[v rsp_exmem], w0 ;send EXMEM response opcode
+         gcall   cmd_put8
+
+         load32  w0, exmem_last ;send LASTADR
+         gcall   cmd_put32
+
+         load32  w0, free0   ;send ORIG
+         mov     #[loww exmstart], w2
+         sub     w0, w2, w0
+         mov     #[highw exmstart], w2
+         subb    w1, w2, w1
+         gcall   cmd_put32
+
+         mcall   exmem_alloc_avail ;send LEFT
+         gcall   cmd_put32
+         return
+  /endif
 
 ;*******************************************************************************
 ;
