@@ -287,6 +287,7 @@ alloc    canflags            ;local flag bits, use FLG_xxx bit numbers
 
 .equiv   flg_ext, 0          ;frame being built is extended, not standard
 .equiv   flg_rtr, 1          ;frame being built is a remote request, not data
+.equiv   flg_on, 2           ;module is enabled, can send frames
 ;
 ;   DMA buffers.  On some processors, the DMA engine can only access a special
 ;   part of RAM.  This is specified with the "dma" attribute to the ".section"
@@ -338,7 +339,7 @@ alloc    canbuf[v ii]w[v jj]
          glbsub  [Can]_init, regf0
   /endif
 
-         clr     canflags    ;init all local flags to 0
+         clr     canflags    ;init all local flags to off
          clrflag [Canin]     ;reset to no CAN input frame available
          clrflag cansend[chars nam] ;no task has CAN sending facility acquired
          clrflag canrun[chars nam] ;init to CAN interface not up and running
@@ -652,6 +653,8 @@ done\@:
          call    task_new    ;create CAN frames receiving task
          goto    can_task    ;go to execution start of the new task
 
+         bset    canflags, #flg_on ;indicate CAN hardware is ready for use
+
          leaverest
 
 ;*******************************************************************************
@@ -862,7 +865,17 @@ sdat_leave:                  ;common exit point
 ;   information about the frame will have been transferred into the hardware and
 ;   the lock on the software transmit frame state released.
 ;
+;   Nothing is done if the CAN harware has not been set up for operation.  That
+;   means either CAN_START was called when a normal module, or this module was
+;   configured to be on when an MDEV.
+;
+;   This routine is always safe to call after CAN_INIT.  The CAN frame is
+;   silently discarded when the hardware is not enabled.
+;
          glbsubd [Can]_send, regf0 | regf1 | regf2
+
+         btss    canflags, #flg_on ;CAN hardware is enabled ?
+         jump    snd_leave   ;no, discard frame and release lock
 ;
 ;   Wait for the previous frame to be sent, and the transmit buffer therefore
 ;   available to write a new frame into.
@@ -972,12 +985,14 @@ snd_dctrl:                   ;done setting the control and ID bits
          pop     w3
   /endif
 
+snd_leave:                   ;common exit point
          clrflag cansend[chars nam] ;release lock on the CAN transmit state
          leaverest
 
 ;*******************************************************************************
 ;
-;   CAN frames receiving task.
+;   CAN frames receiving task.  This task only runs when the CAN hardware has
+;   been set up.  The ON flag therefore does not need to be checked.
 ;
 can_task:                    ;task execution start point
          setflag canrun[chars nam] ;indicate CAN interface is up and running
