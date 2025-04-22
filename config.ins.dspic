@@ -929,7 +929,7 @@ config_stat glbentd
 
 ;*******************************************************************************
 ;
-;   Subroutine CONFIG_STAT_SYS0
+;   Command CFGSTAT
 ;
 ;   Send a CFGSTAT response for the current status of the main system (subsystem
 ;   0).
