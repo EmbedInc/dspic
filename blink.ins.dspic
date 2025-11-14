@@ -59,6 +59,8 @@
 ;
 .section .ram_[chars name], bss
 
+allocg   [chars name]_ctrl   ;override control word
+
 
 ;*******************
 ;
@@ -69,6 +71,7 @@ alloc    accslice            ;overflows when time for next display slice
 alloc    slice               ;0-N current display slice number
 alloc    pattn               ;0-N number of pattern being displayed
 
+
 .section .code_[chars name], code
 ;*******************************************************************************
 ;
@@ -78,11 +81,16 @@ alloc    pattn               ;0-N number of pattern being displayed
 ;
          glbsub  [chars name]_init, regf0
 
+         mov     #0, w0
+         mov     w0, [chars name]_ctrl ;init to no override, normal operation
+
          mov     tick1ms, w0
          mov     w0, lastclock ;init last clock value current with
+
          mov     #65535, w0
          mov     w0, accslice ;force slice update next name_UPDATE
          mov     w0, pattn   ;init current pattern number to invalid
+
          mov     #[- nstbits 1], w0
          mov     w0, slice   ;first update will start at start of pattern
 
@@ -102,7 +110,7 @@ alloc    pattn               ;0-N number of pattern being displayed
 ;   no benefit, although it does no harm other than to take more excution
 ;   cycles.  Calling it less often than that will not cause time to be lost, but
 ;   will cause the display to be updated in bursts so as to appear to "stutter"
-;   if too slow.  Roughly calling this routine every 1 to 5 ms is recommended.
+;   if too slow.  Calling this routine roughly every 1 to 5 ms is recommended.
 ;
          glbsub  [chars name]_update, regf0 | regf1 | regf2 | regf3
 
@@ -137,10 +145,44 @@ stupd_recheck:               ;back here after a clock tick was processed
 ;
 ;   Determine the pattern to display.
 ;
+         mov     #65535, w2  ;get invalid pattern number ready
+
+         mov     [chars name]_ctrl, w0 ;get the override word into W0
+         lsr     w0, #14, w1 ;get the 0-3 override opcode into W1
+         ;
+         ;   Handle override 0, normal operation.
+         ;
+         bra     z, stupd_normpatt ;normal operation ?
+         ;
+         ;   Handle override 1, unconditionally off.
+         ;
+         sub     #1, w1
+         bra     nz, stupd_nov1 ;not override 1 ?
+         mov     w2, pattn   ;invalidate curr pattern number
+         jump    stupd_doff  ;LED off
+stupd_nov1:
+         ;
+         ;   Handle override 2, unconditionally on.
+         ;
+         sub     #1, w1
+         bra     nz, stupd_nov2 ;not override 2 ?
+         bra     nz, stupd_nov1 ;not override 1 ?
+         mov     w2, pattn   ;invalidate curr pattern number
+         jump    stupd_don   ;LED on
+stupd_nov2:
+         ;
+         ;   Handle override 3, pattern in low bits of override word.
+         ;
+         mov     #0x3FFF, w1 ;mask in only the override pattern number
+         and     w0, w1, w0
+         jump    stupd_pattw0 ;display the pattern in W0
+
+stupd_normpatt:              ;normal operation to select the pattern
          pattnum             ;set W0 to pattern number, W1-W3 trashed
 ;
 ;   W0 contains the 0-N number of the pattern to display.
 ;
+stupd_pattw0:                ;pattern number is in W0
          mov     pattn, w1   ;get number of pattern currently displaying
          mov     w0, pattn   ;update number of pattern to display now
          cp      w0, w1      ;compare new pattern to previous
@@ -207,7 +249,8 @@ stupd_hbits:
          btsc    w1, #0      ;bit is off ?
          jump    stupd_don   ;no, the bit is on
 
-         set_[chars pin]_off ;display off this slice
+stupd_doff:                  ;display off this slice
+         set_[chars pin]_off
          jump    stupd_recheck
 
 stupd_don:                   ;display on this slice

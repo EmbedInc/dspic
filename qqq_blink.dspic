@@ -22,18 +22,33 @@
 ;   To support multiple different LEDs in a system, the name of this module
 ;   is customizable.
 ;
-;   Exported routines:
+;   Exported symbols:
 ;
 ;     name_INIT
 ;
-;       Must be first call into this module.
+;       Subroutine.  Must be first call into this module.
 ;
 ;     name_UPDATE
 ;
-;       Must be called periodically.  It determines the system state, decides
-;       what pattern to display, tracks real time, and updates the LED
-;       accordingly.  It is intended to be called from the main event loop as
-;       a low priority event or during idle time.
+;       Subroutine.  Must be called periodically.  It determines the system
+;       state, decides what pattern to display, tracks real time, and updates
+;       the LED accordingly.  It is intended to be called from the main event
+;       loop as a low priority event or during idle time.
+;
+;     name_CTRL
+;
+;       Variable, 16 bits.  Overall LED controll setting.  The high two bits
+;       are an opcode that defines how the LED is to be controlled.  The opcodes
+;       are:
+;
+;         0  -  Normal operation.  The macro PATTNUM is run to determine the
+;               number of the pattern to display.  Default.
+;
+;         1  -  Off.
+;
+;         2  -  On.
+;
+;         3  -  The low 14 bits are the number of the pattern to display.
 ;
 ;   Configuration parameters:
 ;
