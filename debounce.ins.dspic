@@ -1,0 +1,84 @@
+;   ***************************************************************
+;   * Copyright (C) 2025, Embed Inc (http://www.embedinc.com)     *
+;   *                                                             *
+;   * Permission to copy this file is granted as long as this     *
+;   * copyright notice is included in its entirety at the         *
+;   * beginning of the file, whether the file is copied in whole  *
+;   * or in part and regardless of whether other information is   *
+;   * added to the copy.                                          *
+;   *                                                             *
+;   * The contents of this file may be used in any way,           *
+;   * commercial or otherwise.  This file is provided "as is",    *
+;   * and Embed Inc makes no claims of suitability for a          *
+;   * particular purpose nor assumes any liability resulting from *
+;   * its use.                                                    *
+;   ***************************************************************
+;
+;   Facilities to help debounce digital input signals.
+;
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro DEBOUNCE_TO_BIT name var bit
+//
+//   Debounce the input pin NAME.  The debounced state of the input is written
+//   to bit BIT of variable VAR.  VAR must be in near memory.  The output bit is
+//   1 to indicate the debounced state of the input is on, and 0 for off.  The
+//   polarity of the input pin as declared with its /INBIT command used to
+//   determine on and off.
+//
+//   The NAME and VAR parameters are raw names, not strings.  BIT is integer.
+//
+//   The following state must be previously set:
+//
+//     debounce_count
+//
+//       Preprocessor constant of variable indicating the number of ticks the
+//       input value must be steady for to consider it debounced to its new
+//       value.
+//
+//     dbcount_<name>
+//
+//       Variable in near memory that is used internally by the macro to
+//       indicate the remaining ticks until the current input value is
+//       considered debounced.  This variable should be initialized to
+//       DEBOUNCE_COUNT before the first time this macro is run for this pin.
+//
+//   Each run of this macro performs the logic for one additional clock tick.
+//
+//   Trashes: W0
+//
+/macro debounce_to_bit
+  /var local name string = [qstr [arg 1]] ;input pin name
+  /var local var string = [qstr [arg 2]] ;variable to write result to
+  /var local bit integer = [vnl [arg 3]] ;bit number within output variable
+
+  /write ";"
+  /write ";   Debounce the " [ucase name] " input into " var "<" bit ">."
+  /write ";"
+         skip_[chars name]_off ;instantaneous input is off ?
+         jump    [lab on]    ;no, is on
+         ;
+         ;   Input is off.
+         ;
+         btss    [chars var], #[v bit] ;opposite of debounced state ?
+         jump    [lab restart] ;same, restart debounce time
+         dec     dbcount_[chars name] ;one less tick until debounced
+         bra     gt, [lab done] ;debounce time not elapsed yet ?
+         bclr    [chars var], #[v bit] ;update debounced state
+         jump    [lab restart]
+         ;
+         ;   Input is on.
+         ;
+[lab on]:
+         btsc    [chars var], #[v bit] ;opposite of debounced state ?
+         jump    [lab restart] ;same, restart debounce time
+         dec     dbcount_[chars name] ;one less tick until debounced
+         bra     gt, [lab done] ;debounce time not elapsed yet ?
+         bset    [chars var], #[v bit] ;update debounced state
+  /write
+[lab restart]:               ;restart debounce wait time
+         mov     #[v debounce_count], w0
+         mov     w0, dbcount_[chars name]
+[lab done]:                  ;done debouncing
+  /endmac
