@@ -16,56 +16,83 @@
 ;
 ;   Facilities to help debounce digital input signals.
 ;
+;   All the DEBOUNCE_xxx macros below can be modified by a common set of
+;   preprocessor state:
+;
+;     DEBOUNCE_LENGTH
+;
+;       Integer constant or variable, required.
+;
+;       The number of ticks the input value must be steady for to consider it
+;       debounced to its new value.
+;
+;     DO_LEADING
+;
+;       Macro, optional.
+;
+;       Will be run on the debounced off to on transition (leading edge) of the
+;       input signal.  This macro is run after whatever other leading edge
+;       actions the macro is specified to perform.
+;
+;       W0 may be trashed.  The remaining registers must be preserved.
+;
+;     DO_TRAILING
+;
+;       Macro, optional.
+;
+;       Will be run on the debounced on to off transition (trailing edge) of the
+;       input signal.  This macro is run after whatever other trailing edge
+;       actions the macro is specified to perform.
+;
+;       W0 may be trashed.  The remaining registers must be preserved.
+;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-//   Macro DEBOUNCE_TO_BIT name var bit
+//   Macro DEBOUNCE_TO_BIT pin var bit
 //
-//   Debounce the input pin NAME.  The debounced state of the input is written
-//   to bit BIT of variable VAR.  VAR must be in near memory.  The output bit is
-//   1 to indicate the debounced state of the input is on, and 0 for off.  The
-//   polarity of the input pin as declared with its /INBIT command used to
+//   Debounce the input pin PIN.  The debounced state of the input is written to
+//   bit BIT of variable VAR.  VAR must be in near memory.  The output bit is 1
+//   to indicate the debounced state of the input is on, and 0 for off.  The
+//   polarity of the input pin as declared with its /INBIT command is used to
 //   determine on and off.
 //
-//   The NAME and VAR parameters are raw names, not strings.  BIT is integer.
+//   The PIN and VAR parameters are raw names, not strings.  BIT is integer.
 //
 //   The following state must be previously set:
 //
-//     debounce_count
-//
-//       Preprocessor constant of variable indicating the number of ticks the
-//       input value must be steady for to consider it debounced to its new
-//       value.
-//
-//     dbcount_<name>
+//     dbcount_<pin>
 //
 //       Variable in near memory that is used internally by the macro to
 //       indicate the remaining ticks until the current input value is
 //       considered debounced.  This variable should be initialized to
-//       DEBOUNCE_COUNT before the first time this macro is run for this pin.
+//       DEBOUNCE_LENGTH before the first time this macro is run for this pin.
 //
 //   Each run of this macro performs the logic for one additional clock tick.
 //
 //   Trashes: W0
 //
 /macro debounce_to_bit
-  /var local name string = [qstr [arg 1]] ;input pin name
+  /var local pin string = [qstr [arg 1]] ;input pin name
   /var local var string = [qstr [arg 2]] ;variable to write result to
   /var local bit integer = [vnl [arg 3]] ;bit number within output variable
 
   /write ";"
-  /write ";   Debounce the " [ucase name] " input into " var "<" bit ">."
+  /write ";   Debounce the " [ucase pin] " input into " var "<" bit ">."
   /write ";"
-         skip_[chars name]_off ;instantaneous input is off ?
+         skip_[chars pin]_off ;instantaneous input is off ?
          jump    [lab on]    ;no, is on
          ;
          ;   Input is off.
          ;
          btss    [chars var], #[v bit] ;opposite of debounced state ?
          jump    [lab restart] ;same, restart debounce time
-         dec     dbcount_[chars name] ;one less tick until debounced
+         dec     dbcount_[chars pin] ;one less tick until debounced
          bra     gt, [lab done] ;debounce time not elapsed yet ?
          bclr    [chars var], #[v bit] ;update debounced state
+  /if [exist "do_trailing:macro"] then
+         do_trailing
+    /endif
          jump    [lab restart]
          ;
          ;   Input is on.
@@ -73,12 +100,104 @@
 [lab on]:
          btsc    [chars var], #[v bit] ;opposite of debounced state ?
          jump    [lab restart] ;same, restart debounce time
-         dec     dbcount_[chars name] ;one less tick until debounced
+         dec     dbcount_[chars pin] ;one less tick until debounced
          bra     gt, [lab done] ;debounce time not elapsed yet ?
          bset    [chars var], #[v bit] ;update debounced state
+  /if [exist "do_leading:macro"] then
+         do_leading
+    /endif
   /write
 [lab restart]:               ;restart debounce wait time
-         mov     #[v debounce_count], w0
-         mov     w0, dbcount_[chars name]
+         mov     #[v debounce_length], w0
+         mov     w0, dbcount_[chars pin]
+[lab done]:                  ;done debouncing
+  /endmac
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//   Macro DEBOUNCE_TO_FLAG pin flagdb [flagon flagoff]
+//
+//   Debounce the input pin PIN.  Flag FLAGDB is updated with the debounced
+//   state of the input as that changes.  FLAGDB is assumed to have been defined
+//   with a /FLAG preprocessor command.  The flag is asserted to indicate the
+//   debounced state of the input is on, and cleared for off.  The polarity of
+//   the input pin as declared with its /INBIT command is used to determine on
+//   and off.
+//
+//   The optional parameters FLAGON and FLAGOFF are names of flags to assert on
+//   the off-to-on (FLAGON) and on-to-off (FLAGOFF) edges of the debounced
+//   signal.  Each parameter may be omitted, in which case no such flag is
+//   written to or required to exist.  If FLAGOFF is desired to be set but no
+//   FLAGON, leave zero or more spaces between the commas delimiting the FLAGON
+//   parameter.
+//
+//   Example:
+//
+//        debounce_to_flag pulse, pulselev, , pulsend
+//
+//     The PULSE digital input is debounced into flag PULSELEV, and flag PULSEND
+//     is set on the trailing edge of each pulse.  Nothing extra is done on each
+//     debounced leading edge.
+//
+//   All parameter are raw names, not strings.  BIT is integer.
+//
+//   The following state must be previously set:
+//
+//     dbcount_<pin>
+//
+//       Variable in near memory that is used internally by the macro to
+//       indicate the remaining ticks until the current input value is
+//       considered debounced.  This variable should be initialized to
+//       DEBOUNCE_LENGTH before the first time this macro is run for this pin.
+//
+//   Each run of this macro performs the logic for one additional clock tick.
+//
+//   Trashes: W0
+//
+/macro debounce_to_flag
+  /var local pin string = [qstr [arg 1]] ;input pin name
+  /var local flagdb string = [qstr [arg 2]] ;flag to set to debounced value
+  /var local flagon string = [qstr [arg 3]] ;flag to set to on leading edge
+  /var local flagoff string = [qstr [arg 4]] ;flag to set to on trailing edge
+
+  /write ";"
+  /write ";   Debounce the " [ucase pin] " input into flag " flagdb "."
+  /write ";"
+         skip_[chars pin]_off ;instantaneous input is off ?
+         jump    [lab on]    ;no, is on
+         ;
+         ;   Input is off.
+         ;
+         skip_flag [chars flagdb] ;opposite of debounced state ?
+         jump    [lab restart] ;same, restart debounce time
+         dec     dbcount_[chars pin] ;one less tick until debounced
+         bra     gt, [lab done] ;debounce time not elapsed yet ?
+         clrflag [chars flagdb] ;update debounced state
+  /if [<> flagoff ""] then
+         setflag [chars flagoff] ;set flag to indicate trailing edge
+    /endif
+  /if [exist "do_trailing:macro"] then
+         do_trailing
+    /endif
+         jump    [lab restart]
+         ;
+         ;   Input is on.
+         ;
+[lab on]:
+         skip_nflag [chars flagdb] ;opposite of debounced state ?
+         jump    [lab restart] ;same, restart debounce time
+         dec     dbcount_[chars pin] ;one less tick until debounced
+         bra     gt, [lab done] ;debounce time not elapsed yet ?
+         setflag [chars flagdb] ;update debounced state
+  /if [<> flagon ""] then
+         setflag [chars flagon] ;set flag to indicate leading edge
+    /endif
+  /if [exist "do_leading:macro"] then
+         do_leading
+    /endif
+  /write
+[lab restart]:               ;restart debounce wait time
+         mov     #[v debounce_length], w0
+         mov     w0, dbcount_[chars pin]
 [lab done]:                  ;done debouncing
   /endmac
