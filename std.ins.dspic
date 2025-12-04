@@ -288,14 +288,25 @@
 //   Subroutine DEBUG_INIT name
 //
 //   If a boolean with name "debug_<name>" does not exist, then it is created as
-//   a constant set to False.
+//   a constant.  If the environment variable DEBUG_name exists and is set to
+//   TRUE or FALSE, then constant will be set to that value.  Otherwise, the
+//   constant is set to FALSE.
+//
+//   Nothing is done if a constant or variable debug_<name> already exists.
 //
 /subroutine debug_init
   /var local name string = [vnl [qstr [arg 1]]]
+  /var local cname string = [str "debug_" name] ;name of constant to create
+  /var local s string        ;scratch string
+  /var local val bool        ;value to set the new constant to
 
-  /if [not [exist [str "debug_" name ":vcon"]]] then
-    /const debug_[chars name] bool = false
+  /if [exist [str cname ":vcon"]] then ;already exists, nothing to do ?
+    /return
     /endif
+
+  /set s [ucase [evar cname]] ;get environment variable value, if any
+  /set val [= s "TRUE"]      ;make value to set environment variable to
+  /const [chars cname] bool = val ;create the preprocessor constant
   /endsub
 
 ;*******************************************************************************
