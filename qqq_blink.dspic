@@ -89,7 +89,8 @@
 ;
 ;       When this macro exists, it is run to switch the LED on.  The default is
 ;       to set the output pin specified by PIN (above).  PIN is irrelevant if
-;       this macro is defined.
+;       this macro is defined.  W0-W3 may be trashed.  The remaining registers
+;       must be preserved.
 ;
 ;     LED_OFF, macro
 ;
