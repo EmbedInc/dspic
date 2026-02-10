@@ -34,7 +34,7 @@
   /endif
 
 /if [not [exist "pattms"]] then
-  /const pattms integer = 48
+  /const pattms integer = 3000
   /endif
 ;
 ;   Derived constants.
@@ -114,11 +114,11 @@ alloc    pattn               ;0-N number of pattern being displayed
 ;
          glbsub  [chars name]_update, regf0 | regf1 | regf2 | regf3
 
-stupd_recheck:               ;back here after a clock tick was processed
+ledupd_recheck:              ;back here after a clock tick was processed
          mov     lastclock, w0 ;get last clock value updated to
          mov     tick1ms, w1 ;get the current clock
          cp      w0, w1
-         bra     z, stupd_leave ;no new tick, nothing more to do ?
+         bra     z, leave    ;no new tick, nothing more to do ?
 ;
 ;   A new clock tick has occurred.
 ;
@@ -129,7 +129,7 @@ stupd_recheck:               ;back here after a clock tick was processed
          mov     #[v add1ms], w1
          add     w0, w1, w0
          mov     w0, accslice
-         bra     nc, stupd_recheck ;no new display slice this tick ?
+         bra     nc, ledupd_recheck ;no new display slice this tick ?
          ;
          ;   Advance to next display slice.
          ;
@@ -152,41 +152,41 @@ stupd_recheck:               ;back here after a clock tick was processed
          ;
          ;   Handle override 0, normal operation.
          ;
-         bra     z, stupd_normpatt ;normal operation ?
+         bra     z, ledupd_normpatt ;normal operation ?
          ;
          ;   Handle override 1, unconditionally off.
          ;
          sub     #1, w1
-         bra     nz, stupd_nov1 ;not override 1 ?
+         bra     nz, ledupd_nov1 ;not override 1 ?
          mov     w2, pattn   ;invalidate curr pattern number
-         jump    stupd_doff  ;LED off
-stupd_nov1:
+         jump    ledupd_doff ;LED off
+ledupd_nov1:
          ;
          ;   Handle override 2, unconditionally on.
          ;
          sub     #1, w1
-         bra     nz, stupd_nov2 ;not override 2 ?
-         bra     nz, stupd_nov1 ;not override 1 ?
+         bra     nz, ledupd_nov2 ;not override 2 ?
+         bra     nz, ledupd_nov1 ;not override 1 ?
          mov     w2, pattn   ;invalidate curr pattern number
-         jump    stupd_don   ;LED on
-stupd_nov2:
+         jump    ledupd_don  ;LED on
+ledupd_nov2:
          ;
          ;   Handle override 3, pattern in low bits of override word.
          ;
          mov     #0x3FFF, w1 ;mask in only the override pattern number
          and     w0, w1, w0
-         jump    stupd_pattw0 ;display the pattern in W0
+         jump    pattw0      ;display the pattern in W0
 
-stupd_normpatt:              ;normal operation to select the pattern
+ledupd_normpatt:             ;normal operation to select the pattern
          pattnum             ;set W0 to pattern number, W1-W3 trashed
 ;
 ;   W0 contains the 0-N number of the pattern to display.
 ;
-stupd_pattw0:                ;pattern number is in W0
+pattw0:                      ;pattern number is in W0
          mov     pattn, w1   ;get number of pattern currently displaying
          mov     w0, pattn   ;update number of pattern to display now
          cp      w0, w1      ;compare new pattern to previous
-         bra     z, stupd_hpatsl ;same pattern as last time ?
+         bra     z, ledupd_hpatsl ;same pattern as last time ?
          ;
          ;   The display pattern has changed.  Reset to displaying the start of
          ;   the pattern.
@@ -195,7 +195,7 @@ stupd_pattw0:                ;pattern number is in W0
          mov     w0, slice   ;set to first slice in pattern
          mov     w0, accslice ;set to start of this slice
 
-stupd_hpatsl:                ;PATTN and SLICE all set
+ledupd_hpatsl:               ;PATTN and SLICE all set
 ;
 ;   Update the display.  PATTN is the number of the pattern to display, and
 ;   SLICE is the 0-N slice to display within the pattern.
@@ -220,14 +220,14 @@ stupd_hpatsl:                ;PATTN and SLICE all set
          ;   to the program memory word containing the bit to display.
          ;
          mov     slice, w0   ;get 0-N slice number within this pattern
-stupd_pwslice:               ;back here to skip whole prog mem words
+ledupd_pwslice:              ;back here to skip whole prog mem words
          cp      w0, #24     ;compare to number of bits in a prog mem word
-         bra     ltu, stupd_dpwslice ;done finding prog mem word of this slice ?
+         bra     ltu, ledupd_dpwslice ;done finding prog mem word of this slice ?
          sub     #24, w0     ;no, make 0-N number of bit within next word
          add     #2, w2      ;update address to next word
          addc    #0, w3
-         jump    stupd_pwslice ;back to check slice within word again
-stupd_dpwslice:              ;W0 is 0-N bit within word at W3:W2
+         jump    ledupd_pwslice ;back to check slice within word again
+ledupd_dpwslice:             ;W0 is 0-N bit within word at W3:W2
          ;
          ;   W3:W2 is the address of the whole program memory word that contains
          ;   the bit to display.  W0 is the 0-23 number of the bit within that
@@ -235,29 +235,39 @@ stupd_dpwslice:              ;W0 is 0-N bit within word at W3:W2
          ;
          mov     w3, Tblpag  ;set high bits of prog mem address to read from
          cp      w0, #16
-         bra     geu, stupd_hword ;bit is in the high word ?
+         bra     geu, ledupd_hword ;bit is in the high word ?
          tblrdl  [w2], w1    ;no, read the low word
-         jump    stupd_hbits ;have bit pattern
-stupd_hword:                 ;the bit is in the high word
+         jump    ledupd_hbits ;have bit pattern
+ledupd_hword:                ;the bit is in the high word
          tblrdh  [w2], w1    ;read the high word
          sub     #16, w0     ;make bit number within this part of the word
-stupd_hbits:
+ledupd_hbits:
          ;
          ;   W0 is the 0-N number of the bit within W1 to display.
          ;
          lsr     w1, w0, w1  ;move the selected bit into LSB of W1
          btsc    w1, #0      ;bit is off ?
-         jump    stupd_don   ;no, the bit is on
+         jump    ledupd_don  ;no, the bit is on
 
-stupd_doff:                  ;display off this slice
+ledupd_doff:                 ;display off this slice
+/if [exist "led_off:macro"]  ;macro supplied to turn LED off ?
+  /then
+         led_off
+  /else
          set_[chars pin]_off
-         jump    stupd_recheck
+  /endif
+         jump    ledupd_recheck
 
-stupd_don:                   ;display on this slice
+ledupd_don:                  ;display on this slice
+/if [exist "led_on:macro"]   ;macro supplied to turn LED on ?
+  /then
+         led_on
+  /else
          set_[chars pin]_on
-         jump    stupd_recheck
+         jump    ledupd_recheck
+  /endif
 
-stupd_leave:
+leave:
          leaverest
 
 ////////////////////////////////////////////////////////////////////////////////

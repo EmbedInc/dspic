@@ -16,8 +16,8 @@
 ;
 ;   This module manages the blinking of a single LED.  The LED is always
 ;   either fully on or fully off, but can display different blink patterns
-;   depending on system conditions.  The LED is driven from a single output
-;   line using programmed I/O.
+;   depending on system conditions.  By default, the LED is driven by a single
+;   output pin.  Macros can optionally be supplied to switch the LED on and off.
 ;
 ;   To support multiple different LEDs in a system, the name of this module
 ;   is customizable.
@@ -58,18 +58,7 @@
 ;       LEDs are being controlled, then multiple versions of this module can be
 ;       used, but each must have a different name.
 ;
-;       The default is the same as the module name.  If the module is not
-;       renamed from the template, then the default is "ledstat".
-;
-;     PIN, string
-;
-;       Name of the /OUTBIT pin that controls the LED.  Setting this line to ON
-;       is assumed to enable the LED, and OFF to disable it.  The LED can be
-;       wired either way, as long as the polarity in the /OUTBIT command is set
-;       accordingly.
-;
-;       The default is the same as the module name.  If the module is not
-;       renamed from the template, then the default is "ledstat".
+;       The default is the same as the module name.
 ;
 ;     NSTBITS, integer
 ;
@@ -84,7 +73,27 @@
 ;
 ;       The length of a whole pattern in milliseconds.
 ;
-;       The default is 1000 (1 second).
+;       The default is 3000 (3 seconds).
+;
+;     PIN, string
+;
+;       Name of the /OUTBIT pin that controls the LED.  Setting this line to ON
+;       is assumed to enable the LED, and OFF to disable it.  The LED can be
+;       wired either way, as long as the polarity in the /OUTBIT command is set
+;       accordingly.
+;
+;       The default is the same as the module name.  If the module is not
+;       renamed from the template, then the default is "ledstat".
+;
+;     LED_ON, macro
+;
+;       When this macro exists, it is run to switch the LED on.  The default is
+;       to set the output pin specified by PIN (above).  PIN is irrelevant if
+;       this macro is defined.
+;
+;     LED_OFF, macro
+;
+;       Like LED_ON, except that this macro switches the LED off instead of on.
 ;
 /include "qq2.ins.dspic"
 
@@ -95,7 +104,7 @@
 /const   name    string = "qq3" ;generic name of exported symbol in this module
 /const   pin     string = "qq3" ;name of output pin controlling the LED
 /const   nstbits integer = 48 ;number of slices in one display pattern
-/const   pattms  integer = 1000 ;length of whole pattern, ms
+/const   pattms  integer = 3000 ;length of whole pattern, ms
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -104,10 +113,14 @@
 //   Determine the number of the pattern to display.  This macro leaves the 0-N
 //   pattern number in W0.  W1-W3 may be trashed.
 //
+//   Labels this macro can jump to:
+//
+//     PATTW0 - W0 contains the 0-N number of the pattern to display.
+//
+//     LEAVE - Exit the subroutine without altering the LED driving state.
+//
 /macro pattnum
          mov     #0, w0
-
-havepatt:                    ;W0 contains the 0-N number of the pattern to display
   /endmac
 //
 ////////////////////////////////////////////////////////////////////////////////
@@ -128,6 +141,6 @@ havepatt:                    ;W0 contains the 0-N number of the pattern to displ
 ;   PATTERN macro parameter.
 ;
 tbl_patt:
-         pattern ************************------------------------ ;0 - normal operation
+         pattern ********--------********--------********-------- ;0 - normal, 1 Hz
 
 .end
